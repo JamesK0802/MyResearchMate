@@ -1,12 +1,14 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable, catchError, of } from 'rxjs';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 
-export interface PcrComponent {
+export interface PCRComponent {
   id?: string;
   name: string;
   componentType: string;
-  calculationMode: 'fixed_ratio' | 'fixed_volume' | 'volume_per_25ul' | 'primer_concentration' | 'fixed_final_concentration' | 'user_input' | 'fill_to_reaction_volume';
+  calculationMode: string;
   stockConcentration?: number;
   stockUnit?: string;
   finalConcentration?: number;
@@ -19,7 +21,7 @@ export interface PcrComponent {
   displayOrder: number;
 }
 
-export interface PcrPreset {
+export interface PCRPreset {
   id?: string;
   name: string;
   category: string;
@@ -27,32 +29,53 @@ export interface PcrPreset {
   description?: string;
   defaultReactionVolume: number;
   allowedReactionVolumes: number[];
-  isDefault: boolean;
-  components: PcrComponent[];
+  isSystem: boolean;
+  ownerUserId?: number;
+  components: PCRComponent[];
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class PcrPresetService {
-  private apiUrl = '/api/pcr-presets';
+  private apiUrl = `${environment.apiBaseUrl}/pcr-presets`;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private auth: AuthService) {}
 
-  getPresets(): Observable<PcrPreset[]> {
-    return this.http.get<PcrPreset[]>(this.apiUrl).pipe(
-      catchError(err => {
-        console.error('Failed to fetch presets', err);
-        return of([]);
-      })
-    );
+  private async getHeaders() {
+    // Access session from AuthService's internal state
+    const session = (this.auth as any).sessionSubject?.value;
+    const token = session?.access_token || '';
+    return new HttpHeaders().set('Authorization', `Bearer ${token}`);
   }
 
-  createPreset(preset: PcrPreset): Observable<any> {
-    return this.http.post(this.apiUrl, preset);
+  async getPresets(): Promise<{ presets: PCRPreset[], transfers: any[] }> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.get<any>(this.apiUrl, { headers }));
   }
 
-  deletePreset(id: string): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/${id}`);
+  async createPreset(preset: PCRPreset): Promise<any> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.post(this.apiUrl, preset, { headers }));
+  }
+
+  async deletePreset(presetId: string): Promise<any> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.delete(`${this.apiUrl}/${presetId}`, { headers }));
+  }
+
+  async sendPreset(presetId: string, toUserId: number): Promise<any> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.post(`${this.apiUrl}/send`, { preset_id: presetId, to_user_id: toUserId }, { headers }));
+  }
+
+  async acceptTransfer(transferId: string): Promise<any> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.post(`${this.apiUrl}/transfers/${transferId}/accept`, {}, { headers }));
+  }
+
+  async rejectTransfer(transferId: string): Promise<any> {
+    const headers = await this.getHeaders();
+    return firstValueFrom(this.http.post(`${this.apiUrl}/transfers/${transferId}/reject`, {}, { headers }));
   }
 }

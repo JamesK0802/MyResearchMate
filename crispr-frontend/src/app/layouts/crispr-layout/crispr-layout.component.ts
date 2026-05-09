@@ -28,6 +28,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
               <small>Load exported Excel results</small>
             </span>
           </a>
+          <a routerLink="/my-data" routerLinkActive="active" class="sub-tab">
+            <span class="sub-tab-text">
+              <strong>My Data</strong>
+              <small>Manage your saved results</small>
+            </span>
+          </a>
         </div>
       </div>
       <div class="crispr-body">

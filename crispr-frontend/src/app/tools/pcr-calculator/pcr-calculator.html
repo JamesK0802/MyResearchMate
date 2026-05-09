@@ -1,169 +1,253 @@
 <div class="pcr-container">
-  <header class="header-section">
+  <div class="pcr-header">
     <div class="header-content">
       <h1>PCR Setup Calculator</h1>
       <p>Precision protocol planning for CRISPR validation and benchmarking.</p>
     </div>
     <div class="header-actions">
-      <button class="btn-toggle" (click)="viewMode = viewMode === 'calculator' ? 'manager' : 'calculator'">
-        {{ viewMode === 'calculator' ? '⚙️ Manage Presets' : '🧪 Back to Calculator' }}
+      <button class="btn-manage" (click)="viewMode = 'manager'">
+        <span class="icon">⚙️</span> Manage Presets
+        <span *ngIf="incomingTransfers.length > 0" class="notif-dot"></span>
       </button>
-    </div>
-  </header>
-
-  <!-- 🧪 CALCULATOR VIEW -->
-  <div *ngIf="viewMode === 'calculator'" class="calculator-view">
-    <div class="control-grid">
-      <!-- Left: Configuration -->
-      <section class="config-panel card">
-        <div class="card-header">
-          <h3>Protocol Configuration</h3>
-        </div>
-        <form [formGroup]="pcrForm" class="pcr-form">
-          <div class="form-group full-width">
-            <label>Select Preset</label>
-            <select formControlName="presetId" (change)="selectPreset($any($event.target).value)">
-              <option value="custom">Custom (Build from Scratch)</option>
-              <option *ngFor="let p of availablePresets" [value]="p.id">{{ p.name }}</option>
-            </select>
-          </div>
-
-          <div class="input-row">
-            <div class="form-group">
-              <label>Reactions</label>
-              <input type="number" formControlName="numReactions">
-            </div>
-            <div class="form-group">
-              <label>Overage (%)</label>
-              <input type="number" formControlName="overage">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Reaction Volume (µL)</label>
-            <input type="number" formControlName="reactionVolume">
-          </div>
-
-          <div class="components-section" formArrayName="components">
-            <div class="components-header">
-              <h4>Component Details</h4>
-              <button type="button" class="btn-small-add" (click)="addComponent()">+ Add Component</button>
-            </div>
-
-            <div *ngFor="let comp of componentForms.controls; let i = index" [formGroupName]="i" class="comp-item">
-              <div class="comp-header">
-                <input type="text" formControlName="name" class="name-edit-input" placeholder="Component Name">
-                <button type="button" class="btn-remove-mini" (click)="removeComponent(i)"
-                  title="Remove Component">×</button>
-              </div>
-
-              <!-- Mode Selector -->
-              <div class="mode-selector">
-                <label>Mode</label>
-                <select formControlName="calculationMode">
-                  <option *ngFor="let mode of calculationModes" [value]="mode.id">{{ mode.name }}</option>
-                </select>
-              </div>
-
-              <!-- Dynamic inputs based on calculation mode -->
-              <div class="comp-inputs">
-                <ng-container [ngSwitch]="comp.value.calculationMode">
-                  <!-- Concentration Based -->
-                  <div *ngSwitchCase="'primer_concentration'" class="input-grid">
-                    <div class="form-group">
-                      <label>Stock Conc</label>
-                      <div class="unit-input">
-                        <input type="number" formControlName="stockConcentration">
-                        <select formControlName="stockUnit">
-                          <option *ngFor="let u of concentrationUnits" [value]="u">{{ u }}</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="form-group">
-                      <label>Final Conc</label>
-                      <div class="unit-input">
-                        <input type="number" formControlName="finalConcentration">
-                        <select formControlName="finalUnit">
-                          <option *ngFor="let u of concentrationUnits" [value]="u">{{ u }}</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Fixed Ratio -->
-                  <div *ngSwitchCase="'fixed_ratio'" class="form-group">
-                    <label>Ratio Denominator (1/N)</label>
-                    <input type="number" formControlName="ratioDenominator">
-                  </div>
-
-                  <!-- Fixed Volume -->
-                  <div *ngSwitchCase="'fixed_volume'" class="form-group">
-                    <label>Volume (µL)</label>
-                    <input type="number" formControlName="fixedVolume">
-                  </div>
-                </ng-container>
-              </div>
-            </div>
-          </div>
-        </form>
-      </section>
-
-      <!-- Right: Results -->
-      <section class="results-panel">
-        <div class="results-header">
-          <button class="btn-secondary" style="margin-right: 12px;" (click)="saveAsPreset()">💾 Save as New
-            Preset</button>
-          <button class="btn-export" (click)="exportPDF()">📄 Export PDF Protocol</button>
-        </div>
-
-        <div class="card result-card" *ngIf="results">
-          <div class="card-header">
-            <h3>Preparation Table</h3>
-          </div>
-          <table class="prep-table">
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th class="text-right">Per Reaction (µL)</th>
-                <th class="text-right">Total Bulk (µL)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let c of results.components" [class.master-mix]="c.includeInMasterMix">
-                <td>
-                  {{ c.name }}
-                  <small *ngIf="!c.includeInMasterMix" class="label-info">(Add separately)</small>
-                </td>
-                <td class="text-right">{{ c.perReaction | number:'1.2-2' }}</td>
-                <td class="text-right font-bold">{{ c.total | number:'1.2-2' }}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="alerts-section">
-            <div *ngFor="let err of errors" class="alert alert-error">⚠️ {{ err }}</div>
-            <div *ngFor="let warn of warnings" class="alert alert-warning">💡 {{ warn }}</div>
-          </div>
-        </div>
-      </section>
     </div>
   </div>
 
-  <!-- ⚙️ MANAGER VIEW -->
-  <div *ngIf="viewMode === 'manager'" class="manager-view">
-    <div class="card">
-      <div class="card-header">
-        <h3>Server-Backed Presets</h3>
-      </div>
-      <div class="preset-list">
-        <div *ngFor="let p of availablePresets" class="preset-row">
-          <div class="preset-info">
-            <div class="preset-name">{{ p.name }}</div>
-            <div class="preset-meta">{{ p.category }} • {{ p.source || 'Local' }}</div>
+  <!-- Calculator View -->
+  <div *ngIf="viewMode === 'calculator'" class="calculator-view">
+    <form [formGroup]="pcrForm" class="pcr-layout">
+      <!-- Left Panel: Configuration -->
+      <div class="config-panel card">
+        <div class="section-header">
+          <h2>Protocol Configuration</h2>
+        </div>
+
+        <div class="field-group">
+          <label>Select Preset</label>
+          <select formControlName="presetId" (change)="selectPreset($any($event.target).value)">
+            <option value="custom">-- Custom Protocol --</option>
+            <optgroup label="System Defaults">
+              <option *ngFor="let p of systemPresets" [value]="p.id">{{ p.name }}</option>
+            </optgroup>
+            <optgroup label="My Presets" *ngIf="myPresets.length > 0">
+              <option *ngFor="let p of myPresets" [value]="p.id">{{ p.name }}</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="row-fields">
+          <div class="field-group">
+            <label>Reactions</label>
+            <input type="number" formControlName="numReactions">
           </div>
-          <div class="preset-actions">
-            <button *ngIf="!p.isDefault" class="btn-delete" (click)="deletePreset(p.id!)">Delete</button>
-            <span *ngIf="p.isDefault" class="default-badge">System Default</span>
+          <div class="field-group">
+            <label>Overage (%)</label>
+            <input type="number" formControlName="overage">
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>Reaction Volume (µL)</label>
+          <input type="number" formControlName="reactionVolume">
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-header">
+          <h2>Component Details</h2>
+          <button type="button" class="btn-add-mini" (click)="addComponent()">+ Add Component</button>
+        </div>
+
+        <div formArrayName="components" class="components-list">
+          <div *ngFor="let comp of componentForms.controls; let i=index" [formGroupName]="i" class="comp-item-card">
+            <div class="comp-header">
+              <input type="text" formControlName="name" class="comp-name-input">
+              <button type="button" class="btn-remove" (click)="removeComponent(i)">×</button>
+            </div>
+
+            <div class="comp-body">
+              <div class="field-group-mini">
+                <label>Mode</label>
+                <select formControlName="calculationMode">
+                  <option value="fixed_ratio">Ratio (1/N)</option>
+                  <option value="fixed_volume">Fixed Volume (µL)</option>
+                  <option value="primer_concentration">Concentration (C1V1)</option>
+                  <option value="fill_to_reaction_volume">Water (Balance)</option>
+                </select>
+              </div>
+
+              <!-- Mode Specific Fields -->
+              <div *ngIf="comp.get('calculationMode')?.value === 'fixed_ratio'" class="field-group-mini">
+                <label>Ratio Denominator (1/N)</label>
+                <input type="number" formControlName="ratioDenominator">
+              </div>
+
+              <div *ngIf="comp.get('calculationMode')?.value === 'fixed_volume'" class="field-group-mini">
+                <label>Volume (µL)</label>
+                <input type="number" formControlName="fixedVolume">
+              </div>
+
+              <div *ngIf="comp.get('calculationMode')?.value === 'primer_concentration'" class="row-fields-mini">
+                <div class="field-group-mini">
+                  <label>Final Conc.</label>
+                  <div class="input-with-unit">
+                    <input type="number" formControlName="finalConcentration">
+                    <span>{{ comp.get('finalUnit')?.value }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="comp-footer">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="includeInMasterMix">
+                Include in Master Mix
+              </label>
+              <label *ngIf="comp.get('isOptional')?.value" class="checkbox-label">
+                <input type="checkbox" formControlName="enabled">
+                Enabled
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Results -->
+      <div class="results-panel">
+        <div class="results-actions">
+          <button type="button" class="btn-save-preset" (click)="saveAsPreset()" [disabled]="!auth.isLoggedIn">
+            <span class="icon">💾</span> {{ auth.isLoggedIn ? 'Save as New Preset' : 'Log in to Save' }}
+          </button>
+          <button type="button" class="btn-export" (click)="exportPDF()">
+            <span class="icon">📄</span> Export PDF Protocol
+          </button>
+        </div>
+
+        <div class="results-card card">
+          <div class="section-header">
+            <h2>Preparation Table</h2>
+          </div>
+
+          <div *ngIf="results" class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th class="text-right">Per Reaction (µL)</th>
+                  <th class="text-right">Total Bulk (µL)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let c of results.components" [class.optional-disabled]="c.isOptional && !c.includeInMasterMix">
+                  <td>
+                    <div class="comp-table-name">
+                      {{ c.name }}
+                      <span *ngIf="!c.includeInMasterMix" class="separate-badge">(Add separately)</span>
+                    </div>
+                  </td>
+                  <td class="text-right">{{ c.perReaction | number:'1.2-2' }}</td>
+                  <td class="text-right highlight-vol">{{ c.total | number:'1.2-2' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="alerts" *ngIf="errors.length > 0 || warnings.length > 0">
+            <div *ngFor="let err of errors" class="alert error">{{ err }}</div>
+            <div *ngFor="let warn of warnings" class="alert warning">{{ warn }}</div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Manager View (Modal-like Overlay) -->
+  <div *ngIf="viewMode === 'manager'" class="manager-overlay" (click)="viewMode = 'calculator'">
+    <div class="manager-modal card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Manage PCR Presets</h2>
+        <button class="btn-close" (click)="viewMode = 'calculator'">×</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button [class.active]="managerTab === 'system'" (click)="managerTab = 'system'">System Defaults</button>
+        <button [class.active]="managerTab === 'my'" (click)="managerTab = 'my'">
+          My Presets <span class="badge-count">{{ myPresets.length }}</span>
+        </button>
+        <button [class.active]="managerTab === 'incoming'" (click)="managerTab = 'incoming'">
+          Incoming <span *ngIf="incomingTransfers.length > 0" class="badge-notif">{{ incomingTransfers.length }}</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- System Presets -->
+        <div *ngIf="managerTab === 'system'" class="preset-list">
+          <div *ngFor="let p of systemPresets" class="preset-item system">
+            <div class="p-info">
+              <span class="p-name">{{ p.name }}</span>
+              <span class="p-meta">{{ p.category }} • {{ p.source }}</span>
+            </div>
+            <span class="badge-system">System Default</span>
+          </div>
+        </div>
+
+        <!-- My Presets -->
+        <div *ngIf="managerTab === 'my'" class="preset-list">
+          <div *ngIf="myPresets.length === 0" class="empty-list">You haven't saved any personal presets yet.</div>
+          <div *ngFor="let p of myPresets" class="preset-item">
+            <div class="p-info">
+              <span class="p-name">{{ p.name }}</span>
+              <span class="p-meta">{{ p.category }} • Created on {{ p.id ? 'Saved' : 'Local' }}</span>
+            </div>
+            <div class="p-actions">
+              <button class="btn-send" (click)="openShareModal(p)" title="Send to Researcher">Send to</button>
+              <button class="btn-delete" (click)="deletePreset(p.id!)" title="Delete">🗑️</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Incoming Transfers -->
+        <div *ngIf="managerTab === 'incoming'" class="preset-list">
+          <div *ngIf="incomingTransfers.length === 0" class="empty-list">No incoming presets.</div>
+          <div *ngFor="let t of incomingTransfers" class="preset-item transfer">
+            <div class="p-info">
+              <span class="p-name">{{ t.preset_name }}</span>
+              <span class="p-meta">From: {{ t.users?.name }} • {{ t.created_at | date:'shortDate' }}</span>
+            </div>
+            <div class="p-actions">
+              <button class="btn-accept" (click)="acceptIncoming(t)">Add to My Presets</button>
+              <button class="btn-reject" (click)="rejectIncoming(t)">Ignore</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send To Modal -->
+  <div *ngIf="sharingPreset" class="modal-overlay" (click)="sharingPreset = null">
+    <div class="share-modal card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Send "{{ sharingPreset.name }}" to...</h3>
+        <button class="btn-close" (click)="sharingPreset = null">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="user-search-box">
+          <input type="text" [(ngModel)]="userSearchQuery" (input)="searchUsers()" placeholder="Search researchers by name...">
+          <div *ngIf="isSearchingUsers" class="mini-spinner"></div>
+        </div>
+
+        <div class="search-results">
+          <div *ngFor="let user of filteredUsers" class="user-row">
+            <div class="user-info">
+              <span class="user-name">{{ user.name }}</span>
+              <span class="user-email">{{ user.email }}</span>
+            </div>
+            <div class="user-actions">
+              <button class="btn-send-action" (click)="sendToUser(user)">Send Preset</button>
+            </div>
+          </div>
+          <div *ngIf="userSearchQuery.length >= 2 && foundUsers.length === 0 && !isSearchingUsers" class="empty-search">
+            No researchers found matching "{{ userSearchQuery }}"
           </div>
         </div>
       </div>

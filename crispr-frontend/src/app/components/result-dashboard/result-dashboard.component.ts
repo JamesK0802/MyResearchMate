@@ -5,6 +5,9 @@ import { takeUntil } from 'rxjs/operators';
 import { AppStateService } from '../../services/app-state.service';
 import { Chart } from 'chart.js/auto';
 
+import { AuthService } from '../../services/auth.service';
+import { ResultsService } from '../../services/results.service';
+
 @Component({
   selector: 'app-result-dashboard',
   standalone: true,
@@ -12,11 +15,45 @@ import { Chart } from 'chart.js/auto';
   templateUrl: './result-dashboard.component.html'
 })
 export class ResultDashboardComponent implements OnInit, OnDestroy {
+  isSaving = false;
+
   constructor(
     public state: AppStateService,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private auth: AuthService,
+    private resultsService: ResultsService
   ) {}
+
+  async saveResult() {
+    const session = await this.auth.getSession();
+    if (!session) {
+      alert('Please sign in to save your results.');
+      return;
+    }
+
+    const title = prompt('Enter a title for this result:', `CRISPR Analysis - ${new Date().toLocaleDateString()}`);
+    if (!title) return;
+
+    const exportData = this.state.getExportData();
+    if (!exportData) return;
+
+    this.isSaving = true;
+    try {
+      await this.resultsService.saveResult(
+        title,
+        {}, // We'll put everything inside result_json for simplicity
+        exportData
+      );
+      alert('Result saved successfully to "My Data"!');
+    } catch (err) {
+      console.error('Failed to save result:', err);
+      alert('Failed to save result. Please try again.');
+    } finally {
+      this.isSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
 
   ngOnInit() {
     this.state.resultsUpdated$.pipe(takeUntil(this.destroy$)).subscribe(() => {

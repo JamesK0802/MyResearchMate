@@ -5,20 +5,80 @@
       <a routerLink="/" class="nav-brand">
         <!-- <span class="brand-dna">⌬</span> -->
         <div class="brand-text">
-          <span class="brand-title">CRISPR Analysis Platform</span>
-          <span class="brand-dept">ANU · Research School of Biology</span>
+          <span class="brand-title">My Research Mate</span>
+          <span class="brand-dept">ANU RSB Research Platform</span>
         </div>
       </a>
-      <a routerLink="/crispr" routerLinkActive="active" class="nav-tab">CRISPR Tool</a>
+
+      <!-- Tools dropdown (always visible) -->
       <div class="nav-dropdown">
         <span class="nav-tab" style="cursor: pointer;">Tools ▾</span>
         <div class="dropdown-content">
+          <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">CRISPR Tool</a>
           <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
         </div>
       </div>
+
+      <!-- Labs dropdown (logged in only) -->
+      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+        <span class="nav-tab" style="cursor: pointer;">Labs ▾</span>
+        <div class="dropdown-content">
+          <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
+          <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
+          <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
+        </div>
+      </div>
+
+      <!-- My Data dropdown (logged in only) -->
+      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+        <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
+        <div class="dropdown-content">
+          <a routerLink="/my-data" routerLinkActive="active" class="dropdown-item">CRISPR Analysis Results</a>
+        </div>
+      </div>
+
+      <!-- Contact (always visible) -->
+      <a routerLink="/contact" class="nav-tab">Contact</a>
+
+      <!-- Admin/Manager links -->
+      <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner' || auth.currentProfile?.role === 'manager')"
+        routerLink="/admin/labs" routerLinkActive="active" class="nav-tab admin-link">Admin Panel</a>
+
+      <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner')"
+        routerLink="/admin/managers" routerLinkActive="active" class="nav-tab admin-link">Managers</a>
     </div>
+
     <div class="nav-right">
       <span class="version-tag">v1.8.0</span>
+
+      <!-- Logged out: Link to Login Page -->
+      <ng-container *ngIf="!(auth.session$ | async)">
+        <a routerLink="/login" class="nav-tab btn-login-link">Sign In</a>
+      </ng-container>
+
+      <!-- Logged in: Profile dropdown -->
+      <ng-container *ngIf="auth.session$ | async">
+        <div class="nav-dropdown profile-dropdown">
+          <button class="btn-profile">
+            <span class="profile-avatar">{{ (auth.currentProfile?.name || auth.currentProfile?.email || '?')[0] |
+              uppercase }}</span>
+            <span class="profile-name">{{ auth.currentProfile?.name || 'Profile' }}</span>
+            <span class="dropdown-arrow">▾</span>
+          </button>
+          <div class="dropdown-content profile-menu">
+            <div class="profile-menu-header">
+              <span class="pm-name">{{ auth.currentProfile?.name }}</span>
+              <span class="pm-email">{{ auth.currentProfile?.email }}</span>
+              <span class="pm-role" [class]="'role-' + (auth.currentProfile?.role || 'user')">
+                {{ auth.currentProfile?.role | uppercase }}
+              </span>
+            </div>
+            <div class="profile-menu-divider"></div>
+            <a routerLink="/profile" class="dropdown-item">👤 My Profile</a>
+            <button class="dropdown-item logout-item" (click)="logout()">🚪 Sign Out</button>
+          </div>
+        </div>
+      </ng-container>
     </div>
   </nav>
 

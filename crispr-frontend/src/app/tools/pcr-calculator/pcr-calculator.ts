@@ -1,7 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
-import { PcrPresetService, PcrPreset, PcrComponent } from '../../services/pcr-preset.service';
+import { ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators, FormsModule } from '@angular/forms';
+import { PcrPresetService, PCRPreset, PCRComponent } from '../../services/pcr-preset.service';
+import { AuthService } from '../../services/auth.service';
+import { LabService } from '../../services/lab.service';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -16,34 +18,38 @@ interface CalculatedComponent {
 @Component({
   selector: 'app-pcr-calculator',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   templateUrl: './pcr-calculator.html',
   styleUrl: './pcr-calculator.css',
 })
 export class PcrCalculator implements OnInit {
   pcrForm!: FormGroup;
-  availablePresets: PcrPreset[] = [];
-  selectedPreset: PcrPreset | null = null;
   
+  // Preset Storage
+  allPresets: PCRPreset[] = [];
+  incomingTransfers: any[] = [];
+  
+  selectedPreset: PCRPreset | null = null;
   viewMode: 'calculator' | 'manager' = 'calculator';
+  managerTab: 'system' | 'my' | 'incoming' = 'system';
 
-  calculationModes = [
-    { id: 'fixed_ratio', name: 'Ratio (1/N)' },
-    { id: 'fixed_volume', name: 'Fixed Volume (µL)' },
-    { id: 'primer_concentration', name: 'Concentration (C1V1)' },
-    { id: 'fill_to_reaction_volume', name: 'Water (Balance)' }
-  ];
-
-  concentrationUnits = ['mM', 'µM', 'nM'];
+  // Sharing State
+  sharingPreset: PCRPreset | null = null;
+  userSearchQuery = '';
+  foundUsers: any[] = [];
+  isSearchingUsers = false;
 
   constructor(
     private fb: FormBuilder,
-    private presetService: PcrPresetService
+    private presetService: PcrPresetService,
+    public auth: AuthService,
+    private labService: LabService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
     this.initForm();
-    this.loadPresets();
+    this.loadData();
   }
 
   initForm() {
@@ -56,14 +62,23 @@ export class PcrCalculator implements OnInit {
     });
   }
 
-  loadPresets() {
-    this.presetService.getPresets().subscribe(presets => {
-      this.availablePresets = presets;
-      if (presets.length > 0) {
-        this.selectPreset(presets[0].id!);
+  async loadData() {
+    try {
+      const data = await this.presetService.getPresets();
+      this.allPresets = data.presets;
+      this.incomingTransfers = data.transfers;
+      
+      if (this.allPresets.length > 0 && !this.selectedPreset) {
+        this.selectPreset(this.allPresets[0].id!);
       }
-    });
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.error('Failed to load presets', err);
+    }
   }
+
+  get systemPresets() { return this.allPresets.filter(p => p.isSystem); }
+  get myPresets() { return this.allPresets.filter(p => !p.isSystem && p.ownerUserId === this.auth.currentProfile?.id); }
 
   get componentForms() {
     return this.pcrForm.get('components') as FormArray;
@@ -72,26 +87,21 @@ export class PcrCalculator implements OnInit {
   selectPreset(id: string) {
     if (id === 'custom') {
       this.selectedPreset = {
-        id: 'custom',
         name: 'Custom Protocol',
         category: 'Custom',
         defaultReactionVolume: 20,
         allowedReactionVolumes: [],
-        isDefault: false,
+        isSystem: false,
         components: []
       };
-      this.pcrForm.patchValue({ 
-        presetId: 'custom',
-        reactionVolume: 20
-      });
+      this.pcrForm.patchValue({ presetId: 'custom', reactionVolume: 20 });
       while (this.componentForms.length) this.componentForms.removeAt(0);
-      
       this.addComponent('Template DNA', 'fixed_volume', false);
       this.addComponent('Nuclease-Free Water', 'fill_to_reaction_volume', true);
       return;
     }
 
-    const preset = this.availablePresets.find(p => p.id === id);
+    const preset = this.allPresets.find(p => p.id === id);
     if (!preset) return;
     
     this.selectedPreset = preset;
@@ -102,35 +112,13 @@ export class PcrCalculator implements OnInit {
 
     while (this.componentForms.length) this.componentForms.removeAt(0);
     
-    const sortedComps = [...preset.components].sort((a, b) => {
-      const isTemplateA = a.name.toLowerCase().includes('template');
-      const isTemplateB = b.name.toLowerCase().includes('template');
-      const isWaterA = a.calculationMode === 'fill_to_reaction_volume';
-      const isWaterB = b.calculationMode === 'fill_to_reaction_volume';
-
-      if (isTemplateA) return -1;
-      if (isTemplateB) return 1;
-      if (isWaterA) return 1;
-      if (isWaterB) return -1;
-      return (a.displayOrder || 0) - (b.displayOrder || 0);
-    });
+    const sortedComps = [...preset.components].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 
     sortedComps.forEach(comp => {
-      let mode = comp.calculationMode;
-      // Merge redundant modes
-      if (mode === 'user_input') mode = 'fixed_volume';
-      if (mode === 'volume_per_25ul') mode = 'fixed_ratio';
-      if (mode === 'fixed_final_concentration') mode = 'primer_concentration';
-
-      let ratioDenom = comp.ratioDenominator;
-      if (comp.calculationMode === 'volume_per_25ul' && comp.volumePer25ul) {
-        ratioDenom = 25 / comp.volumePer25ul;
-      }
-
       this.componentForms.push(this.fb.group({
         id: [comp.id],
         name: [comp.name],
-        calculationMode: [mode],
+        calculationMode: [comp.calculationMode],
         isOptional: [comp.isOptional],
         enabled: [true],
         userInputVolume: [comp.fixedVolume || 0],
@@ -138,7 +126,7 @@ export class PcrCalculator implements OnInit {
         stockUnit: [comp.stockUnit || 'µM'],
         finalConcentration: [comp.finalConcentration || 0.5],
         finalUnit: [comp.finalUnit || 'µM'],
-        ratioDenominator: [ratioDenom || 2],
+        ratioDenominator: [comp.ratioDenominator || 2],
         fixedVolume: [comp.fixedVolume || 0],
         includeInMasterMix: [comp.includeInMasterMix]
       }));
@@ -190,7 +178,6 @@ export class PcrCalculator implements OnInit {
 
   calculateResults() {
     if (!this.selectedPreset) return null;
-    
     const formVal = this.pcrForm.value;
     const rxnVol = formVal.reactionVolume;
     const nRxn = formVal.numReactions;
@@ -202,34 +189,21 @@ export class PcrCalculator implements OnInit {
 
     formVal.components.forEach((c: any) => {
       if (c.isOptional && !c.enabled) return;
-      
       let perRxn = 0;
-
       switch (c.calculationMode) {
-        case 'fixed_ratio':
-          perRxn = rxnVol / (c.ratioDenominator || 1);
-          break;
-        case 'fixed_volume':
-          perRxn = c.fixedVolume || 0;
-          break;
+        case 'fixed_ratio': perRxn = rxnVol / (c.ratioDenominator || 1); break;
+        case 'fixed_volume': perRxn = c.fixedVolume || 0; break;
         case 'primer_concentration':
           const stockUM = this.toMicromolar(c.stockConcentration, c.stockUnit);
           const finalUM = this.toMicromolar(c.finalConcentration, c.finalUnit);
-          if (stockUM > 0) {
-            perRxn = (finalUM * rxnVol) / stockUM;
-          }
+          if (stockUM > 0) perRxn = (finalUM * rxnVol) / stockUM;
           break;
-        case 'fill_to_reaction_volume':
-          waterComponent = c;
-          return; 
+        case 'fill_to_reaction_volume': waterComponent = c; return; 
       }
-
       results.push({
-        name: c.name,
-        perReaction: perRxn,
+        name: c.name, perReaction: perRxn,
         total: perRxn * (c.includeInMasterMix ? effectiveRxns : nRxn),
-        isOptional: c.isOptional,
-        includeInMasterMix: c.includeInMasterMix
+        isOptional: c.isOptional, includeInMasterMix: c.includeInMasterMix
       });
       sumOtherVols += perRxn;
     });
@@ -237,21 +211,11 @@ export class PcrCalculator implements OnInit {
     const waterVol = Math.max(0, rxnVol - sumOtherVols);
     if (waterComponent) {
       results.push({
-        name: waterComponent.name,
-        perReaction: waterVol,
-        total: waterVol * effectiveRxns,
-        isOptional: false,
-        includeInMasterMix: true
+        name: waterComponent.name, perReaction: waterVol,
+        total: waterVol * effectiveRxns, isOptional: false, includeInMasterMix: true
       });
     }
-
-    return {
-      components: results,
-      effectiveRxns,
-      totalRxnVol: rxnVol,
-      waterVol: rxnVol - sumOtherVols,
-      clampedWater: waterVol
-    };
+    return { components: results, effectiveRxns, totalRxnVol: rxnVol, waterVol: rxnVol - sumOtherVols, clampedWater: waterVol };
   }
 
   get results() { return this.calculateResults(); }
@@ -270,7 +234,6 @@ export class PcrCalculator implements OnInit {
     const warns: string[] = [];
     if (res) {
       res.components.forEach(c => {
-        // Warning should be based on TOTAL BULK for pipetting safety
         if (c.total > 0 && c.total < 0.5) warns.push(`Total bulk volume for ${c.name} is very low (< 0.5 µL).`);
       });
       if (res.clampedWater * res.effectiveRxns < 1 && res.waterVol >= 0) warns.push('Total water volume is extremely low. Pipetting may be difficult.');
@@ -278,44 +241,111 @@ export class PcrCalculator implements OnInit {
     return warns;
   }
 
-  saveAsPreset() {
+  async saveAsPreset() {
+    if (!this.auth.isLoggedIn) {
+      alert('Please log in to save your personal presets.');
+      return;
+    }
     const name = prompt('Enter a name for this preset:');
     if (!name) return;
 
     const formVal = this.pcrForm.value;
-    const newPreset: PcrPreset = {
-      name: name,
-      category: 'User Created',
+    const newPreset: PCRPreset = {
+      name: name, category: 'User Created',
       defaultReactionVolume: formVal.reactionVolume,
       allowedReactionVolumes: [formVal.reactionVolume],
-      isDefault: false,
+      isSystem: false,
       components: formVal.components.map((c: any, i: number) => ({
-        name: c.name,
-        componentType: 'other',
-        calculationMode: c.calculationMode,
-        stockConcentration: c.stockConcentration,
-        stockUnit: c.stockUnit,
-        finalConcentration: c.finalConcentration,
-        finalUnit: c.finalUnit,
-        ratioDenominator: c.ratioDenominator,
-        fixedVolume: c.fixedVolume,
-        includeInMasterMix: c.includeInMasterMix,
-        isOptional: c.isOptional,
-        displayOrder: i
+        name: c.name, componentType: 'other', calculationMode: c.calculationMode,
+        stockConcentration: c.stockConcentration, stockUnit: c.stockUnit,
+        finalConcentration: c.finalConcentration, finalUnit: c.finalUnit,
+        ratioDenominator: c.ratioDenominator, fixedVolume: c.fixedVolume,
+        includeInMasterMix: c.includeInMasterMix, isOptional: c.isOptional, displayOrder: i
       }))
     };
 
-    this.presetService.createPreset(newPreset).subscribe(() => {
+    try {
+      await this.presetService.createPreset(newPreset);
       alert('Preset saved successfully!');
-      this.loadPresets();
-    });
+      this.loadData();
+    } catch (err) {
+      alert('Failed to save preset');
+    }
   }
 
-  deletePreset(id: string) {
+  async deletePreset(id: string) {
     if (confirm('Are you sure you want to delete this preset?')) {
-      this.presetService.deletePreset(id).subscribe(() => {
-        this.loadPresets();
-      });
+      await this.presetService.deletePreset(id);
+      this.loadData();
+    }
+  }
+
+  // --- Sharing / Transfers ---
+
+  allUsers: any[] = [];
+  filteredUsers: any[] = [];
+
+  async openShareModal(preset: PCRPreset) {
+    this.sharingPreset = preset;
+    this.userSearchQuery = '';
+    this.isSearchingUsers = true;
+    try {
+      // Use the same endpoint as manager management
+      this.allUsers = await this.labService.getAllUsers();
+      // Filter out self and owner if needed, but usually just self
+      this.allUsers = this.allUsers.filter(u => u.id !== this.auth.currentProfile?.id);
+      this.filteredUsers = [...this.allUsers];
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.error('Failed to load users for sharing', err);
+    } finally {
+      this.isSearchingUsers = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  searchUsers() {
+    const term = this.userSearchQuery.toLowerCase().trim();
+    if (!term) {
+      this.filteredUsers = [...this.allUsers];
+    } else {
+      this.filteredUsers = this.allUsers.filter(u => 
+        (u.name || '').toLowerCase().includes(term) || 
+        (u.email || '').toLowerCase().includes(term) ||
+        (u.uid || '').toLowerCase().includes(term)
+      );
+    }
+    this.cdr.detectChanges();
+  }
+
+  async sendToUser(user: any) {
+    if (!this.sharingPreset) return;
+    try {
+      await this.presetService.sendPreset(this.sharingPreset.id!, user.id);
+      alert(`Preset sent to ${user.name}!`);
+      this.sharingPreset = null;
+    } catch (err) {
+      alert('Failed to send preset');
+    }
+  }
+
+  async acceptIncoming(transfer: any) {
+    try {
+      await this.presetService.acceptTransfer(transfer.id);
+      alert('Preset added to your collection!');
+      this.loadData();
+    } catch (err) {
+      alert('Failed to accept preset');
+    }
+  }
+
+  async rejectIncoming(transfer: any) {
+    if (!confirm('Are you sure you want to ignore this preset?')) return;
+    try {
+      await this.presetService.rejectTransfer(transfer.id);
+      this.loadData();
+    } catch (err) {
+      alert('Failed to reject preset');
     }
   }
 
@@ -328,21 +358,17 @@ export class PcrCalculator implements OnInit {
     doc.setFontSize(22);
     doc.setTextColor(30, 41, 59);
     doc.text('PCR Setup Protocol', 14, 20);
-    
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
     doc.text(`Preset: ${this.selectedPreset.name}`, 14, 30);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 160, 30);
-
     doc.setDrawColor(226, 232, 240);
     doc.setFillColor(248, 250, 252);
     doc.rect(14, 35, 182, 20, 'FD');
-    
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
     doc.setFont('helvetica', 'bold');
     doc.text('Experiment Settings', 20, 42);
-    
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.text(`Reactions: ${form.numReactions}`, 20, 49);
@@ -352,17 +378,10 @@ export class PcrCalculator implements OnInit {
     autoTable(doc, {
       startY: 60,
       head: [['Component', 'Per Rxn (µL)', 'Total Bulk (µL)']],
-      body: res.components.map(c => [
-        c.name, 
-        c.perReaction.toFixed(2), 
-        c.total.toFixed(2)
-      ]),
+      body: res.components.map(c => [c.name, c.perReaction.toFixed(2), c.total.toFixed(2)]),
       headStyles: { fillColor: [30, 41, 59] },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: {
-        1: { halign: 'right' },
-        2: { halign: 'right' }
-      }
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
     });
 
     doc.save(`${this.selectedPreset.name.replace(/\s+/g, '_')}_Protocol.pdf`);

@@ -1,9 +1,18 @@
 import { Routes } from '@angular/router';
 import { MainPageComponent } from './pages/main-page/main-page.component';
 import { CrisprLayoutComponent } from './layouts/crispr-layout/crispr-layout.component';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   { path: '', component: MainPageComponent },
+  { 
+    path: 'login', 
+    loadComponent: () => import('./pages/login-page/login-page.component').then(m => m.LoginPageComponent) 
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./pages/register-page/register-page.component').then(m => m.RegisterPageComponent)
+  },
   {
     path: 'crispr',
     component: CrisprLayoutComponent,
@@ -23,9 +32,40 @@ export const routes: Routes = [
       }
     ]
   },
+  {
+    path: 'my-data',
+    loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
+    canActivate: [authGuard]
+  },
+  { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
+  { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
+  { path: 'labs/my', loadComponent: () => import('./pages/my-labs/my-labs.component').then(m => m.MyLabsComponent), canActivate: [authGuard] },
+  {
+    path: 'admin/labs',
+    loadComponent: () => import('./pages/admin-panel/admin-panel.component').then(m => m.AdminPanelComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'admin/managers',
+    loadComponent: () => import('./pages/manager-management/manager-management.component').then(m => m.ManagerManagementComponent),
+    canActivate: [authGuard]
+  },
   { 
     path: 'tools/pcr', 
     loadComponent: () => import('./tools/pcr-calculator/pcr-calculator').then(m => m.PcrCalculator) 
+  },
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./pages/login-callback/login-callback.component').then(m => m.LoginCallbackComponent)
+  },
+  {
+    path: 'profile',
+    loadComponent: () => import('./pages/profile-page/profile-page.component').then(m => m.ProfilePageComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'contact',
+    loadComponent: () => import('./pages/contact-page/contact-page.component').then(m => m.ContactPageComponent)
   },
   { path: '**', redirectTo: '' }
 ];

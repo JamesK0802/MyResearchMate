@@ -351,6 +351,50 @@ export class AppStateService {
     this.selectedRowIndex = 0;
   }
 
+  /**
+   * Unified loader to restore state from a package containing params and scopes.
+   * Used by both Excel Import and My Data Load.
+   */
+  loadResultData(data: { params: any, scopes: any[] }) {
+    this.ngZone.run(() => {
+      this.lastRunParams = data.params;
+      this.allFileResults = [];
+      
+      const mergedScope = data.scopes.find(s => s.sheetName === 'Merged');
+      if (mergedScope) {
+        this.mergedGenes = mergedScope.genes;
+        this.totalMergedRawReads = mergedScope.readFlow.rawReads;
+        this.totalMergedPhredPassed = mergedScope.readFlow.phredPassed;
+        this.totalMergedAnchorMatched = mergedScope.readFlow.anchorMatched;
+        this.totalMergedAmbiguous = mergedScope.readFlow.ambiguousReads;
+      } else {
+        this.mergedGenes = [];
+      }
+
+      const fileScopes = data.scopes.filter(s => s.sheetName !== 'Merged');
+      for (const scope of fileScopes) {
+        this.allFileResults.push({
+          fastq_file: scope.sheetName,
+          multi_reference_result: {
+            debug: {
+              total_reads_parsed: scope.readFlow.rawReads,
+              phred_passed_count: scope.readFlow.phredPassed,
+              anchor_matched_count: scope.readFlow.anchorMatched
+            },
+            ambiguous_read_count: scope.readFlow.ambiguousReads,
+            genes: scope.genes
+          }
+        });
+      }
+
+      this.isMultiReference = true;
+      this.multiFileCount = fileScopes.length;
+      this.selectedScopeIndex = -1;
+      this.updateVisibleGenes();
+      this.resultsUpdated$.next();
+    });
+  }
+
   destroyCharts() { this.charts.forEach(c => c.destroy()); this.charts = []; }
   addChart(chart: Chart) { this.charts.push(chart); }
   getScopeName(i: number): string { if (i === -1) return 'All'; const p = this.allFileResults[i].fastq_file; return p.split('/').pop() || p; }
@@ -423,18 +467,68 @@ export class AppStateService {
     });
   }
 
-  async exportToExcel() {
-    if (!this.lastRunParams || this.mergedGenes.length === 0) return;
+  /**
+   * Helper to build the same data structure used by Excel export.
+   * This includes both params and processed scopes (Merged + Per-file).
+   */
+  getExportData() {
+    if (!this.lastRunParams || this.mergedGenes.length === 0) return null;
+
     const scopes: ScopeData[] = [];
-    const totalAssigned = this.mergedGenes.filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived).reduce((s, g) => s + g.assigned_read_count, 0);
-    scopes.push({ sheetName: 'Merged', readFlow: { rawReads: this.totalMergedRawReads, phredPassed: this.totalMergedPhredPassed, anchorMatched: this.totalMergedAnchorMatched, assignedReads: totalAssigned, ambiguousReads: this.totalMergedAmbiguous }, genes: this.mergedGenes });
+    const totalAssigned = this.mergedGenes
+      .filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived)
+      .reduce((s, g) => s + g.assigned_read_count, 0);
+
+    // 1. Merged scope
+    scopes.push({
+      sheetName: 'Merged',
+      readFlow: {
+        rawReads: this.totalMergedRawReads,
+        phredPassed: this.totalMergedPhredPassed,
+        anchorMatched: this.totalMergedAnchorMatched,
+        assignedReads: totalAssigned,
+        ambiguousReads: this.totalMergedAmbiguous
+      },
+      genes: this.mergedGenes
+    });
+
+    // 2. Individual file scopes
     for (let i = 0; i < this.allFileResults.length; i++) {
-      const fr = this.allFileResults[i]; const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined; if (!mrd) continue;
-      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`; const fg = mrd.genes || [];
-      const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived).reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
-      scopes.push({ sheetName: fn, readFlow: { rawReads: mrd.debug?.total_reads_parsed ?? 0, phredPassed: mrd.debug?.phred_passed_count ?? 0, anchorMatched: mrd.debug?.anchor_matched_count ?? 0, assignedReads: fa, ambiguousReads: mrd.ambiguous_read_count ?? 0 }, genes: fg });
+      const fr = this.allFileResults[i];
+      const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined;
+      if (!mrd) continue;
+      
+      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
+      const fg = mrd.genes || [];
+      const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived)
+                   .reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
+
+      scopes.push({
+        sheetName: fn,
+        readFlow: {
+          rawReads: mrd.debug?.total_reads_parsed ?? 0,
+          phredPassed: mrd.debug?.phred_passed_count ?? 0,
+          anchorMatched: mrd.debug?.anchor_matched_count ?? 0,
+          assignedReads: fa,
+          ambiguousReads: mrd.ambiguous_read_count ?? 0
+        },
+        genes: fg
+      });
     }
-    try { await this.excelExportService.exportToExcel(this.lastRunParams, scopes); this.addLog('Excel exported.'); }
-    catch (e: any) { console.error('Excel export failed:', e); this.addLog(`Excel export failed: ${e.message}`); }
+
+    return { params: this.lastRunParams, scopes };
+  }
+
+  async exportToExcel() {
+    const data = this.getExportData();
+    if (!data) return;
+
+    try {
+      await this.excelExportService.exportToExcel(data.params, data.scopes);
+      this.addLog('Excel exported.');
+    } catch (e: any) {
+      console.error('Excel export failed:', e);
+      this.addLog(`Excel export failed: ${e.message}`);
+    }
   }
 }

@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before any other imports that need env vars
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, APIRouter
 import core.classifier as classifier
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,13 +13,12 @@ import uuid
 import time
 import pcr_presets
 
-# Initialize PCR Presets DB
-pcr_presets.init_db()
+# PCR Presets are now managed via Supabase (pcr_presets.py)
 
 # Import our analysis pipelines
 from run_local import process_files, process_files_multi
 
-app = FastAPI(title="CRISPR Analysis API")
+app = FastAPI(title="My Research Mate API")
 
 # ── Main API Router ──────────────────────────────────────────────────────────
 api_router = APIRouter(prefix="/api")
@@ -256,6 +258,18 @@ async def run_benchmark_endpoint(
 
 # Include PCR presets router
 api_router.include_router(pcr_presets.router)
+
+# Include auth router
+from auth.router import router as auth_router
+api_router.include_router(auth_router)
+
+# Include results router
+from routers.results import router as results_router
+api_router.include_router(results_router)
+
+# Include labs router
+from routers.labs import router as labs_router
+api_router.include_router(labs_router)
 
 # Include main api_router
 app.include_router(api_router)

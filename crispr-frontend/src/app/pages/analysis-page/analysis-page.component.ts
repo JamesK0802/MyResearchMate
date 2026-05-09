@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { AppStateService } from '../../services/app-state.service';
 import { ResultDashboardComponent } from '../../components/result-dashboard/result-dashboard.component';
-import { ExportParams } from '../../services/excel-export.service';
+import { AuthService } from '../../services/auth.service';
+import { ResultsService } from '../../services/results.service';
 
 @Component({
   selector: 'app-analysis-page',
@@ -12,9 +13,13 @@ import { ExportParams } from '../../services/excel-export.service';
   templateUrl: './analysis-page.component.html'
 })
 export class AnalysisPageComponent implements OnInit {
+  isSaving = false;
+
   constructor(
     public state: AppStateService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public auth: AuthService,
+    private resultsService: ResultsService
   ) { }
 
   ngOnInit() {
@@ -43,7 +48,35 @@ export class AnalysisPageComponent implements OnInit {
   onDragLeave(event: DragEvent) { event.preventDefault(); this.state.isDragging = false; }
   removeFile(i: number) { this.state.selectedFiles.splice(i, 1); }
 
+  async saveCurrentResult() {
+    const session = await this.auth.getSession();
+    if (!session) {
+      alert('Please sign in to save your results.');
+      return;
+    }
+
+    const title = prompt('Enter a title for this result:');
+    if (!title) return;
+
+    this.isSaving = true;
+    try {
+      await this.resultsService.saveResult(
+        title,
+        this.state.lastRunParams,
+        this.state.allFileResults
+      );
+      alert('Result saved successfully to "My Data"!');
+    } catch (err) {
+      console.error('Failed to save result:', err);
+      alert('Failed to save result. Please try again.');
+    } finally {
+      this.isSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   runAnalysis() {
+    // ... (existing runAnalysis code)
     const rawValue = this.state.analysisForm.value;
     const formInvalid = this.state.analysisForm.get('genes')?.invalid || this.state.analysisForm.get('interestRegion')?.invalid;
 

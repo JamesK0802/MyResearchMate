@@ -10,7 +10,16 @@
     <button *ngIf="state.activeMode === 'viewer'" type="button" class="btn-new-analysis" (click)="state.newViewer()">
       <span class="btn-icon"></span> New View
     </button>
+    
     <span class="button-divider">&nbsp; </span>
+
+    <!-- Save to My Data Button -->
+    <button type="button" class="btn-save-data" 
+      (click)="saveResult()"
+      [disabled]="state.mergedGenes.length === 0 || isSaving">
+      <span class="save-icon">💾</span> {{ isSaving ? 'Saving...' : 'Save to My Data' }}
+    </button>
+
     <button type="button" class="btn-export" (click)="state.exportToExcel()"
       [disabled]="state.mergedGenes.length === 0">
       <span class="export-icon"></span> Export Excel

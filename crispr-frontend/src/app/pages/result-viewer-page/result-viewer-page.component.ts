@@ -42,47 +42,9 @@ export class ResultViewerPageComponent implements OnInit {
       this.state.addLog(`Loading excel file: ${file.name}`);
       const data = await this.excelExportService.importFromExcel(file);
       
-      this.state.ngZone.run(() => {
-        this.state.lastRunParams = data.params as ExportParams;
-        this.state.allFileResults = [];
-        
-        const mergedScope = data.scopes.find(s => s.sheetName === 'Merged');
-        if (mergedScope) {
-          this.state.mergedGenes = mergedScope.genes;
-          this.state.totalMergedRawReads = mergedScope.readFlow.rawReads;
-          this.state.totalMergedPhredPassed = mergedScope.readFlow.phredPassed;
-          this.state.totalMergedAnchorMatched = mergedScope.readFlow.anchorMatched;
-          this.state.totalMergedAmbiguous = mergedScope.readFlow.ambiguousReads;
-        } else {
-          this.state.mergedGenes = [];
-        }
-
-        const fileScopes = data.scopes.filter(s => s.sheetName !== 'Merged');
-        for (const scope of fileScopes) {
-          this.state.allFileResults.push({
-            fastq_file: scope.sheetName,
-            multi_reference_result: {
-              debug: {
-                total_reads_parsed: scope.readFlow.rawReads,
-                phred_passed_count: scope.readFlow.phredPassed,
-                anchor_matched_count: scope.readFlow.anchorMatched
-              },
-              ambiguous_read_count: scope.readFlow.ambiguousReads,
-              genes: scope.genes
-            }
-          });
-        }
-
-        this.state.isMultiReference = true;
-        this.state.multiFileCount = fileScopes.length;
-        this.state.selectedScopeIndex = -1;
-        this.state.updateVisibleGenes();
-        
-        this.cdr.detectChanges(); // Force *ngIf to update
-        this.state.resultsUpdated$.next();
-
-        this.state.addLog(`Excel report imported successfully.`);
-      });
+      this.state.loadResultData(data);
+      this.cdr.detectChanges();
+      this.state.addLog(`Excel report imported successfully.`);
     } catch (e: any) {
       console.error('Excel import failed:', e);
       this.state.addLog(`Excel import failed: ${e.message}`);

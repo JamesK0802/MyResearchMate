@@ -1,32 +1,33 @@
-# Node / Angular
-node_modules/
-dist/
-.angular/
-.npm
-.cache/
+# --- Backend (Python) ---
+crispr_backend/venv/
+crispr_backend/.venv/
+crispr_backend/__pycache__/
+crispr_backend/*.pyc
+crispr_backend/.env
+crispr_backend/data/*.db
+crispr_backend/temp/
+crispr_backend/tasks.json
 
-# Python
-venv/
-.venv/
-__pycache__/
-*.py[cod]
-*$py.class
-.env
+# --- Frontend (Angular) ---
+crispr-frontend/node_modules/
+crispr-frontend/.angular/
+crispr-frontend/dist/
+crispr-frontend/.vscode/
+# 만약 environment.ts에 민감한 키를 넣었다면 아래 주석을 해제하세요.
+# crispr-frontend/src/environments/environment.ts
+# crispr-frontend/src/environments/environment.prod.ts
 
-# MacOS
+# --- System & IDE ---
 .DS_Store
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+*.log
+.gemini/
+.antigravity/
 
-# Build Artifacts & Binaries
-dist/
-build/
-backend-bin/
-dist-packaged/
-*.spec
-bin/
-obj/
+# --- Temporary/Research Data ---
+*.fastq
+*.fastq.gz
+*.csv
+*.xlsx
+results/
