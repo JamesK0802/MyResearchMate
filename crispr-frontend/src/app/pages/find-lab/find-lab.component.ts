@@ -98,57 +98,55 @@ import { LabService } from '../../services/lab.service';
     </div>
   `,
   styles: [`
-    .find-lab-container { padding: 40px; max-width: 1200px; margin: 0 auto; }
-    .page-header { margin-bottom: 40px; }
-    .page-header h1 { font-size: 2.5rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
-    .page-header p { color: #64748b; font-size: 1.1rem; }
+    .find-lab-container { padding: var(--space-10); max-width: var(--page-max-width); margin: 0 auto; }
+    .page-header { margin-bottom: var(--space-8); }
+    .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
+    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
-    .search-bar-container { display: flex; gap: 20px; margin-bottom: 40px; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .search-bar-container { display: flex; gap: var(--space-5); margin-bottom: var(--space-8); background: var(--color-surface); padding: var(--space-5); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); border: 1px solid var(--color-border-light); }
     .search-box { flex: 1; position: relative; }
-    .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; }
-    .search-box input { width: 100%; padding: 14px 16px 14px 48px; border: 2px solid #f1f5f9; border-radius: 12px; font-size: 1rem; transition: all 0.2s; }
-    .search-box input:focus { border-color: #166534; outline: none; background: #f0fdf4; }
-    
-    .sort-box { display: flex; align-items: center; gap: 12px; }
-    .sort-box label { font-weight: 700; color: #64748b; font-size: 0.9rem; white-space: nowrap; }
-    .sort-box select { padding: 12px 16px; border: 2px solid #f1f5f9; border-radius: 12px; background: white; font-weight: 600; color: #1e293b; cursor: pointer; }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: var(--color-text-tertiary); }
+    .search-box input { width: 100%; padding: 11px 14px 11px 40px; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--text-md); color: var(--color-text-body); background: var(--color-surface-alt); transition: var(--transition-fast); outline: none; }
+    .search-box input:focus { border-color: var(--color-primary); background: var(--color-surface); box-shadow: 0 0 0 3px rgba(22,101,52,0.08); }
+    .sort-box { display: flex; align-items: center; gap: var(--space-3); }
+    .sort-box label { font-weight: var(--fw-semi); color: var(--color-text-secondary); font-size: var(--text-base); white-space: nowrap; }
+    .sort-box select { padding: 10px 14px; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); font-family: var(--font-sans); font-weight: var(--fw-semi); color: var(--color-text-body); cursor: pointer; font-size: var(--text-base); outline: none; transition: var(--transition-fast); }
+    .sort-box select:focus { border-color: var(--color-primary); }
 
-    .labs-grid { display: flex; flex-direction: column; gap: 16px; }
-    .lab-card { background: white; border-radius: 20px; padding: 24px; border: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; gap: 30px; transition: all 0.2s; }
-    .lab-card:hover { transform: translateX(8px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); border-color: #166534; }
-    
-    .lab-main-info { flex: 1; }
-    .lab-card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 8px; }
-    .lab-name { font-size: 1.2rem; font-weight: 800; color: #0f172a; margin: 0; }
-    .lab-date { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
-    
-    .lab-tagline { font-weight: 700; color: #166534; font-size: 0.9rem; margin-bottom: 6px; }
-    .lab-desc { color: #64748b; font-size: 0.9rem; line-height: 1.5; margin: 0; max-width: 800px; }
-    
-    .lab-footer { min-width: 180px; display: flex; justify-content: flex-end; }
-    .btn-join { width: 100%; padding: 14px; background: #166534; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
-    .btn-join:hover:not(:disabled) { background: #14532d; }
-    .btn-join:disabled { opacity: 0.6; cursor: not-allowed; }
+    .labs-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+    .lab-card { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-5) var(--space-6); border: 1px solid var(--color-border-light); display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); transition: var(--transition-normal); }
+    .lab-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-md); transform: translateX(4px); }
+    .lab-main-info { flex: 1; min-width: 0; }
+    .lab-card-header { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+    .lab-name { font-size: var(--text-lg); font-weight: var(--fw-black); color: var(--color-text-primary); margin: 0; }
+    .lab-date { font-size: var(--text-xs); color: var(--color-text-tertiary); font-weight: var(--fw-semi); }
+    .lab-tagline { font-weight: var(--fw-semi); color: var(--color-primary); font-size: var(--text-base); margin-bottom: var(--space-1); }
+    .lab-desc { color: var(--color-text-secondary); font-size: var(--text-base); line-height: var(--lh-normal); margin: 0; max-width: 700px; }
+    .lab-footer { min-width: 160px; display: flex; justify-content: flex-end; flex-shrink: 0; }
+    .btn-join { padding: 10px 20px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; transition: var(--transition-fast); white-space: nowrap; }
+    .btn-join:hover:not(:disabled) { background: var(--color-primary-hover); }
+    .btn-join:disabled { opacity: 0.55; cursor: not-allowed; }
+    .status-badge { background: var(--color-primary-light); color: var(--color-primary); padding: 9px 18px; border-radius: var(--radius-md); font-weight: var(--fw-bold); font-size: var(--text-base); border: 1px solid var(--color-primary-border); }
+    .status-badge.pending { background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning-border); }
 
-    .status-badge { background: #f0fdf4; color: #166534; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; border: 1px solid #bbf7d0; }
-    .status-badge.pending { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+    .my-requests-section { margin-bottom: var(--space-8); background: var(--color-surface-alt); padding: var(--space-6); border-radius: var(--radius-xl); border: 1px solid var(--color-border); }
+    .section-title { font-size: var(--text-md); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-4); }
+    .requests-list-mini { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+    .request-mini-card { background: var(--color-surface); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+    .req-mini-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+    .req-lab-name { font-weight: var(--fw-bold); color: var(--color-text-primary); font-size: var(--text-base); }
+    .req-mini-date { font-size: var(--text-xs); color: var(--color-text-tertiary); }
+    .status-badge-mini { font-size: var(--text-xs); font-weight: var(--fw-black); padding: 2px 8px; border-radius: var(--radius-sm); text-transform: uppercase; }
+    .status-badge-mini.pending  { background: var(--color-warning-bg); color: var(--color-warning); }
+    .status-badge-mini.approved { background: var(--color-primary-subtle); color: var(--color-primary); }
+    .status-badge-mini.rejected { background: var(--color-error-bg); color: var(--color-error); }
 
-    .my-requests-section { margin-bottom: 40px; background: #f8fafc; padding: 24px; border-radius: 20px; border: 1px solid #e2e8f0; }
-    .section-title { font-size: 1.1rem; font-weight: 800; color: #1e293b; margin-bottom: 16px; }
-    .requests-list-mini { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-    .request-mini-card { background: white; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
-    .req-mini-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .req-lab-name { font-weight: 700; color: #0f172a; }
-    .req-mini-date { font-size: 0.75rem; color: #94a3b8; }
-    .status-badge-mini { font-size: 0.7rem; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
-    .status-badge-mini.pending { background: #fffbeb; color: #b45309; }
-    .status-badge-mini.approved { background: #f0fdf4; color: #15803d; }
-    .status-badge-mini.rejected { background: #fef2f2; color: #b91c1c; }
-
-    .loading-state, .empty-state { text-align: center; padding: 100px 0; color: #64748b; }
-    .spinner { width: 40px; height: 40px; border: 4px solid #f1f5f9; border-top: 4px solid #166534; border-radius: 50%; margin: 0 auto 16px; animation: spin 1s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    .empty-icon { font-size: 4rem; margin-bottom: 20px; }
+    .loading-state, .empty-state { text-align: center; padding: 80px 0; color: var(--color-text-secondary); }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--color-border-light); border-top-color: var(--color-primary); border-radius: 50%; margin: 0 auto var(--space-4); animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-icon { font-size: 3rem; margin-bottom: var(--space-5); display: block; }
+    .empty-state h3 { font-size: var(--text-xl); color: var(--color-text-primary); margin-bottom: var(--space-3); font-weight: var(--fw-bold); }
+    .empty-state p { color: var(--color-text-secondary); font-size: var(--text-md); }
   `]
 })
 export class FindLabComponent implements OnInit {

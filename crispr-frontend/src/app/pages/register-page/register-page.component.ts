@@ -101,30 +101,39 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `,
   styles: [`
-    .login-container { display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 150px); padding: 20px; background: #f8fafc; }
-    .login-card { width: 100%; max-width: 480px; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
-    .login-header { text-align: center; margin-bottom: 32px; }
-    .login-logo { font-size: 3rem; margin-bottom: 12px; color: #166534; }
-    .login-header h1 { font-size: 1.75rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
-    .login-header p { color: #64748b; font-size: 0.95rem; }
-    .input-group { margin-bottom: 20px; }
-    .input-group label { display: block; font-size: 0.85rem; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; }
-    .login-input { width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 1rem; transition: all 0.2s; }
-    .login-input:focus { border-color: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.1); outline: none; }
-    .readonly-field { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
-    .textarea-field { min-height: 80px; resize: vertical; }
-    .required { color: #ef4444; }
-    .hint { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; display: block; }
-    .otp-field { text-align: center; font-size: 2rem; letter-spacing: 0.5rem; font-weight: 800; }
-    .btn-primary-login { width: 100%; padding: 14px; background: #166534; color: white; border: none; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 10px; }
-    .btn-primary-login:hover:not(:disabled) { background: #14532d; }
-    .btn-primary-login:disabled { opacity: 0.7; cursor: not-allowed; }
-    .login-status { padding: 12px; border-radius: 8px; font-size: 0.9rem; text-align: center; margin-top: 20px; background: #fef2f2; color: #991b1b; }
-    .login-status.success { background: #f0fdf4; color: #166534; }
-    .login-footer { text-align: center; padding-top: 20px; margin-top: 20px; border-top: 1px solid #f1f5f9; }
-    .back-link { font-size: 0.9rem; color: #64748b; text-decoration: none; }
+    .login-container { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: var(--space-6); }
+    .login-card { width: 100%; max-width: 480px; background: var(--color-surface); padding: var(--space-10); border-radius: var(--radius-2xl); box-shadow: var(--shadow-xl); border: 1px solid var(--color-border-light); }
+    .login-header { text-align: center; margin-bottom: var(--space-8); }
+    .login-logo { font-size: 3.5rem; margin-bottom: var(--space-4); color: var(--color-primary); font-weight: var(--fw-black); }
+    .login-header h1 { font-size: var(--text-2xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
+    .login-header p { color: var(--color-text-secondary); font-size: var(--text-base); }
+    
+    .input-group { margin-bottom: var(--space-5); }
+    .input-group label { display: block; font-size: var(--text-xs); font-weight: var(--fw-black); color: var(--color-text-tertiary); margin-bottom: var(--space-2); text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    .login-input { width: 100%; padding: 12px 16px; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); font-size: var(--text-base); font-family: var(--font-sans); color: var(--color-text-body); transition: var(--transition-fast); background: var(--color-surface); outline: none; }
+    .login-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(22,101,52,0.08); }
+    
+    .readonly-field { background: var(--color-surface-alt); color: var(--color-text-tertiary); cursor: not-allowed; border-color: var(--color-border-light); }
+    .textarea-field { min-height: 100px; resize: vertical; }
+    .required { color: var(--color-error); }
+    .hint { font-size: var(--text-xs); color: var(--color-text-tertiary); margin-top: var(--space-1); display: block; font-weight: var(--fw-semi); }
+    
+    .otp-field { text-align: center; font-size: 2.5rem; letter-spacing: 0.8rem; font-weight: var(--fw-black); color: var(--color-primary); }
+    
+    .btn-primary-login { width: 100%; padding: 16px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-lg); font-size: var(--text-base); font-weight: var(--fw-black); cursor: pointer; transition: var(--transition-fast); margin-top: var(--space-4); box-shadow: var(--shadow-md); }
+    .btn-primary-login:hover:not(:disabled) { background: var(--color-primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+    .btn-primary-login:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+    
+    .login-status { padding: var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); text-align: center; margin-top: var(--space-5); background: var(--color-error-bg); color: var(--color-error); border: 1px solid var(--color-error-border); font-weight: var(--fw-semi); }
+    .login-status.success { background: var(--color-primary-light); color: var(--color-primary); border: 1px solid var(--color-primary-border); }
+    
+    .login-footer { text-align: center; padding-top: var(--space-5); margin-top: var(--space-5); border-top: 1px solid var(--color-border-light); }
+    .back-link { font-size: var(--text-sm); color: var(--color-text-secondary); text-decoration: none; font-weight: var(--fw-bold); transition: var(--transition-fast); }
+    .back-link:hover { color: var(--color-primary); }
+    
     .text-center { text-align: center; }
-    .btn-text { background: none; border: none; color: #166534; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0; }
+    .btn-text { background: none; border: none; color: var(--color-primary); font-weight: var(--fw-black); cursor: pointer; text-decoration: underline; padding: 0; }
   `]
 })
 export class RegisterPageComponent implements OnInit {

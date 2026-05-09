@@ -94,52 +94,48 @@ import { LabService, LabRegistrationRequest } from '../../services/lab.service';
     </div>
   `,
   styles: [`
-    .admin-container { padding: 40px; max-width: 1000px; margin: 0 auto; }
-    .page-header { margin-bottom: 30px; }
-    .page-header h1 { font-size: 2rem; font-weight: 800; color: #0f172a; }
-    
-    .requests-list { display: flex; flex-direction: column; gap: 20px; }
-    .request-row { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
-    .request-row.processed { opacity: 0.7; background: #f8fafc; }
-    
-    .req-main { flex: 1; }
-    .req-info { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-    .lab-name { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
-    .req-date { font-size: 0.85rem; color: #64748b; }
-    
-    .status-pill { font-size: 0.7rem; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
-    .pending { background: #fef9c3; color: #854d0e; }
-    .approved { background: #dcfce7; color: #166534; }
-    .rejected { background: #fee2e2; color: #991b1b; }
-    
-    .req-tagline { font-size: 1rem; font-weight: 600; color: #166534; margin-bottom: 8px; }
-    .req-desc { font-size: 0.9rem; color: #64748b; margin-bottom: 20px; line-height: 1.5; background: #f8fafc; padding: 12px; border-radius: 10px; border: 1px solid #f1f5f9; }
+    .admin-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
+    .page-header { margin-bottom: var(--space-8); }
+    .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); letter-spacing: -0.025em; margin-bottom: var(--space-2); }
+    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
-    .details-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; }
-    .detail-block label { display: block; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; }
-    
-    .leader-box { font-size: 0.95rem; line-height: 1.4; }
-    .members-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-    .member-tag { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; }
-    .no-m { font-style: italic; color: #cbd5e1; font-size: 0.85rem; }
-    
-    .req-actions { display: flex; gap: 10px; }
-    .req-actions button { padding: 10px 20px; border-radius: 10px; font-weight: 700; cursor: pointer; border: none; transition: transform 0.1s; }
-    .req-actions button:hover:not(:disabled) { transform: scale(1.05); }
-    .btn-approve { background: #166534; color: white; }
-    .btn-reject { background: #f1f5f9; color: #64748b; }
+    .requests-list { display: flex; flex-direction: column; gap: var(--space-5); }
+    .request-row { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-xs); border: 1px solid var(--color-border-light); display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-6); }
+    .request-row.processed { opacity: 0.7; background: var(--color-surface-alt); }
+    .req-main { flex: 1; min-width: 0; }
+    .req-info { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); flex-wrap: wrap; }
+    .lab-name { font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--color-text-primary); }
+    .req-date { font-size: var(--text-sm); color: var(--color-text-secondary); }
+    .status-pill { font-size: var(--text-xs); font-weight: var(--fw-black); padding: 3px 9px; border-radius: var(--radius-sm); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pending  { background: #fef9c3; color: #854d0e; }
+    .approved { background: var(--color-primary-subtle); color: var(--color-primary); }
+    .rejected { background: var(--color-error-bg); color: var(--color-error); }
+    .req-tagline { font-size: var(--text-md); font-weight: var(--fw-semi); color: var(--color-primary); margin-bottom: var(--space-2); }
+    .req-desc { font-size: var(--text-base); color: var(--color-text-secondary); margin-bottom: var(--space-5); line-height: var(--lh-normal); background: var(--color-surface-alt); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); }
+    .details-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: var(--space-8); }
+    .detail-block label { display: block; font-size: var(--text-xs); font-weight: var(--fw-black); color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-2); }
+    .leader-box { font-size: var(--text-base); line-height: var(--lh-normal); color: var(--color-text-body); }
+    .members-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .member-tag { background: var(--color-surface-alt); color: var(--color-text-body); padding: 3px 10px; border-radius: var(--radius-sm); font-size: var(--text-base); border: 1px solid var(--color-border); }
+    .no-m { font-style: italic; color: var(--color-text-tertiary); font-size: var(--text-base); }
+    .req-actions { display: flex; gap: var(--space-2); flex-shrink: 0; align-self: flex-start; }
+    .req-actions button { padding: 9px 18px; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; border: none; transition: var(--transition-fast); }
+    .req-actions button:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn-approve { background: var(--color-primary); color: white; }
+    .btn-approve:hover:not(:disabled) { background: var(--color-primary-hover); }
+    .btn-reject { background: var(--color-surface-alt); color: var(--color-text-secondary); border: 1px solid var(--color-border) !important; }
+    .btn-reject:hover:not(:disabled) { background: var(--color-border-light); }
 
-    .admin-section { margin-bottom: 40px; }
-    .section-title { font-size: 1.1rem; font-weight: 700; color: #64748b; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .empty-mini { background: #f8fafc; border: 1.5px dashed #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; color: #94a3b8; }
-    
-    .history-section { border-top: 2px solid #f1f5f9; padding-top: 30px; }
-    .btn-history-toggle { width: 100%; padding: 12px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b; font-weight: 700; cursor: pointer; margin-bottom: 20px; }
-    .history-list { display: flex; flex-direction: column; gap: 12px; }
-    .request-row.processed { padding: 16px 24px; }
-    .mini-grid { grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; color: #94a3b8; }
-    
-    .loading-state, .empty-state { text-align: center; padding: 60px; color: #64748b; }
+    .admin-section { margin-bottom: var(--space-10); }
+    .section-title { font-size: var(--text-base); font-weight: var(--fw-black); color: var(--color-text-tertiary); margin-bottom: var(--space-4); text-transform: uppercase; letter-spacing: 0.06em; }
+    .empty-mini { background: var(--color-surface-alt); border: 1.5px dashed var(--color-border); border-radius: var(--radius-md); padding: var(--space-5); text-align: center; color: var(--color-text-tertiary); font-size: var(--text-base); }
+    .history-section { border-top: 1px solid var(--color-border-light); padding-top: var(--space-8); }
+    .btn-history-toggle { width: 100%; padding: 11px; background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: var(--font-sans); color: var(--color-text-secondary); font-weight: var(--fw-semi); font-size: var(--text-base); cursor: pointer; margin-bottom: var(--space-5); transition: var(--transition-fast); }
+    .btn-history-toggle:hover { background: var(--color-border-light); }
+    .history-list { display: flex; flex-direction: column; gap: var(--space-3); }
+    .request-row.processed { padding: var(--space-4) var(--space-6); }
+    .mini-grid { grid-template-columns: 1fr 1fr; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-text-tertiary); }
+    .loading-state, .empty-state { text-align: center; padding: 60px; color: var(--color-text-secondary); font-size: var(--text-md); }
   `]
 })
 export class AdminPanelComponent implements OnInit {
