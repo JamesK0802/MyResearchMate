@@ -5,6 +5,8 @@ import { AppStateService } from '../../services/app-state.service';
 import { ResultDashboardComponent } from '../../components/result-dashboard/result-dashboard.component';
 import { AuthService } from '../../services/auth.service';
 import { ResultsService } from '../../services/results.service';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 @Component({
   selector: 'app-analysis-page',
@@ -14,6 +16,7 @@ import { ResultsService } from '../../services/results.service';
 })
 export class AnalysisPageComponent implements OnInit {
   isSaving = false;
+  showAutofill = false;
 
   constructor(
     public state: AppStateService,
@@ -24,6 +27,50 @@ export class AnalysisPageComponent implements OnInit {
 
   ngOnInit() {
     this.state.activateSlot('analysis');
+  }
+
+  async downloadTemplate() {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('References');
+    worksheet.columns = [
+      { header: 'Gene Name', key: 'geneName', width: 20 },
+      { header: 'Gene Sequence', key: 'geneSeq', width: 50 },
+      { header: 'Target Name', key: 'targetName', width: 20 },
+      { header: 'gRNA Sequence', key: 'targetSeq', width: 30 }
+    ];
+    
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), 'CRISPR_Reference_Template.xlsx');
+  }
+
+  async onTemplateUpload(event: any) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const workbook = new ExcelJS.Workbook();
+    const reader = new FileReader();
+    reader.onload = async (e: any) => {
+      const buffer = e.target.result;
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.getWorksheet(1);
+      const rows: any[] = [];
+      worksheet?.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const geneName = row.getCell(1).text;
+        const geneSeq = row.getCell(2).text;
+        const targetName = row.getCell(3).text;
+        const targetSeq = row.getCell(4).text;
+        if (geneName && geneSeq && targetSeq) rows.push({ geneName, geneSeq, targetName, targetSeq });
+      });
+      if (rows.length > 0) {
+        this.state.setGenesBulk(rows);
+        this.showAutofill = false;
+        this.cdr.detectChanges();
+        alert(`Successfully loaded ${rows.length} reference targets!`);
+      } else {
+        alert('No valid data found in Excel. Please check the template.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   onFileSelected(event: any) {

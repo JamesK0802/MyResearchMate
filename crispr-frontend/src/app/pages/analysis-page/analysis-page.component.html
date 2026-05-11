@@ -93,7 +93,23 @@
         <div class="section-header">
           <h2>Reference Configuration</h2>
           <div class="header-actions">
+            <button type="button" class="btn-autofill" (click)="showAutofill = !showAutofill">
+              ✨ Auto Fill
+            </button>
             <button type="button" class="btn-add" (click)="state.addGene()">+ Add Gene</button>
+          </div>
+        </div>
+
+        <div class="autofill-actions-panel" *ngIf="showAutofill">
+          <p class="autofill-hint">Fill out the template and upload to bulk-configure genes and targets.</p>
+          <div class="autofill-buttons">
+            <button type="button" class="btn-template-download" (click)="downloadTemplate()">
+              📥 Download Template
+            </button>
+            <button type="button" class="btn-template-upload" (click)="templateFileInput.click()">
+              📤 Upload Sequence (Excel)
+            </button>
+            <input type="file" #templateFileInput (change)="onTemplateUpload($event)" hidden accept=".xlsx,.xls" />
           </div>
         </div>
         <div formArrayName="genes">

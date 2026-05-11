@@ -188,6 +188,41 @@ export class AppStateService {
   addGeneTarget(gi: number) { this.getGeneTargets(gi).push(this.createGeneTargetGroup()); }
   removeGeneTarget(gi: number, ti: number) { const a = this.getGeneTargets(gi); if (a.length > 1) a.removeAt(ti); }
 
+  setGenesBulk(data: { geneName: string, geneSeq: string, targetName: string, targetSeq: string }[]) {
+    this.ngZone.run(() => {
+      while (this.geneBlocks.length > 0) { this.geneBlocks.removeAt(0); }
+      const geneMap = new Map<string, { seq: string, targets: { name: string, seq: string }[] }>();
+
+      data.forEach(row => {
+        const key = row.geneName?.trim() || 'Unknown Gene';
+        if (!geneMap.has(key)) {
+          geneMap.set(key, { seq: row.geneSeq?.trim() || '', targets: [] });
+        }
+        geneMap.get(key)!.targets.push({
+          name: row.targetName?.trim() || `T${geneMap.get(key)!.targets.length + 1}`,
+          seq: row.targetSeq?.trim() || ''
+        });
+      });
+
+      geneMap.forEach((val, name) => {
+        const targetGroups = val.targets.map(t => this.fb.group({
+          target_id: [t.name],
+          gRNA: [t.seq, Validators.required]
+        }));
+        const geneGroup = this.fb.group({
+          gene_name: [name],
+          gene_reference: [val.seq, Validators.required],
+          geneTargets: this.fb.array(targetGroups)
+        });
+        this.geneBlocks.push(geneGroup);
+      });
+
+      if (this.geneBlocks.length === 0) {
+        this.addGene();
+      }
+    });
+  }
+
   // ── Logging ────────────────────────────────────────────────────────────────
   addLog(msg: string) {
     const ts = new Date().toLocaleTimeString();

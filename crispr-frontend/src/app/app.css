@@ -619,8 +619,8 @@ input, select, textarea {
 /* Dashboard Styling */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-3);
   margin-bottom: var(--space-8);
 }
 
@@ -1018,7 +1018,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 .gene-info-stripe {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-3);
   background: var(--color-primary-light);
   border: 1px solid var(--color-primary-border);
   border-top: none;
@@ -1991,4 +1991,77 @@ select.form-control {
 .btn-save-data:disabled {
   background-color: #9ca3af !important;
   cursor: not-allowed;
+}
+
+/* Autofill UI */
+.btn-autofill {
+  padding: 8px 16px;
+  background-color: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-right: 8px;
+}
+
+.btn-autofill:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.autofill-actions-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  animation: slideDown 0.25s ease-out;
+}
+
+.autofill-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.autofill-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-template-download, .btn-template-upload {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.btn-template-download {
+  background-color: white;
+  color: #1e293b;
+  border-color: #e2e8f0;
+}
+
+.btn-template-download:hover {
+  background-color: #f1f5f9;
+}
+
+.btn-template-upload {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-template-upload:hover {
+  background-color: #2563eb;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

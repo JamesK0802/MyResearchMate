@@ -665,7 +665,7 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                     })
 
         final_payload["results"].append({
-            "fastq_file": filepath,
+            "fastq_file": os.path.basename(filepath),
             "multi_reference_result": gene_output
         })
 
