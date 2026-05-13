@@ -17,7 +17,7 @@ export interface LabRegistrationRequest {
   lab_leader_uid: string;
   lab_tagline?: string;
   lab_description?: string;
-  members_json: LabMemberInfo[];
+  members_json: LabMemberInfo[] | null;
   status: 'pending' | 'approved' | 'rejected';
   requested_by: number;
   created_at: string;

@@ -47,12 +47,12 @@ import { LabService, LabRegistrationRequest } from '../../services/lab.service';
                   </div>
                 </div>
                 <div class="detail-block">
-                  <label>Team Members ({{ req.members_json.length }})</label>
+                  <label>Team Members ({{ req.members_json?.length || 0 }})</label>
                   <div class="members-tags">
                     <span *ngFor="let m of req.members_json" class="member-tag" [title]="m.email">
                       {{ m.name || m.uid }}
                     </span>
-                    <span *ngIf="req.members_json.length === 0" class="no-m">No additional members</span>
+                    <span *ngIf="(req.members_json?.length || 0) === 0" class="no-m">No additional members</span>
                   </div>
                 </div>
               </div>

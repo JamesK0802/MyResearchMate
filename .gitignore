@@ -9,7 +9,13 @@
 # --- Backend (Python) ---
 crispr_backend/venv/
 crispr_backend/.venv/
-crispr_backend/.env
+# --- Secrets & Environment ---
+.env
+.env.local
+**/ .env
+**/ .env.local
+backend/.env
+frontend/.env
 crispr_backend/data/*.db
 crispr_backend/temp/
 # 만약 environment.ts에 민감한 키를 넣었다면 아래 주석을 해제하세요.
