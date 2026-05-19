@@ -1,0 +1,199 @@
+.archive-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Controls Card */
+.controls-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-row {
+  display: flex;
+  gap: 12px;
+}
+
+.search-query {
+  flex: 1;
+}
+
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 16px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-group label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.app-input, .app-select {
+  padding: 8px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  background: white;
+  outline: none;
+}
+
+/* Core Experiment List & Card Styles (Identical to My Experiments) */
+.experiments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.experiment-card {
+  padding: 14px 20px 10px 20px !important;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.experiment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* 2-row Compact Header */
+.exp-header-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1.5px solid var(--color-border-light);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.exp-title-date-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  padding-top: 0px;
+  margin-bottom: -6px;
+}
+
+.exp-title-date-group .inline-exp-title {
+  font-size: 1.35rem;
+  font-weight: 850;
+  color: var(--color-text-primary);
+  border: none;
+  background: transparent;
+  outline: none;
+}
+
+.exp-actions-inline-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.exp-action-buttons-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.detail-btn-inline {
+  background: var(--color-primary);
+  color: white;
+  font-weight: 750;
+  box-shadow: 0 4px 6px -1px rgba(22, 101, 52, 0.15);
+}
+
+.meta-date-inline {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Horizontal scroller sequence */
+.workflow-container {
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.workflow-scroll-area {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 0;
+  scroll-behavior: smooth;
+  box-sizing: border-box;
+}
+
+.workflow-scroll-area::-webkit-scrollbar {
+  height: 6px;
+}
+
+.workflow-scroll-area::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+.workflow-scroll-area::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+/* Archived timeline modal popup standard sizing and overlays */
+.exp-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exp-modal-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: 32px;
+  width: 95%;
+  max-width: 1000px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: relative;
+  border: 1.5px solid var(--color-border);
+}
+
+.empty-msg {
+  text-align: center;
+  padding: 80px 40px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  font-weight: 600;
+}

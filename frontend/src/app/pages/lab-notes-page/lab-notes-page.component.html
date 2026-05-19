@@ -1,0 +1,106 @@
+<div class="notes-page app-page">
+  <div class="notes-layout" [class.sidebar-hidden]="sidebarCollapsed">
+    
+    <!-- Sidebar -->
+    <div class="notes-sidebar">
+      <button class="app-btn app-btn-primary add-btn" (click)="createNewNote()">+ New Note</button>
+      
+      <div class="note-list">
+        <div *ngFor="let n of notes" 
+             class="note-card" 
+             [class.selected]="selectedNote?.id === n.id" 
+             (click)="selectNote(n.id)">
+           <div class="note-title">{{ n.title || 'Untitled Note' }}</div>
+           <div class="note-meta">{{ formatDate(n.updated_at) }}</div>
+        </div>
+        <div *ngIf="!notes.length" class="empty-msg">No entries found. Click New Note to start.</div>
+      </div>
+    </div>
+
+    <!-- Rich Text Word-style Editor Area -->
+    <div class="editor-container section-card">
+      <!-- Floating sidebar toggle button -->
+      <button class="toggle-sidebar-btn" (click)="sidebarCollapsed = !sidebarCollapsed" title="Toggle Note List">
+        <span *ngIf="!sidebarCollapsed">◀</span>
+        <span *ngIf="sidebarCollapsed">▶</span>
+      </button>
+
+      <ng-container *ngIf="selectedNote">
+        
+        <!-- Editor Header (Title) -->
+        <div class="editor-header">
+          <input class="title-input" 
+                 [(ngModel)]="noteForm.title" 
+                 (input)="onContentChange()" 
+                 placeholder="Title of your entry..." />
+          <button class="app-btn app-btn-danger-outline delete-btn" (click)="deleteNote(selectedNote.id)">Delete Note</button>
+        </div>
+
+        <!-- Rich editable canvas -->
+        <div class="editor-canvas-wrapper" (click)="onEditorClick($event)" (scroll)="onEditorScroll()">
+          <div #richEditor
+               class="rich-editor-canvas"
+               contenteditable="true"
+               (scroll)="onEditorScroll()"
+               (input)="onEditorInput()"
+               (paste)="onPaste($event)"
+               (drop)="onDrop($event)"
+               (dragover)="onDragOver($event)"
+               placeholder="Start writing your general lab notes here...">
+          </div>
+
+          <!-- Interactive Drag-to-Resize Guide Overlay -->
+          <div class="image-resize-guide" 
+               (mousedown)="onGuideMouseDown($event)"
+               [ngStyle]="{ 'display': selectedImg ? 'block' : 'none', 'top': guideStyle.top, 'left': guideStyle.left, 'width': guideStyle.width, 'height': guideStyle.height }">
+            <div class="resize-handle tl" (mousedown)="onResizeStart($event, 'tl')"></div>
+            <div class="resize-handle tr" (mousedown)="onResizeStart($event, 'tr')"></div>
+            <div class="resize-handle bl" (mousedown)="onResizeStart($event, 'bl')"></div>
+            <div class="resize-handle br" (mousedown)="onResizeStart($event, 'br')"></div>
+            
+            <!-- Modern Google Docs-style Alignment & Wrapping Menu -->
+            <div class="image-format-menu">
+              <button class="menu-pill-btn" [class.active]="currentWrapping === 'inline'" (click)="setImageWrapping('inline')" title="In Line with Text">
+                📄 Inline
+              </button>
+              <button class="menu-pill-btn" [class.active]="currentWrapping === 'left'" (click)="setImageWrapping('left')" title="Float Left / Text Wrapping">
+                📰 Wrap Left
+              </button>
+              <button class="menu-pill-btn" [class.active]="currentWrapping === 'right'" (click)="setImageWrapping('right')" title="Float Right / Text Wrapping">
+                📰 Wrap Right
+              </button>
+              <button class="menu-pill-btn" [class.active]="currentWrapping === 'absolute'" (click)="setImageWrapping('absolute')" title="Float Freely Anywhere">
+                📌 Floating
+              </button>
+              <div class="menu-divider"></div>
+              <div class="menu-dimensions">{{ currentImgWidth }}px</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom right Sync status -->
+        <div class="sync-status-bottom">
+          <div *ngIf="syncState === 'saved'" class="status-indicator-wrapper">
+            <span class="status-dot dot-saved"></span>
+            <span class="status-text text-saved">Saved to Cloud</span>
+          </div>
+          <div *ngIf="syncState === 'saving'" class="status-indicator-wrapper">
+            <span class="spinner-small"></span>
+            <span class="status-text text-saving">Saving changes...</span>
+          </div>
+          <div *ngIf="syncState === 'error'" class="status-indicator-wrapper">
+            <span class="status-dot dot-error"></span>
+            <span class="status-text text-error">Sync conflict</span>
+          </div>
+        </div>
+
+      </ng-container>
+
+      <div *ngIf="!selectedNote" class="empty-editor">
+        <div class="empty-icon">📖</div>
+        <p>Choose an entry from the ledger or create a new journal entry to begin editing.</p>
+      </div>
+    </div>
+
+  </div>
+</div>

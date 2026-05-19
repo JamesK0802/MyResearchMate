@@ -1,0 +1,366 @@
+<div class="booking-page app-page">
+  <header class="page-header">
+    <span class="app-badge app-badge-green">FACILITY</span>
+    <h1>Facility Booking</h1>
+    <p class="page-header__subtitle">Reserve lab equipment and research spaces at ANU RSB.</p>
+  </header>
+
+  <!-- ═══ TOP: NEW BOOKING FORM ═══ -->
+  <div class="section-card booking-form-card">
+    <h2 class="card-title">New Booking</h2>
+    <div class="form-grid-inline">
+      <div class="app-form-group">
+        <label class="app-label">Spot <span class="app-required">*</span></label>
+        <select class="app-select" [(ngModel)]="form.spot_id">
+          <option *ngFor="let s of allSpots" [value]="s.id">{{ s.name }} ({{ s.room }})</option>
+        </select>
+      </div>
+      <div class="app-form-group">
+        <label class="app-label">Name <span class="app-required">*</span></label>
+        <input class="app-input" [(ngModel)]="form.user_name" placeholder="e.g. Nicole" />
+      </div>
+      <div class="app-form-group">
+        <label class="app-label">Species</label>
+        <input class="app-input" [(ngModel)]="form.species" placeholder="e.g. Arabidopsis" />
+      </div>
+      <div class="app-form-group">
+        <label class="app-label">Start Month <span class="app-required">*</span></label>
+        <input class="app-input" type="month" [(ngModel)]="form.start_month" />
+      </div>
+      <div class="app-form-group">
+        <label class="app-label">End Month <span class="app-required">*</span></label>
+        <input class="app-input" type="month" [(ngModel)]="form.end_month" />
+      </div>
+    </div>
+    
+    <div class="app-form-group" style="margin-top: 12px;">
+      <label class="app-label">Comment</label>
+      <input class="app-input" [(ngModel)]="form.comment" placeholder="Optional notes..." />
+    </div>
+
+    <div class="form-actions" style="margin-top: 16px; display: flex; align-items: center; gap: 16px;">
+      <button class="app-btn app-btn-primary" (click)="checkAndBook()" [disabled]="formLoading || !form.spot_id || !form.user_name || !form.start_month || !form.end_month">
+        {{ formLoading ? 'Checking...' : '✓ Book Spot' }}
+      </button>
+      <span *ngIf="formSuccess" class="success-text">✅ {{ formSuccess }}</span>
+    </div>
+
+    <!-- Error & Alternatives -->
+    <div *ngIf="formError || (availability && !availability.available)" class="form-feedback">
+      <div *ngIf="formError" class="app-alert app-alert-error">{{ formError }}</div>
+      
+      <div *ngIf="availability && !availability.available" class="alt-section">
+        <div class="app-alert app-alert-warning">
+          ❌ <strong>{{ availability.spot_name }}</strong> is booked by {{ availability.conflict?.user_name }} ({{ formatMonth(getMonthStrFromDate(availability.conflict?.start_date!)) }} — {{ formatMonth(getMonthStrFromDate(availability.conflict?.end_date!)) }})
+        </div>
+        <div *ngIf="availability.alternatives.length > 0" class="alt-list" style="margin-top: 12px;">
+          <p class="alt-title" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">✅ Available alternatives in the same category:</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button *ngFor="let alt of availability.alternatives" class="alt-btn" (click)="pickAlternative(alt)">
+              {{ alt.name }} <span class="alt-room">{{ alt.room }}</span>
+            </button>
+          </div>
+        </div>
+        <div *ngIf="availability.alternatives.length === 0" class="app-alert app-alert-error" style="margin-top:8px">
+          No alternatives available for these dates.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MIDDLE: TABS ═══ -->
+  <div class="app-tabs" style="margin-top: 24px; border-bottom: 2px solid var(--color-border-light);">
+    <button class="app-tab" [class.active]="activeTab === 'table'" (click)="setTab('table')">📋 Bookings List</button>
+    <button class="app-tab" [class.active]="activeTab === 'map'" (click)="setTab('map')">🗺️ Monthly Map</button>
+    <button class="app-tab" [class.active]="activeTab === 'yearly'" (click)="setTab('yearly')">📅 Yearly Overview</button>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-state" style="padding: 40px; text-align: center;">
+    <div class="app-spinner"></div>
+    <p style="margin-top: 16px; color: var(--color-text-secondary);">Loading data...</p>
+  </div>
+
+  <div *ngIf="error" class="app-alert app-alert-error" style="margin-top: 24px;">⚠️ {{ error }}</div>
+
+  <!-- ═══ TAB 1: TABLE VIEW ═══ -->
+  <div *ngIf="!loading && !error && activeTab === 'table'" class="tab-content" style="margin-top: 24px;">
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" [(ngModel)]="showExpired" /> Show Expired Bookings
+      </label>
+    </div>
+
+    <div class="app-table-container">
+      <table class="app-table">
+        <thead>
+          <tr>
+            <th>Spot</th>
+            <th>Name</th>
+            <th>Species</th>
+            <th>From</th>
+            <th>Until</th>
+            <th>Comment</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let b of filteredBookings">
+            <td><strong>{{ b.spot_name }}</strong><br><span style="font-size: 0.75rem; color: var(--color-text-tertiary);">{{ b.spot_room }}</span></td>
+            <td>{{ b.user_name }}</td>
+            <td>{{ b.species || '—' }}</td>
+            <td>{{ formatDate(b.start_date) }}</td>
+            <td>{{ formatDate(b.end_date) }}</td>
+            <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ b.comment || '—' }}</td>
+            <td>
+              <button class="app-btn app-btn-secondary app-btn-sm" (click)="openEditModal(b)">Edit</button>
+            </td>
+          </tr>
+          <tr *ngIf="filteredBookings.length === 0">
+            <td colspan="7" style="text-align: center; padding: 32px; color: var(--color-text-secondary);">No bookings found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 2: MONTHLY MAP ═══ -->
+  <div *ngIf="!loading && !error && activeTab === 'map'" class="tab-content" style="margin-top: 24px;">
+    
+    <!-- Controls Bar -->
+    <div class="controls-bar section-card" style="margin-bottom: 24px;">
+      <div class="controls-row">
+        <div class="month-nav">
+          <button class="app-btn app-btn-ghost app-btn-sm" (click)="prevMonth()">◀</button>
+          <span class="month-label">{{ monthLabel }} {{ selectedYear }}</span>
+          <button class="app-btn app-btn-ghost app-btn-sm" (click)="nextMonth()">▶</button>
+        </div>
+        <select class="app-select compact-select" [(ngModel)]="selectedYear" (ngModelChange)="onFilterChange()">
+          <option *ngFor="let y of years" [value]="y">{{ y }}</option>
+        </select>
+        <select class="app-select compact-select" [(ngModel)]="selectedMonth" (ngModelChange)="onFilterChange()">
+          <option *ngFor="let m of months" [value]="m.value">{{ m.label }}</option>
+        </select>
+      </div>
+      <div class="summary-row">
+        <div class="summary-stat"><span class="stat-value">{{ mapSummary.total_spots }}</span><span class="stat-label">Total</span></div>
+        <div class="summary-stat stat-booked"><span class="stat-value">{{ mapSummary.booked }}</span><span class="stat-label">Booked</span></div>
+        <div class="summary-stat stat-available"><span class="stat-value">{{ mapSummary.available }}</span><span class="stat-label">Available</span></div>
+      </div>
+    </div>
+
+    <!-- FLOOR PLAN -->
+    <div class="floor-plan">
+      <!-- Room 1: Acacia Room 18 -->
+      <div class="room-container room-acacia">
+        <div class="room-header">Acacia Room 18</div>
+        <div class="room-body">
+          <div class="fp-acacia-grid">
+            <!-- Row 1 -->
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_01')" (click)="onMonthlySpotClick('Acacia Room 18_01')">
+              <div class="cell-name">18_01</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_01')">{{ getBookingInfo('Acacia Room 18_01') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_01')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_02')" (click)="onMonthlySpotClick('Acacia Room 18_02')">
+              <div class="cell-name">18_02</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_02')">{{ getBookingInfo('Acacia Room 18_02') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_02')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_03')" (click)="onMonthlySpotClick('Acacia Room 18_03')">
+              <div class="cell-name">18_03</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_03')">{{ getBookingInfo('Acacia Room 18_03') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_03')">Available</div>
+            </div>
+            <!-- Row 2 -->
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_04')" (click)="onMonthlySpotClick('Acacia Room 18_04')">
+              <div class="cell-name">18_04</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_04')">{{ getBookingInfo('Acacia Room 18_04') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_04')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_05')" (click)="onMonthlySpotClick('Acacia Room 18_05')">
+              <div class="cell-name">18_05</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_05')">{{ getBookingInfo('Acacia Room 18_05') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_05')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_06')" (click)="onMonthlySpotClick('Acacia Room 18_06')">
+              <div class="cell-name">18_06</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_06')">{{ getBookingInfo('Acacia Room 18_06') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_06')">Available</div>
+            </div>
+            <!-- Row 3 -->
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_07')" (click)="onMonthlySpotClick('Acacia Room 18_07')">
+              <div class="cell-name">18_07</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_07')">{{ getBookingInfo('Acacia Room 18_07') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_07')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_08')" (click)="onMonthlySpotClick('Acacia Room 18_08')">
+              <div class="cell-name">18_08</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_08')">{{ getBookingInfo('Acacia Room 18_08') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_08')">Available</div>
+            </div>
+            <div class="fp-cell" [class.booked]="isBooked('Acacia Room 18_09')" (click)="onMonthlySpotClick('Acacia Room 18_09')">
+              <div class="cell-name">18_09</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_09')">{{ getBookingInfo('Acacia Room 18_09') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_09')">Available</div>
+            </div>
+          </div>
+          <!-- Center Column -->
+          <div class="fp-center">
+            <div class="fp-label-box">Storage Place</div>
+            <div class="fp-cell fp-cell-tall" [class.booked]="isBooked('Acacia Room 18_10')" (click)="onMonthlySpotClick('Acacia Room 18_10')">
+              <div class="cell-name">18_10</div>
+              <div class="cell-info" *ngIf="isBooked('Acacia Room 18_10')">{{ getBookingInfo('Acacia Room 18_10') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Acacia Room 18_10')">Available</div>
+            </div>
+            <div class="fp-label-box fp-door">Door</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room 2: Speed Breeding & Drying Room -->
+      <div class="room-container room-speed-breeding">
+        <div class="room-header">Speed Breeding & Drying Room</div>
+        <div class="room-body">
+          <div class="fp-right">
+            <!-- Top row: SB Station 02 & 03 -->
+            <div class="fp-right-top">
+              <div class="fp-cell fp-cell-wide" [class.booked]="isBooked('Speed Breeding Station_02')" (click)="onMonthlySpotClick('Speed Breeding Station_02')">
+                <div class="cell-name">SB Station 02</div>
+                <div class="cell-info" *ngIf="isBooked('Speed Breeding Station_02')">{{ getBookingInfo('Speed Breeding Station_02') }}</div>
+                <div class="cell-avail" *ngIf="!isBooked('Speed Breeding Station_02')">Available</div>
+              </div>
+              <div class="fp-cell fp-cell-wide" [class.booked]="isBooked('Speed Breeding Station_03')" (click)="onMonthlySpotClick('Speed Breeding Station_03')">
+                <div class="cell-name">SB Station 03</div>
+                <div class="cell-info" *ngIf="isBooked('Speed Breeding Station_03')">{{ getBookingInfo('Speed Breeding Station_03') }}</div>
+                <div class="cell-avail" *ngIf="!isBooked('Speed Breeding Station_03')">Available</div>
+              </div>
+            </div>
+
+            <!-- Middle: Overflow 02 + SB Room label -->
+            <div class="fp-right-mid">
+              <div class="fp-cell fp-cell-sm" [class.booked]="isBooked('Overflow_02')" (click)="onMonthlySpotClick('Overflow_02')">
+                <div class="cell-name">Overflow 02</div>
+                <div class="cell-info" *ngIf="isBooked('Overflow_02')">{{ getBookingInfo('Overflow_02') }}</div>
+                <div class="cell-avail" *ngIf="!isBooked('Overflow_02')">Available</div>
+              </div>
+              <div class="fp-room-label">Speed Breeding Room</div>
+            </div>
+
+            <!-- Bottom: Overflow 01 + SB Station 01 -->
+            <div class="fp-right-bot">
+              <div class="fp-cell fp-cell-sm" [class.booked]="isBooked('Overflow_01')" (click)="onMonthlySpotClick('Overflow_01')">
+                <div class="cell-name">Overflow 01</div>
+                <div class="cell-info" *ngIf="isBooked('Overflow_01')">{{ getBookingInfo('Overflow_01') }}</div>
+                <div class="cell-avail" *ngIf="!isBooked('Overflow_01')">Available</div>
+              </div>
+              <div class="fp-cell fp-cell-wide" [class.booked]="isBooked('Speed Breeding Station_01')" (click)="onMonthlySpotClick('Speed Breeding Station_01')">
+                <div class="cell-name">SB Station 01</div>
+                <div class="cell-info" *ngIf="isBooked('Speed Breeding Station_01')">{{ getBookingInfo('Speed Breeding Station_01') }}</div>
+                <div class="cell-avail" *ngIf="!isBooked('Speed Breeding Station_01')">Available</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Far Right: Speed Drying -->
+          <div class="fp-far-right">
+            <div class="fp-cell fp-cell-tall" [class.booked]="isBooked('Speed Drying Station_01')" (click)="onMonthlySpotClick('Speed Drying Station_01')">
+              <div class="cell-name">Speed Drying 01</div>
+              <div class="cell-info" *ngIf="isBooked('Speed Drying Station_01')">{{ getBookingInfo('Speed Drying Station_01') }}</div>
+              <div class="cell-avail" *ngIf="!isBooked('Speed Drying Station_01')">Available</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 3: YEARLY OVERVIEW ═══ -->
+  <div *ngIf="!loading && !error && activeTab === 'yearly' && yearlySummary" class="tab-content" style="margin-top: 24px;">
+    
+    <div class="controls-bar section-card" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <span style="font-weight: 600; color: var(--color-text-secondary);">Overview Year:</span>
+        <select class="app-select compact-select" [(ngModel)]="selectedYear" (ngModelChange)="onFilterChange()">
+          <option *ngFor="let y of years" [value]="y">{{ y }}</option>
+        </select>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--color-text-tertiary); font-style: italic;">
+        💡 Click and drag months to select a booking range! Click booked cells to view details.
+      </div>
+    </div>
+
+    <div class="app-table-container">
+      <table class="yearly-table" style="user-select: none;">
+        <thead>
+          <tr>
+            <th class="yt-spot-col">Spot</th>
+            <th *ngFor="let m of months">{{ m.label.substring(0,3) }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of yearlySummary.summary">
+            <td class="yt-spot-col">
+              <strong>{{ s.spot.name }}</strong><br>
+              <span style="font-size: 0.65rem; color: var(--color-text-tertiary);">{{ s.spot.room }}</span>
+            </td>
+            <td *ngFor="let m of s.months" 
+                [class.yt-booked]="m.booked" 
+                [class.yt-avail]="!m.booked"
+                [class.yt-selected]="isCellSelected(s.spot.id, m.month)"
+                (mousedown)="onYearlyCellMouseDown(s.spot.id, m.month, m.booked, m.user_name)"
+                (mouseenter)="onYearlyCellMouseEnter(s.spot.id, m.month, m.booked)"
+                [title]="m.booked ? 'Booked by ' + m.user_name + ' (Click to view details)' : 'Available (Click/Drag to select)'">
+              <span *ngIf="m.booked" class="yt-name">{{ m.user_name }}</span>
+              <span *ngIf="!m.booked && isCellSelected(s.spot.id, m.month)" class="yt-drag-dot"></span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: EDIT BOOKING ═══ -->
+  <div class="app-modal-overlay" *ngIf="showEditModal" (click)="closeEditModal()">
+    <div class="app-modal app-modal-md" (click)="$event.stopPropagation()">
+      <div class="app-modal-header">
+        <div>
+          <h2>Edit Booking</h2>
+          <p class="modal-spot-name" *ngIf="selectedBooking">{{ selectedBooking.spot_name }}</p>
+        </div>
+        <button class="app-modal-close" (click)="closeEditModal()">✕</button>
+      </div>
+      <div class="app-modal-body">
+        
+        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div class="app-form-group"><label class="app-label">Name <span class="app-required">*</span></label><input class="app-input" [(ngModel)]="editForm.user_name" /></div>
+          <div class="app-form-group"><label class="app-label">Species</label><input class="app-input" [(ngModel)]="editForm.species" /></div>
+          <div class="app-form-group"><label class="app-label">Start Month <span class="app-required">*</span></label><input class="app-input" type="month" [(ngModel)]="editForm.start_month" /></div>
+          <div class="app-form-group"><label class="app-label">End Month <span class="app-required">*</span></label><input class="app-input" type="month" [(ngModel)]="editForm.end_month" /></div>
+          <div class="app-form-group" style="grid-column: 1 / -1;"><label class="app-label">Comment</label><input class="app-input" [(ngModel)]="editForm.comment" /></div>
+        </div>
+
+        <div *ngIf="formError" class="app-alert app-alert-error" style="margin-top: 16px;">{{ formError }}</div>
+
+        <div *ngIf="showDeleteConfirm" class="app-alert app-alert-warning" style="margin-top:16px">
+          Are you sure you want to delete this booking?
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="app-btn app-btn-danger app-btn-sm" (click)="confirmDelete()" [disabled]="formLoading">{{ formLoading ? 'Deleting...' : 'Yes, Delete' }}</button>
+            <button class="app-btn app-btn-ghost app-btn-sm" (click)="showDeleteConfirm=false">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div class="app-modal-footer" style="display: flex; justify-content: space-between;">
+        <button class="app-btn app-btn-danger app-btn-sm" (click)="showDeleteConfirm=true" *ngIf="!showDeleteConfirm">🗑️ Delete</button>
+        <div *ngIf="showDeleteConfirm"></div> <!-- spacer -->
+        <div style="display: flex; gap: 8px;">
+          <button class="app-btn app-btn-primary app-btn-sm" (click)="saveEdit()" [disabled]="formLoading || !editForm.user_name || !editForm.start_month || !editForm.end_month">
+            {{ formLoading ? 'Saving...' : '✓ Save Changes' }}
+          </button>
+          <button class="app-btn app-btn-ghost app-btn-sm" (click)="closeEditModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

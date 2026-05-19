@@ -1,0 +1,240 @@
+<div class="archive-page app-page">
+  <header class="page-header">
+    <div class="header-content">
+      <h1>Experiment Archive</h1>
+      <p>Consult past schedules, review success rates, inspect workflow notes, and analyze data metrics.</p>
+    </div>
+  </header>
+
+  <!-- Filter & Search Controls -->
+  <div class="controls-card section-card">
+    <div class="search-row">
+      <input class="app-input search-query" 
+             [(ngModel)]="searchQuery" 
+             (input)="applyFilters()" 
+             placeholder="Search by experiment title or description..." />
+      <button class="app-btn app-btn-outline" (click)="resetFilters()">Clear Filters</button>
+    </div>
+    
+    <div class="filters-row">
+      <div class="filter-group">
+        <label>Work Type</label>
+        <select class="app-select" [(ngModel)]="filterWorkType" (change)="applyFilters()">
+          <option value="">All Types</option>
+          <option *ngFor="let p of presets" [value]="p.id">{{ p.title }}</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Success Rate</label>
+        <select class="app-select" [(ngModel)]="filterScore" (change)="applyFilters()">
+          <option value="">All Rates</option>
+          <option value="5">Rate 5 (High)</option>
+          <option value="4">Rate 4</option>
+          <option value="3">Rate 3</option>
+          <option value="2">Rate 2</option>
+          <option value="1">Rate 1 (Low)</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Sample Contains</label>
+        <input class="app-input" [(ngModel)]="filterSample" (input)="applyFilters()" placeholder="e.g. Sample-B" />
+      </div>
+
+      <div class="filter-group">
+        <label>Tag Contains</label>
+        <input class="app-input" [(ngModel)]="filterTag" (input)="applyFilters()" placeholder="e.g. crispr" />
+      </div>
+
+      <div class="filter-group">
+        <label>Archived Date</label>
+        <input class="app-input" type="date" [(ngModel)]="filterDate" (change)="applyFilters()" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Archived List (Exact same layout structure as My Experiments!) -->
+  <div class="experiments-list">
+    <div *ngIf="!filteredExperiments.length" class="empty-msg section-card">
+      <p>No archived experiment matches the selected filter metrics.</p>
+    </div>
+    
+    <div *ngFor="let exp of filteredExperiments" class="experiment-card section-card" [style.border-top]="'4px solid ' + getScoreColor(exp.success_score)" style="border-top-left-radius: 12px; border-top-right-radius: 12px;">
+      
+      <!-- Card Header Info (Exactly 2 compact rows with customized side column) -->
+      <div class="exp-header-compact">
+        
+        <!-- Row 1: Title on the left, Success Score and Action stacked on the right -->
+        <div class="exp-header-row-one" style="display: flex; justify-content: space-between; align-items: center; gap: 20px; width: 100%;">
+          <div class="exp-title-date-group" style="display: flex; align-items: center; gap: 12px; flex: 1; padding-top: 0px; margin-bottom: -6px;">
+            <span class="inline-exp-title" style="font-size: 1.35rem; font-weight: 850; color: var(--color-text-primary); border: none; background: transparent; padding: 2px 4px;">
+              {{ exp.title }}
+            </span>
+          </div>
+          
+          <div class="exp-actions-inline-group" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+            <!-- Top: Success Rating Pill with static colors -->
+            <div class="exp-sync-pill">
+              <span class="score-pill-badge" [style.background]="getScoreColor(exp.success_score)" style="color: white; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; white-space: nowrap;">
+                Success Rate: {{ exp.success_score }}/5
+              </span>
+            </div>
+            
+            <!-- Middle: Action button -->
+            <div class="exp-action-buttons-row" style="display: flex; gap: 8px; align-items: center;">
+              <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="viewDetails(exp)">
+                View Details
+              </button>
+            </div>
+            
+            <!-- Bottom: Dates stacked under button -->
+            <span class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-text-tertiary); font-weight: 600; white-space: nowrap;">Started: {{ formatDate(exp.created_at) }}</span>
+            <span class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-primary); font-weight: 600; white-space: nowrap;">Archived: {{ formatDate(exp.archived_at) }}</span>
+          </div>
+        </div>
+
+        <!-- Row 2: Samples Tag Chips list only -->
+        <div class="exp-header-row-two" style="margin-top: 4px;">
+          <div class="samples-tags-container" style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <div *ngFor="let sample of exp.samples" class="sample-tag-chip" style="background: #f1f5f9; border: 1px solid var(--color-border); padding: 2px 8px; border-radius: 9999px; font-size: 0.76rem; font-weight: 600; color: var(--color-text-secondary);">
+              <span class="tag-text">{{ sample }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER (Read-only sequence) -->
+      <div class="workflow-container" style="margin-top: 10px;">
+        <div class="workflow-scroll-area" style="display: flex; gap: 8px; overflow-x: auto; padding: 6px 0;">
+          <ng-container *ngFor="let step of exp.steps; let i = index">
+            
+            <div class="step-card compact-step completed-step" style="flex: 0 0 220px; border: 1.5px solid #22c55e; border-radius: 12px; padding: 10px; background: white; display: flex; flex-direction: column; gap: 8px; justify-content: space-between; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgba(34, 197, 94, 0.05);">
+              
+              <div class="step-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 6px; width: 100%;">
+                  <span class="step-number-badge" style="background: #22c55e; color: white; border-color: #22c55e; font-size: 0.72rem; font-weight: 800; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;">{{ i + 1 }}</span>
+                  <span class="step-title-text" style="font-size: 0.9rem; font-weight: 750; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">{{ step.title }}</span>
+                </div>
+              </div>
+
+              <!-- Single line comment view -->
+              <div class="compact-comment-view" *ngIf="step.comments?.length" style="font-size: 0.76rem; color: var(--color-text-secondary); background: #f1f5f9; padding: 4px 8px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; box-sizing: border-box;">
+                <span class="comment-text" [title]="step.comments[step.comments.length - 1]">
+                  💬 {{ step.comments[step.comments.length - 1] }}
+                </span>
+              </div>
+
+              <!-- Step Status Label (Read-only ✓ Completed) -->
+              <div class="step-complete-action" style="width: 100%; text-align: center;">
+                <span style="font-size: 0.76rem; font-weight: 800; color: #16a34a; background: rgba(34, 197, 94, 0.1); padding: 4px 12px; border-radius: 6px; display: inline-block; width: 100%; box-sizing: border-box;">✓ Completed</span>
+              </div>
+            </div>
+
+            <!-- Intermediary Step Connector -->
+            <div *ngIf="i < exp.steps.length - 1" class="insert-step-divider-static" style="flex: 0 0 30px; display: flex; align-items: center; justify-content: center; position: relative;">
+              <div style="width: 100%; height: 2px; border-top: 2px dashed rgba(34, 197, 94, 0.3); width: 30px;"></div>
+            </div>
+
+          </ng-container>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUNNING READ-ONLY DETAIL OVERLAY DIALOG (Matches My Experiments details modal perfectly!) -->
+  <div class="exp-modal-overlay" *ngIf="selectedExp" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+    <div class="exp-modal-card" style="background: white; border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 32px; width: 95%; max-width: 1000px; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; position: relative;">
+      
+      <!-- Modal Header -->
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 1.5px solid var(--color-border-light); padding-bottom: 16px;">
+        <div class="modal-title-area" style="display: flex; flex-direction: column; gap: 8px;">
+          <h3 style="font-size: 1.6rem; font-weight: 850; color: var(--color-text-primary); margin: 0;">{{ selectedExp.title }}</h3>
+          <div class="modal-exp-meta" style="display: flex; align-items: center; gap: 12px;">
+            <span class="score-pill-badge" [style.background]="getScoreColor(selectedExp.success_score)" style="color: white; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800;">
+              Success Rate: {{ selectedExp.success_score }}/5
+            </span>
+            <span class="meta-date" style="font-size: 0.8rem; color: var(--color-text-tertiary); font-weight: 600;">Started: {{ formatDate(selectedExp.created_at) }}</span>
+            <span class="meta-date" style="font-size: 0.8rem; color: var(--color-primary); font-weight: 600;">Archived: {{ formatDate(selectedExp.archived_at) }}</span>
+          </div>
+        </div>
+        
+        <button class="close-modal-btn" (click)="closeModal()" style="background: transparent; border: none; font-size: 1.25rem; font-weight: 700; color: var(--color-text-tertiary); cursor: pointer;">✕ Close</button>
+      </div>
+      
+      <!-- Modal Body -->
+      <div class="modal-body-layout" style="display: grid; grid-template-columns: 320px 1fr; gap: 32px;">
+        
+        <!-- Left Column: Description and Samples (Read-only) -->
+        <div class="modal-sidebar-panel" style="display: flex; flex-direction: column; gap: 24px; border-right: 1.5px solid var(--color-border-light); padding-right: 32px;">
+          <div class="sidebar-block" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="block-label" style="font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--color-text-tertiary); letter-spacing: 0.05em;">Protocol Description</label>
+            <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.6; margin: 0; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--color-border-light);">
+              {{ selectedExp.description || 'No description provided.' }}
+            </p>
+          </div>
+          
+          <div class="sidebar-block" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="block-label" style="font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--color-text-tertiary); letter-spacing: 0.05em;">Experiment Samples</label>
+            <div class="samples-tags-container" style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <div *ngFor="let sample of selectedExp.samples" class="sample-tag-chip" style="background: #f1f5f9; border: 1px solid var(--color-border); padding: 2px 8px; border-radius: 9999px; font-size: 0.76rem; font-weight: 600; color: var(--color-text-secondary);">
+                <span class="tag-text">{{ sample }}</span>
+              </div>
+              <span *ngIf="!selectedExp.samples?.length" style="font-size: 0.88rem; color: var(--color-text-tertiary); font-style: italic;">No samples listed.</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Right Column: Vertical Timeline Steps Flow (Read-only) -->
+        <div class="modal-timeline-panel" style="display: flex; flex-direction: column; gap: 16px;">
+          <h3 class="panel-title" style="font-size: 1.15rem; font-weight: 800; color: var(--color-text-primary); margin: 0;">Completed Sequence Log</h3>
+          
+          <div class="vertical-timeline-container" style="display: flex; flex-direction: column; gap: 0;">
+            <ng-container *ngFor="let step of selectedExp.steps; let i = index">
+              
+              <!-- Vertical step card -->
+              <div class="vertical-step-card" style="display: flex; gap: 16px; position: relative;">
+                
+                <!-- Side indicators -->
+                <div class="step-side-indicator" style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0;">
+                  <span class="step-badge" style="background: #22c55e; color: white; border-color: #22c55e; font-size: 0.75rem; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; z-index: 2;">{{ i + 1 }}</span>
+                  <div class="connector-line" *ngIf="i < selectedExp.steps.length - 1" style="width: 2px; flex-grow: 1; background: #e2e8f0; margin: 4px 0;"></div>
+                </div>
+                
+                <!-- Card content -->
+                <div class="step-card-content" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--color-border-light); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+                  <div class="step-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h5 style="font-size: 0.95rem; font-weight: 800; color: var(--color-text-primary); margin: 0;">{{ step.title }}</h5>
+                    <span class="completed-time" style="font-size: 0.76rem; color: var(--color-text-tertiary);" *ngIf="step.completed_at">Completed: {{ formatDate(step.completed_at) }}</span>
+                  </div>
+                  
+                  <p style="font-size: 0.84rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;" *ngIf="step.description">{{ step.description }}</p>
+                  
+                  <!-- step comments & images -->
+                  <div class="step-details-wrapper" style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
+                    <div class="comments-list" *ngIf="step.comments?.length" style="display: flex; flex-direction: column; gap: 4px;">
+                      <div class="comment" *ngFor="let c of step.comments" style="font-size: 0.8rem; color: var(--color-text-secondary); background: white; border: 1px solid var(--color-border-light); padding: 6px 10px; border-radius: 6px;">💬 {{ c }}</div>
+                    </div>
+                    
+                    <div class="images-list" *ngIf="step.images?.length" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                      <img *ngFor="let img of step.images" [src]="img" class="step-img" (click)="openImagePreview(img)" style="max-width: 120px; max-height: 120px; border-radius: 6px; border: 1px solid var(--color-border); object-fit: cover; cursor: pointer;" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMAGE LIGHTBOX PREVIEW OVERLAY -->
+  <div class="image-lightbox-overlay" *ngIf="previewImageUrl" (click)="closeImagePreview()" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); z-index: 100000; display: flex; align-items: center; justify-content: center; cursor: zoom-out;">
+    <div class="lightbox-content" (click)="$event.stopPropagation()" style="position: relative; max-width: 90%; max-height: 90%; display: flex; align-items: center; justify-content: center;">
+      <button class="lightbox-close-btn" (click)="closeImagePreview()" style="position: absolute; top: -40px; right: 0; background: transparent; border: none; font-size: 1.5rem; color: white; cursor: pointer; font-weight: 700;">✕ Close</button>
+      <img [src]="previewImageUrl" class="lightbox-img" style="max-width: 100%; max-height: 80vh; border-radius: var(--radius-lg); box-shadow: var(--shadow-2xl); border: 2px solid rgba(255, 255, 255, 0.1);" />
+    </div>
+  </div>
+</div>

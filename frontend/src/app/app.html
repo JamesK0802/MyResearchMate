@@ -37,6 +37,26 @@
         </div>
       </div>
 
+      <!-- Lab Note Dropdown (logged in only) -->
+      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+        <span class="nav-tab" style="cursor: pointer;">Lab Note ▾</span>
+        <div class="dropdown-content">
+          <a routerLink="/lab/notes" routerLinkActive="active" class="dropdown-item">General Notes</a>
+          <a routerLink="/lab/experiments" routerLinkActive="active" class="dropdown-item">My Experiments</a>
+          <a routerLink="/lab/archive" routerLinkActive="active" class="dropdown-item">Experiment Archive</a>
+        </div>
+      </div>
+      
+      <!-- Booking dropdown (logged in only) -->
+      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+        <span class="nav-tab" style="cursor: pointer;">Booking ▾</span>
+        <div class="dropdown-content">
+          <a routerLink="/booking" routerLinkActive="active" class="dropdown-item">Facility Booking</a>
+          <!-- Nicole Booking only visible to allowed users -->
+          <a *ngIf="hasNicoleAccess" routerLink="/booking/nicole" routerLinkActive="active" class="dropdown-item">Nicole Booking</a>
+        </div>
+      </div>
+
       <!-- Contact (always visible) -->
       <a routerLink="/contact" class="nav-tab">Contact</a>
 
@@ -49,7 +69,7 @@
     </div>
 
     <div class="nav-right">
-      <span class="version-tag">v2.0.0</span>
+      <span class="version-tag">v{{ appVersion }}</span>
 
       <!-- Logged out: Link to Login Page -->
       <ng-container *ngIf="!(auth.session$ | async)">

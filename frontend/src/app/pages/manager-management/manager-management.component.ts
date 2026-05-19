@@ -11,13 +11,13 @@ import { firstValueFrom } from 'rxjs';
   template: `
     <div class="manager-container">
       <div class="page-header">
-        <h1>Manager Management</h1>
-        <p>Promote users to Manager or revoke their administrative privileges.</p>
+        <h1>Manager & Access Management</h1>
+        <p>Promote users, revoke privileges, or manage private priority booking permissions.</p>
       </div>
 
       <div *ngIf="loading" class="loading-state">
         <div class="spinner"></div>
-        <p>Loading users...</p>
+        <p>Loading users and access data...</p>
       </div>
 
       <div *ngIf="!loading" class="user-list">
@@ -31,6 +31,7 @@ import { firstValueFrom } from 'rxjs';
               <tr>
                 <th>User</th>
                 <th>Current Role</th>
+                <th>Nicole Booking Access</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -40,10 +41,23 @@ import { firstValueFrom } from 'rxjs';
                   <div class="user-info">
                     <span class="user-name">{{ user.name || 'No Name' }}</span>
                     <span class="user-email">{{ user.email }}</span>
+                    <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 500;">UID: {{ user.uid }}</span>
                   </div>
                 </td>
                 <td>
                   <span class="role-pill" [class]="user.role">{{ user.role | uppercase }}</span>
+                </td>
+                <td>
+                  <!-- Gimmick Access Toggle -->
+                  <label class="access-toggle-label">
+                    <input type="checkbox" 
+                           [checked]="user.uid === 'u6646386' || nicoleAccessMap[user.uid]" 
+                           [disabled]="user.uid === 'u6646386'"
+                           (change)="toggleNicoleAccess(user)" />
+                    <span [class.text-allowed]="user.uid === 'u6646386' || nicoleAccessMap[user.uid]">
+                      {{ (user.uid === 'u6646386' || nicoleAccessMap[user.uid]) ? '✓ Allowed' : '✗ Blocked' }}
+                    </span>
+                  </label>
                 </td>
                 <td>
                   <div class="actions" *ngIf="user.id !== currentUserId && user.role !== 'owner'">
@@ -77,7 +91,7 @@ import { firstValueFrom } from 'rxjs';
     .table-container { background: white; border-radius: 20px; border: 1px solid #f1f5f9; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
     table { width: 100%; border-collapse: collapse; }
     th { background: #f8fafc; text-align: left; padding: 16px 24px; font-size: 0.85rem; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
-    td { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
+    td { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     
     .user-info { display: flex; flex-direction: column; }
     .user-name { font-weight: 700; color: #1e293b; }
@@ -87,6 +101,24 @@ import { firstValueFrom } from 'rxjs';
     .role-pill.owner { background: #166534; color: white; }
     .role-pill.manager { background: #dcfce7; color: #166534; }
     .role-pill.user { background: #f1f5f9; color: #64748b; }
+
+    .access-toggle-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: #64748b;
+      background: #f8fafc;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      transition: all 0.2s;
+    }
+    .access-toggle-label input { cursor: pointer; }
+    .access-toggle-label:hover { background: #f1f5f9; }
+    .text-allowed { color: #166534; }
 
     .actions { display: flex; gap: 10px; }
     button { padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; border: none; }
@@ -109,7 +141,8 @@ export class ManagerManagementComponent implements OnInit {
   filteredUsers: any[] = [];
   loading = true;
   currentUserId: number | null = null;
-  private apiUrl = 'http://127.0.0.1:8000/api';
+  nicoleAccessMap: { [uid: string]: boolean } = {};
+  private apiUrl = '/api'; // Use relative proxy URL matching other calls
 
   constructor(
     private http: HttpClient,
@@ -129,6 +162,15 @@ export class ManagerManagementComponent implements OnInit {
       const headers = await this.getAuthHeaders();
       this.users = await firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/auth/users`, { headers }));
       this.filteredUsers = [...this.users];
+      
+      // Fetch Gimmick access list
+      try {
+        const accessRes = await firstValueFrom(this.http.get<any>(`${this.apiUrl}/nicole-gimmick/list-access`, { headers }));
+        this.nicoleAccessMap = accessRes || {};
+      } catch (err) {
+        console.error('Failed to load Nicole Access list', err);
+      }
+
     } catch (err) {
       console.error('Failed to load users', err);
     } finally {
@@ -162,8 +204,25 @@ export class ManagerManagementComponent implements OnInit {
     }
   }
 
+  async toggleNicoleAccess(user: any) {
+    const hasAccess = !!this.nicoleAccessMap[user.uid];
+    const headers = await this.getAuthHeaders();
+    try {
+      if (hasAccess) {
+        await firstValueFrom(this.http.post(`${this.apiUrl}/nicole-gimmick/revoke/${user.uid}`, {}, { headers }));
+        this.nicoleAccessMap[user.uid] = false;
+      } else {
+        await firstValueFrom(this.http.post(`${this.apiUrl}/nicole-gimmick/grant/${user.uid}`, {}, { headers }));
+        this.nicoleAccessMap[user.uid] = true;
+      }
+      this.cdr.detectChanges();
+    } catch (err) {
+      alert('Failed to update Nicole Booking access.');
+    }
+  }
+
   private async getAuthHeaders(): Promise<HttpHeaders> {
-    const token = this.auth.accessToken;
-    return new HttpHeaders().set('Authorization', `Bearer ${token}`);
+    const session = await this.auth.getSession();
+    return new HttpHeaders().set('Authorization', `Bearer ${session?.access_token}`);
   }
 }

@@ -372,6 +372,20 @@ print("[DEBUG] Including labs_router from routers.labs")
 from routers.labs import router as labs_router
 api_router.include_router(labs_router)
 
+# Include lab notebook router
+print("[DEBUG] Including lab_notebook_router from routers.lab_notebook")
+from routers.lab_notebook import router as lab_notebook_router
+api_router.include_router(lab_notebook_router)
+
+# Include facility booking router
+print("[DEBUG] Including facility_booking_router from routers.facility_booking")
+from routers.facility_booking import router as facility_booking_router
+api_router.include_router(facility_booking_router)
+
+# Include Nicole Gimmick Booking router (fully isolated)
+from routers.nicole_gimmick import router as nicole_gimmick_router
+api_router.include_router(nicole_gimmick_router)
+
 # Include main api_router
 app.include_router(api_router)
 

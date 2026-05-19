@@ -554,13 +554,95 @@ export class AppStateService {
     return { params: this.lastRunParams, scopes };
   }
 
+  private async generateChartImagesForExport(scopes: ScopeData[]): Promise<{ [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }> {
+    const allImages: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } } = {};
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return {};
+
+    for (const scope of scopes) {
+      allImages[scope.sheetName] = {};
+      
+      // 1. Generate Summary Bar Chart
+      const barLabels = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => `${g.gene} (${t.target_id})`) || []);
+      const barDataNoIndel = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.no_indel_pct ?? 0) || []);
+      const barDataSub = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.substitution_pct ?? 0) || []);
+      const barDataIn = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.in_frame_pct ?? 0) || []);
+      const barDataOut = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.out_of_frame_pct ?? 0) || []);
+
+      const barChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: barLabels,
+          datasets: [
+            { label: 'No Indel %', data: barDataNoIndel, backgroundColor: '#2ecc71' },
+            { label: 'Substitution %', data: barDataSub, backgroundColor: '#3498db' },
+            { label: 'In-frame %', data: barDataIn, backgroundColor: '#e67e22' },
+            { label: 'Out-of-frame %', data: barDataOut, backgroundColor: '#e74c3c' },
+          ]
+        },
+        options: { animation: false, responsive: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
+      });
+      allImages[scope.sheetName]['SUMMARY'] = { 'bar': canvas.toDataURL('image/png') };
+      barChart.destroy();
+
+      // 2. Generate Pie and Donut for each target
+      for (const gene of scope.genes) {
+        const targets = gene.analysis_result?.targets || [];
+        for (const target of targets) {
+          const s = target.summary;
+          if (!s) continue;
+
+          // Pie Chart
+          const pieChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+              labels: ['Unmodified', 'Substitution', 'In-frame', 'Out-of-frame'],
+              datasets: [{
+                data: [s.no_indel_pct - s.substitution_pct, s.substitution_pct, s.in_frame_pct, s.out_of_frame_pct],
+                backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
+              }]
+            },
+            options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Mutation Distribution (${gene.gene} - ${target.target_id})` } } }
+          });
+          const chartKey = `${gene.gene}::${target.target_id}`;
+          if (!allImages[scope.sheetName][chartKey]) allImages[scope.sheetName][chartKey] = {};
+          allImages[scope.sheetName][chartKey]['pie'] = canvas.toDataURL('image/png');
+          pieChart.destroy();
+
+          // Donut Chart (Editing Efficiency)
+          const edited = (s.out_of_frame_pct ?? 0) + (s.in_frame_pct ?? 0) + (s.substitution_pct ?? 0);
+          const unedited = 100 - edited;
+          const donutChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: ['Edited', 'Unedited'],
+              datasets: [{
+                data: [edited, unedited],
+                backgroundColor: ['#f85a7e', '#d1d1d1']
+              }]
+            },
+            options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Efficiency (${gene.gene} - ${target.target_id})` } } }
+          });
+          allImages[scope.sheetName][chartKey]['donut'] = canvas.toDataURL('image/png');
+          donutChart.destroy();
+        }
+      }
+    }
+    return allImages;
+  }
+
   async exportToExcel() {
     const data = this.getExportData();
     if (!data) return;
 
     try {
-      await this.excelExportService.exportToExcel(data.params, data.scopes);
-      this.addLog('Excel exported.');
+      this.addLog('Generating chart images for export...');
+      const images = await this.generateChartImagesForExport(data.scopes);
+      await this.excelExportService.exportToExcel(data.params, data.scopes, images);
+      this.addLog('Excel exported with all diagrams.');
     } catch (e: any) {
       console.error('Excel export failed:', e);
       this.addLog(`Excel export failed: ${e.message}`);

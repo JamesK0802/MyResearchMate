@@ -130,3 +130,41 @@ class PcrPresetComponent(Base):
     include_in_master_mix = Column(Boolean, default=True)
     is_optional = Column(Boolean, default=False)
     display_order = Column(Integer)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Facility Booking System
+# ─────────────────────────────────────────────────────────────────────────────
+
+from sqlalchemy import Date
+
+class FacilitySpot(Base):
+    """
+    Represents a physical spot/location within a facility room.
+    Maps to the 'Spot' column in the original Excel allocation sheet.
+    """
+    __tablename__ = "facility_spots"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, unique=True, index=True)          # e.g. "Acacia Room 18_01"
+    room = Column(String, index=True)                       # e.g. "Acacia Room 18"
+    category = Column(String, default="General")            # e.g. "Growth Chamber", "Storage"
+    display_order = Column(Integer, default=0)               # Controls visual ordering
+    map_group = Column(String, nullable=True)                # Grouping for visual layout
+    is_active = Column(Boolean, default=True)                # Soft delete / deactivation
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class FacilityBooking(Base):
+    """
+    Represents a booking/reservation of a facility spot for a date range.
+    Maps to the 'Raw booking table' in the original Excel.
+    """
+    __tablename__ = "facility_bookings"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    spot_id = Column(UUID(as_uuid=True), ForeignKey("facility_spots.id", ondelete="CASCADE"), index=True)
+    user_name = Column(String)                               # Who booked it
+    species = Column(String, nullable=True)                  # e.g. "Arabidopsis Col-0"
+    start_date = Column(Date, nullable=False)                # First day of booking period
+    end_date = Column(Date, nullable=False)                  # Last day of booking period
+    comment = Column(Text, nullable=True)
+    created_by_name = Column(String, nullable=True)          # Name of the user who created it
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

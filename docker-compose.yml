@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql://james:nicole102644!@db:5432/myresearchmate
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -36,8 +38,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: mrm_frontend
     restart: always
     depends_on:

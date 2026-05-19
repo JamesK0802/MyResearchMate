@@ -1,16 +1,21 @@
 # Stage 1: Build
 FROM node:20 AS build
 WORKDIR /app
-COPY package*.json ./
+
+# Copy VERSION file from project root (for version sync)
+COPY VERSION ./VERSION
+
+# Copy frontend source
+COPY frontend/package*.json ./
 RUN npm install
-COPY . .
+COPY frontend/ .
+
+# prebuild hook in package.json automatically runs sync-version.js
 RUN npm run build -- --configuration production
 
 # Stage 2: Serve
 FROM nginx:stable-alpine
-# Copy built files from stage 1
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

@@ -1,6 +1,6 @@
-# MyResearchMate v2.0.0
+# MyResearchMate v3.0.0
 
-**MyResearchMate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, and fosters lab collaboration through a secure, cloud-integrated dashboard.
+**MyResearchMate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
 ---
 
@@ -18,11 +18,25 @@ Precision protocol planning with personalized preset management.
 - **Cloud Sync**: Access your presets from any device via secure Supabase integration.
 - **Researcher Sharing**: Instantly send and receive custom PCR presets with colleagues.
 
+### 3. Lab Notebook & Experiments (New in v3.0)
+A robust workspace for tracking real-time linear protocol flows.
+- **Active Workspaces**: Initialize experiments from custom presets or ad-hoc templates with visual, multi-line protocol briefs.
+- **Compact Horizontal Flow**: Track linear steps horizontally in a clean scroller with quick inline comments and status progression.
+- **Complete All Sequence**: Mark all sequence steps complete instantly with a single button.
+- **Detailed Step Ledger**: Immersion panel showing step descriptions, completion timestamps, custom logs, and evidence photos.
+- **Lightbox Image Viewer**: Click on any uploaded result image to zoom and preview in a high-fidelity lightbox overlay.
+
+### 4. Interactive Success Rate Archiving (New in v3.0)
+Grade and catalog completed protocols with clean, high-utility UI.
+- **Gradient Star Rating**: Clickable 1-5 star success rates representing a smooth spectrum from Low (Red) to High (Green).
+- **Archive Ledger**: Dedicated completed repository displaying past experiments in the exact same premium card and scroller UI as active workspaces for complete consistency.
+- **Search & Filter**: Sift through past runs by Success Rate, Work Type, tags, samples, and archive date.
+
 ---
 
 ## 🛠 Technology Stack
 
-- **Frontend**: Angular 18+ (Premium Aesthetics)
+- **Frontend**: Angular 21 (Premium Minimalist Aesthetics, Pure HSL CSS Design System)
 - **Backend**: FastAPI (Python 3.11+)
 - **Database**: PostgreSQL (Containerized) + Supabase (Optional Cloud Sync)
 - **Containerization**: Docker & Docker Compose
@@ -87,7 +101,7 @@ docker-compose down  # Stops and removes containers
 ```
 
 ### Data Persistence
-Database data is stored in a persistent Docker volume named `postgres_data`. This ensures your data survives container updates or restarts.
+Database data is stored in a persistent Docker volume named `postgres_data`, and laboratory document files are persisted on the host disk under `data/` directory. This ensures all your research materials survive container updates, restarts, or unexpected host shutdowns.
 
 ---
 
@@ -97,32 +111,32 @@ If you want the server to automatically update itself only when the version incr
 
 ### 1. Setup the Script
 1.  Make the script executable:
-    ```bash
-    chmod +x scripts/auto-update.sh
-    ```
+     ```bash
+     chmod +x scripts/auto-update.sh
+     ```
 2.  Edit the script to set your actual repository path:
-    ```bash
-    nano scripts/auto-update.sh
-    # Change REPO_DIR to your actual absolute path
-    ```
+     ```bash
+     nano scripts/auto-update.sh
+     # Change REPO_DIR to your actual absolute path
+     ```
 
 ### 2. Schedule with Cron
 Set the script to run every 5 minutes (or any interval):
 1.  Open crontab: `crontab -e`
 2.  Add this line (update the path):
-    ```cron
-    */5 * * * * /bin/bash /path/to/MyResearchMate/scripts/auto-update.sh >> /path/to/MyResearchMate/auto-update.log 2>&1
-    ```
+     ```cron
+     */5 * * * * /bin/bash /path/to/MyResearchMate/scripts/auto-update.sh >> /path/to/MyResearchMate/auto-update.log 2>&1
+     ```
 
 ### 3. Triggering an Update
 To deploy a new version:
 1.  Increase the version number in the `VERSION` file.
 2.  Commit and push:
-    ```bash
-    git add VERSION
-    git commit -m "Bump version to 2.0.1"
-    git push origin main
-    ```
+     ```bash
+     git add VERSION
+     git commit -m "Bump version to 3.0.0"
+     git push origin main
+     ```
 The server will detect the change within 5 minutes, pull the code, and rebuild the containers automatically.
 
 ---

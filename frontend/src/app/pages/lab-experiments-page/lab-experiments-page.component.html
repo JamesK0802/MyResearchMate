@@ -1,0 +1,453 @@
+<div class="experiments-page app-page">
+  <header class="page-header">
+    <div class="header-content">
+      <h1>My Experiments</h1>
+      <p>Initiate work presets, track linear lab steps, upload evidence, and finalize records.</p>
+    </div>
+  </header>
+
+  <!-- TOP AREA: Create / Preset forms -->
+  <div class="top-area section-card">
+    <div class="top-actions">
+      <h2>Experimental Workspaces</h2>
+      <div class="action-buttons">
+        <button class="app-btn app-btn-outline" (click)="toggleCreatePreset()">Manage Templates</button>
+        <button class="app-btn app-btn-primary" (click)="toggleCreateExp()">+ New Experiment</button>
+      </div>
+    </div>
+
+    <!-- Create Preset Form -->
+    <div *ngIf="showCreatePresetForm" class="form-container preset-form">
+      <h3 *ngIf="!editingPresetId">Create Workflow Preset</h3>
+      <h3 *ngIf="editingPresetId">Edit Workflow Preset</h3>
+      <input class="app-input" [(ngModel)]="presetForm.title" placeholder="Preset Title (e.g. Immunostaining)" />
+      <input class="app-input" [(ngModel)]="presetForm.description" placeholder="Short protocol brief..." />
+      
+      <div class="steps-builder">
+        <h4>Steps Sequence</h4>
+        <div *ngFor="let step of presetForm.steps; let i = index" class="step-input-row">
+          <span class="step-number">{{ i + 1 }}</span>
+          <input class="app-input" [(ngModel)]="step.title" placeholder="Step name (e.g. Wash cells)" />
+          <input class="app-input" [(ngModel)]="step.description" placeholder="Step notes..." />
+          <button class="icon-btn danger" (click)="removePresetStep(i)">✕</button>
+        </div>
+        <button class="app-btn app-btn-outline app-btn-sm" (click)="addPresetStep()">+ Add Step</button>
+      </div>
+
+      <div class="form-actions">
+        <button class="app-btn" (click)="showCreatePresetForm = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="savePreset()">{{ editingPresetId ? 'Save Preset Updates' : 'Save Preset' }}</button>
+      </div>
+
+      <hr class="separator" />
+      <h4>Available Lab Templates</h4>
+      <div class="preset-list">
+        <div *ngFor="let p of presets" class="preset-item">
+          <span><strong>{{ p.title }}</strong> ({{ p.steps.length }} sequence steps)</span>
+          <div class="preset-actions">
+            <button class="icon-btn edit-btn" (click)="editPreset(p)">Edit</button>
+            <button class="icon-btn danger" (click)="deletePreset(p.id)">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Experiment Form (with 2-line visual brief description textarea) -->
+    <div *ngIf="showCreateExpForm" class="form-container">
+      <h3>Initialize Active Experiment</h3>
+      
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Experiment Title</label>
+          <input class="app-input" [(ngModel)]="expForm.title" placeholder="e.g. Toxicity assay region-2" />
+        </div>
+        <div class="form-group">
+          <label>Workflow Preset</label>
+          <select class="app-select" [(ngModel)]="expForm.work_type">
+            <option value="">-- Custom (No Preset) --</option>
+            <option *ngFor="let p of presets" [value]="p.id">{{ p.title }}</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label>Brief Description</label>
+          <textarea class="app-input brief-desc-textarea" [(ngModel)]="expForm.description" placeholder="A brief context about this test run... (Press Enter to start new lines - fits up to 2 lines visually)"></textarea>
+        </div>
+        <div class="form-group full-width">
+          <label>Samples (comma separated)</label>
+          <input class="app-input" [(ngModel)]="expForm.samples" placeholder="SampleA, SampleB, Control" />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="app-btn" (click)="showCreateExpForm = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="createExperiment()">Create Experiment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM AREA: Active experiments list with scrollers -->
+  <div class="experiments-list">
+    <div *ngIf="!activeExperiments.length" class="empty-msg section-card">
+      <p>No active sequences running currently. Tap <strong>New Experiment</strong> to spin up a workflow!</p>
+    </div>
+    
+    <div *ngFor="let exp of activeExperiments" class="experiment-card section-card">
+      
+      <!-- Card Header Info (Exactly 2 compact rows with customized side column) -->
+      <div class="exp-header-compact">
+        
+        <!-- Row 1: Title on the left, Sync + Buttons + Date stacked on the right -->
+        <div class="exp-header-row-one">
+          <div class="exp-title-date-group">
+            <input class="inline-exp-title" 
+                   [(ngModel)]="exp.title" 
+                   (input)="onExperimentChange(exp)" 
+                   placeholder="Experiment Title..." />
+          </div>
+          
+          <div class="exp-actions-inline-group">
+            <!-- Top: Saved to cloud -->
+            <div class="exp-sync-pill">
+              <div *ngIf="syncStates[exp.id] === 'saved'" class="status-indicator-wrapper">
+                <span class="status-dot dot-saved"></span>
+                <span class="status-text text-saved">Saved to Cloud</span>
+              </div>
+              <div *ngIf="syncStates[exp.id] === 'saving'" class="status-indicator-wrapper">
+                <span class="spinner-small"></span>
+                <span class="status-text text-saving">Saving...</span>
+              </div>
+              <div *ngIf="syncStates[exp.id] === 'error'" class="status-indicator-wrapper">
+                <span class="status-dot dot-error"></span>
+                <span class="status-text text-error">Sync Error</span>
+              </div>
+            </div>
+            
+            <!-- Middle: Action buttons -->
+            <div class="exp-action-buttons-row">
+              <button class="app-btn app-btn-success-outline app-btn-sm complete-all-btn" (click)="completeAllSteps(exp)" title="Complete all steps in sequence">
+                Complete All
+              </button>
+              <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="openExperimentDetails(exp)">
+                View Details
+              </button>
+              <button class="app-btn app-btn-danger-outline app-btn-sm delete-btn-inline" (click)="deleteExperiment(exp.id)">
+                Delete
+              </button>
+            </div>
+            
+            <!-- Bottom: Date under delete -->
+            <span class="meta-date-inline">Started: {{ formatDate(exp.created_at) }}</span>
+          </div>
+        </div>
+
+        <!-- Row 2: Samples Tag Chips list only -->
+        <div class="exp-header-row-two">
+          <div class="samples-tags-container">
+            <div *ngFor="let sample of exp.samples; let sIdx = index" class="sample-tag-chip">
+              <span class="tag-text">{{ sample }}</span>
+              <button class="remove-tag-btn" (click)="removeSampleTag(exp, sIdx)" title="Remove Sample">✕</button>
+            </div>
+            <div class="add-tag-wrapper">
+              <input #newSampleInput 
+                     class="add-tag-inline-input" 
+                     placeholder="+ Add sample..."
+                     (keyup.enter)="addSampleTag(exp, newSampleInput)"
+                     (blur)="addSampleTag(exp, newSampleInput)" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
+      <div class="workflow-container">
+        <div class="workflow-scroll-area">
+          
+          <!-- Start Adder Connector -->
+          <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
+            <span class="plus-icon">+</span>
+          </div>
+
+          <ng-container *ngFor="let step of exp.steps; let i = index">
+            
+            <div class="step-card compact-step" 
+                 draggable="true" 
+                 (dragstart)="onDragStart(exp, i)" 
+                 (dragover)="$event.preventDefault()" 
+                 (drop)="onDrop(exp, i)"
+                 [class.active-step]="step.status === 'active'" 
+                 [class.completed-step]="step.status === 'completed'">
+              
+              <div class="step-header">
+                <span class="step-number-badge">{{ i + 1 }}</span>
+                <input class="step-title-input" 
+                       [(ngModel)]="step.title" 
+                       (input)="onExperimentChange(exp)" 
+                       placeholder="Step title..." />
+                <button class="danger-text remove-step-btn" (click)="removeStep(exp, step.id)" title="Remove Step">✕</button>
+              </div>
+
+              <!-- Single line comment view -->
+              <div class="compact-comment-view" *ngIf="step.comments?.length">
+                <span class="comment-text" [title]="step.comments[step.comments.length - 1]">
+                  💬 {{ step.comments[step.comments.length - 1] }}
+                </span>
+              </div>
+
+              <!-- Compact inline comment input -->
+              <div class="compact-comment-input-row">
+                <input #commentInput 
+                       placeholder="Add comment..." 
+                       class="compact-comment-input" 
+                       (keyup.enter)="addComment(exp, step, commentInput)" 
+                       (blur)="addComment(exp, step, commentInput)" />
+              </div>
+
+              <!-- Step Actions -->
+              <div class="step-complete-action">
+                <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn app-btn-sm" (click)="completeStep(exp, step)">✓ Complete</button>
+                <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn app-btn-sm" (click)="undoCompleteStep(exp, step)">↺ Undo</button>
+              </div>
+            </div>
+
+            <!-- Intermediary Step Connector Adder -->
+            <div class="insert-step-divider" (click)="insertStepAt(exp, i + 1)" title="Insert Step here">
+              <span class="plus-icon">+</span>
+            </div>
+
+          </ng-container>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUNNING FULL-SCREEN DETAILED MODAL OVERLAY -->
+  <div class="exp-modal-overlay" *ngIf="selectedExperiment">
+    <div class="exp-modal-card">
+      
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <input class="modal-exp-title" 
+                 [(ngModel)]="selectedExperiment.title" 
+                 (input)="onExperimentChange(selectedExperiment)" 
+                 placeholder="Experiment Title..." />
+          <div class="modal-exp-meta">
+            <span *ngIf="selectedExperiment.work_type" class="badge work-type">{{ getPresetName(selectedExperiment.work_type) }}</span>
+            <span class="meta-date">Started: {{ formatDate(selectedExperiment.created_at) }}</span>
+          </div>
+        </div>
+        
+        <div class="modal-header-actions">
+          <!-- Sync Status -->
+          <div class="exp-sync-pill">
+            <div *ngIf="syncStates[selectedExperiment.id] === 'saved'" class="status-indicator-wrapper">
+              <span class="status-dot dot-saved"></span>
+              <span class="status-text text-saved">Saved to Cloud</span>
+            </div>
+            <div *ngIf="syncStates[selectedExperiment.id] === 'saving'" class="status-indicator-wrapper">
+              <span class="spinner-small"></span>
+              <span class="status-text text-saving">Saving...</span>
+            </div>
+            <div *ngIf="syncStates[selectedExperiment.id] === 'error'" class="status-indicator-wrapper">
+              <span class="status-dot dot-error"></span>
+              <span class="status-text text-error">Sync Error</span>
+            </div>
+          </div>
+          
+          <button class="close-modal-btn" (click)="closeExperimentDetails()">✕ Close</button>
+        </div>
+      </div>
+      
+      <!-- Modal Body -->
+      <div class="modal-body-layout">
+        
+        <!-- Left Column: Description and Samples -->
+        <div class="modal-sidebar-panel">
+          <div class="sidebar-block">
+            <label class="block-label">Protocol Description</label>
+            <textarea class="modal-desc-textarea" 
+                      [(ngModel)]="selectedExperiment.description" 
+                      (input)="onExperimentChange(selectedExperiment)" 
+                      placeholder="Add an experiment description..."></textarea>
+          </div>
+          
+          <div class="sidebar-block">
+            <label class="block-label">Experiment Samples</label>
+            <div class="samples-tags-container">
+              <div *ngFor="let sample of selectedExperiment.samples; let sIdx = index" class="sample-tag-chip">
+                <span class="tag-text">{{ sample }}</span>
+                <button class="remove-tag-btn" (click)="removeSampleTag(selectedExperiment, sIdx)" title="Remove Sample">✕</button>
+              </div>
+              <div class="add-tag-wrapper">
+                <input #newSampleInputModal 
+                       class="add-tag-inline-input" 
+                       placeholder="+ Add sample..."
+                       (keyup.enter)="addSampleTag(selectedExperiment, newSampleInputModal)"
+                       (blur)="addSampleTag(selectedExperiment, newSampleInputModal)" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Statistics / Progress in sidebar -->
+          <div class="sidebar-block progress-block">
+            <label class="block-label">Workflow Progress</label>
+            <div class="progress-stats">
+              <span class="percentage-large">{{ getProgressPercentage(selectedExperiment) }}%</span>
+              <span class="steps-fraction">
+                {{ getCompletedStepsCount(selectedExperiment) }} / {{ selectedExperiment.steps.length }} steps
+              </span>
+            </div>
+            <div class="modal-progress-bar-container">
+              <div class="modal-progress-bar" [ngStyle]="{ 'width': getProgressPercentage(selectedExperiment) + '%' }"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Right Column: Vertical Timeline Steps Flow! -->
+        <div class="modal-timeline-panel">
+          <h3 class="panel-title">Protocol Workflow Steps</h3>
+          
+          <div class="vertical-timeline-container">
+            
+            <!-- Start Intermediary Step Connector Adder -->
+            <div class="vertical-step-connector start-connector" (click)="insertStepAt(selectedExperiment, 0)" title="Insert Step at the beginning">
+              <div class="connector-line"></div>
+              <button class="connector-add-btn">+</button>
+            </div>
+            
+            <ng-container *ngFor="let step of selectedExperiment.steps; let i = index">
+              
+              <!-- The Step Card in Vertical Stack -->
+              <div class="vertical-step-card" 
+                   [class.active-step]="step.status === 'active'" 
+                   [class.completed-step]="step.status === 'completed'">
+                
+                <!-- Left indicator & numbering -->
+                <div class="step-side-indicator">
+                  <span class="step-badge">{{ i + 1 }}</span>
+                  <div class="step-status-dot"></div>
+                </div>
+                
+                <!-- Step Main Content Area -->
+                <div class="step-card-content">
+                  <div class="step-card-header">
+                    <input class="step-title-input" 
+                           [(ngModel)]="step.title" 
+                           (input)="onExperimentChange(selectedExperiment)" 
+                           placeholder="Step title..." />
+                    <button class="danger-text remove-step-btn" (click)="removeStep(selectedExperiment, step.id)" title="Remove Step">✕</button>
+                  </div>
+                  
+                  <textarea class="step-desc-input" 
+                            [(ngModel)]="step.description" 
+                            (input)="onExperimentChange(selectedExperiment)" 
+                            placeholder="Add step description..."></textarea>
+                  
+                  <div class="step-timestamps" *ngIf="step.completed_at">
+                    Completed: {{ formatDate(step.completed_at) }}
+                  </div>
+                  
+                  <!-- Step Images & Comments -->
+                  <div class="step-details-wrapper">
+                    <div class="comments-list" *ngIf="step.comments?.length">
+                      <div class="comment" *ngFor="let c of step.comments">💬 {{ c }}</div>
+                    </div>
+                    
+                    <div class="images-list" *ngIf="step.images?.length">
+                      <img *ngFor="let img of step.images" [src]="img" class="step-img" (click)="openImagePreview(img)" style="cursor: pointer;" />
+                    </div>
+                  </div>
+                  
+                  <!-- Step Actions Foot -->
+                  <div class="step-card-actions">
+                    <div class="add-comment-row">
+                      <input #commentInput placeholder="Type comment & press Enter..." class="app-input-sm" (keyup.enter)="addComment(selectedExperiment, step, commentInput)" />
+                    </div>
+                    <div class="upload-row">
+                      <label class="upload-btn">
+                        <input type="file" style="display:none" accept="image/*" (change)="uploadStepImage($event, selectedExperiment, step)">
+                        <span *ngIf="uploadingImageForStep === step.id">⏳ Uploading...</span>
+                        <span *ngIf="uploadingImageForStep !== step.id">📷 Add Image</span>
+                      </label>
+                    </div>
+                    <div class="step-complete-trigger">
+                      <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn" (click)="completeStep(selectedExperiment, step)">✓ Complete Step</button>
+                      <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn" (click)="undoCompleteStep(selectedExperiment, step)">↺ Undo</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Intermediary Step Connector Adder -->
+              <div class="vertical-step-connector" (click)="insertStepAt(selectedExperiment, i + 1)" title="Insert Step here">
+                <div class="connector-line"></div>
+                <button class="connector-add-btn">+</button>
+              </div>
+              
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUNNING IN-APP RATING & ARCHIVE MODAL OVERLAY (No emojis/icons, pure colors) -->
+  <div class="archive-modal-overlay" *ngIf="archivingExp">
+    <div class="archive-modal-card">
+      <button class="archive-close-btn" (click)="cancelArchiving()" title="Keep active">✕</button>
+      
+      <!-- View 1: Complete options (Archive vs Delete) -->
+      <div *ngIf="!showRatingSelector" class="archive-view-container">
+        <h3>Experiment Completed</h3>
+        <p class="archive-subtitle">All steps in <strong>{{ archivingExp.title }}</strong> are finished. How would you like to handle this workspace?</p>
+        
+        <div class="archive-actions-column">
+          <button class="app-btn app-btn-success archive-main-btn" (click)="proceedToRating()">
+            Archive Record & Rate Success
+          </button>
+          <button class="app-btn app-btn-danger-outline archive-main-btn" (click)="deleteArchivingExp()">
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+      
+      <!-- View 2: Rating Score Selector (1-5 star scale with premium gradient colors) -->
+      <div *ngIf="showRatingSelector" class="archive-view-container">
+        <h3>Rate Success Rate</h3>
+        <p class="archive-subtitle">Select overall success rating for <strong>{{ archivingExp.title }}</strong> workflow (1 to 5):</p>
+        
+        <div class="rating-stars-wrapper">
+          <button *ngFor="let rating of [1, 2, 3, 4, 5]" 
+                  class="rating-star-node star-node-{{ rating }}"
+                  [class.star-active]="selectedRatingScore >= rating"
+                  (click)="selectRatingScore(rating)">
+            ★
+          </button>
+        </div>
+        
+        <div class="rating-legend">
+          <span class="legend-low">1 (Low)</span>
+          <span class="legend-high">5 (High)</span>
+        </div>
+        
+        <div class="archive-rating-actions">
+          <button class="app-btn app-btn-outline" (click)="showRatingSelector = false">
+            Back
+          </button>
+          <button class="app-btn app-btn-primary" [disabled]="selectedRatingScore === 0" (click)="submitArchive()">
+            Archive Record ✓
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMAGE LIGHTBOX PREVIEW OVERLAY -->
+  <div class="image-lightbox-overlay" *ngIf="previewImageUrl" (click)="closeImagePreview()" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); z-index: 100000; display: flex; align-items: center; justify-content: center; cursor: zoom-out;">
+    <div class="lightbox-content" (click)="$event.stopPropagation()" style="position: relative; max-width: 90%; max-height: 90%; display: flex; align-items: center; justify-content: center;">
+      <button class="lightbox-close-btn" (click)="closeImagePreview()" style="position: absolute; top: -40px; right: 0; background: transparent; border: none; font-size: 1.5rem; color: white; cursor: pointer; font-weight: 700;">✕ Close</button>
+      <img [src]="previewImageUrl" class="lightbox-img" style="max-width: 100%; max-height: 80vh; border-radius: var(--radius-lg); box-shadow: var(--shadow-2xl); border: 2px solid rgba(255, 255, 255, 0.1);" />
+    </div>
+  </div>
+</div>

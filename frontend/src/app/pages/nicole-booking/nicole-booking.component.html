@@ -1,0 +1,156 @@
+<div class="nicole-page app-page">
+  <header class="page-header">
+    <div class="header-nav">
+      <span class="app-badge app-badge-pink">📅 ANU PRIORITY TIMELINE</span>
+      <div class="date-selector-row">
+        <button class="nav-arrow-btn" (click)="prevDay()">◀</button>
+        <h1>{{ formatDate(selectedDateStr) }}</h1>
+        <button class="nav-arrow-btn" (click)="nextDay()">▶</button>
+      </div>
+      <div class="datepicker-container">
+        <label>Jump to Date:</label>
+        <input type="date" [(ngModel)]="selectedDateStr" (change)="onDateChange()" class="app-input-sm" />
+      </div>
+    </div>
+  </header>
+
+  <!-- Error / Access Denied State -->
+  <div *ngIf="error && !bookings.length" class="access-denied-card section-card">
+    <div class="denied-icon">🚨</div>
+    <h2>Access Denied</h2>
+    <p class="denied-desc">{{ error }}</p>
+    <div class="denied-hint">
+      💡 This private daily scheduler is restricted. If you require access, please request the System Owner to grant you permission through the Owner Panel.
+    </div>
+  </div>
+
+  <div *ngIf="!loading" class="timeline-container">
+    
+    <!-- TIMELINE LAYOUT -->
+    <div class="timeline-grid-wrapper">
+      
+      <!-- Time axis and slot columns -->
+      <div class="timeline-schedule">
+        
+        <div *ngFor="let slot of slots" class="time-row">
+          
+          <!-- TIME LABEL (09:00, 09:15, etc) -->
+          <div class="time-label">{{ slot }}</div>
+          
+          <!-- SLOT CELL -->
+          <div class="slot-cell">
+            
+            <!-- CASE 1: Booked Slot (Only render at start of booking to let it span) -->
+            <ng-container *ngIf="getBookingForSlot(slot) as b">
+              <div *ngIf="b.start_time === slot" 
+                   class="booked-card"
+                   [style.height.px]="getBookingDurationSlots(b) * 60 - 10"
+                   (click)="selectBooking(b)"
+                   [class.selected-card]="selectedBookingDetails?.id === b.id">
+                <div class="booked-card-header">
+                  <span class="booked-title">{{ b.session_type }}</span>
+                  <span class="booked-time">{{ b.start_time }} - {{ b.end_time }}</span>
+                </div>
+                <div class="booked-card-body">
+                  <span class="booked-user">👤 {{ b.booked_by }}</span>
+                </div>
+              </div>
+            </ng-container>
+            
+            <!-- CASE 2: Empty / Available Slot (Only show if not booked at all) -->
+            <div *ngIf="!getBookingForSlot(slot)" 
+                 class="available-slot" 
+                 (click)="openBooking(slot)">
+              <span class="plus-icon">+</span>
+              <span class="avail-text">Available (Click to schedule)</span>
+            </div>
+            
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- RIGHT DETAIL BAR -->
+    <div class="details-sidebar section-card">
+      <h2 class="sidebar-title">🔍 Slot Details</h2>
+      
+      <div *ngIf="selectedBookingDetails" class="detail-display">
+        <div class="detail-badge">CONFIRMED SLOT</div>
+        <h3 class="detail-task-name">{{ selectedBookingDetails.session_type }}</h3>
+        
+        <div class="detail-meta">
+          <div class="meta-item"><strong>Date:</strong> {{ formatDate(selectedBookingDetails.date_str) }}</div>
+          <div class="meta-item"><strong>Time:</strong> {{ selectedBookingDetails.start_time }} - {{ selectedBookingDetails.end_time }}</div>
+          <div class="meta-item"><strong>Requested By:</strong> {{ selectedBookingDetails.booked_by }}</div>
+        </div>
+
+        <div class="detail-notes" *ngIf="selectedBookingDetails.comment">
+          <strong>Notes / Bribes:</strong>
+          <p class="notes-quote">"{{ selectedBookingDetails.comment }}"</p>
+        </div>
+
+        <div class="detail-reaction" *ngIf="selectedBookingDetails.reaction">
+          <div class="rx-header">💬 Nicole's Assessment:</div>
+          <p class="rx-quote">"{{ selectedBookingDetails.reaction }}"</p>
+        </div>
+      </div>
+
+      <div *ngIf="!selectedBookingDetails" class="empty-sidebar">
+        <div class="empty-icon">📅</div>
+        <p>Click on any booked pink card on the timeline to view details and Nicole's direct response.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOOKING MODAL (POPUP DIALOG) -->
+  <div *ngIf="showBookingModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🔬 Schedule Priority Slot</h3>
+        <button class="close-btn" (click)="closeBookingModal()">×</button>
+      </div>
+      
+      <div class="modal-body">
+        <p class="modal-desc">Requesting emergency lab slot on <strong>{{ formatDate(selectedDateStr) }}</strong> starting at <strong>{{ form.start_time }}</strong>.</p>
+        
+        <div class="app-form-group">
+          <label class="app-label">Task / Meeting Title (Custom)</label>
+          <input class="app-input" type="text" [(ngModel)]="form.session_type" placeholder="e.g. Multiplex CRISPR alignment feedback..." />
+        </div>
+
+        <div class="app-form-group" style="margin-top: 16px;">
+          <label class="app-label">Duration</label>
+          <select class="app-select" [(ngModel)]="form.duration_mins">
+            <option [value]="15">15 Minutes</option>
+            <option [value]="30">30 Minutes</option>
+            <option [value]="45">45 Minutes</option>
+            <option [value]="60">1 Hour</option>
+            <option [value]="90">1.5 Hours</option>
+            <option [value]="120">2 Hours</option>
+          </select>
+        </div>
+
+        <div class="app-form-group" style="margin-top: 16px;">
+          <label class="app-label">Special Notes / Bribes</label>
+          <textarea class="app-textarea" [(ngModel)]="form.comment" placeholder="e.g. Bringing double-shot iced latte..."></textarea>
+        </div>
+
+        <!-- Nicole's Instant Response inside Modal -->
+        <div *ngIf="successReaction" class="reaction-box">
+          <div class="rx-header">💬 Nicole's Instant Response:</div>
+          <div class="rx-body">"{{ successReaction }}"</div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 24px;">
+          <button class="app-btn app-btn-secondary" (click)="closeBookingModal()">Cancel</button>
+          <button class="app-btn app-btn-primary" (click)="submitBooking()" [disabled]="formLoading">
+            {{ formLoading ? 'Booking...' : '🚀 Request Priority Slot' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

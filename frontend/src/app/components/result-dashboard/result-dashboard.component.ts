@@ -25,6 +25,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     private resultsService: ResultsService
   ) {}
 
+
   async saveResult() {
     const session = await this.auth.getSession();
     if (!session) {

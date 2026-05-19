@@ -64,6 +64,35 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'lab',
+    canActivate: [authGuard],
+    children: [
+      { path: '', redirectTo: 'experiments', pathMatch: 'full' },
+      {
+        path: 'notes',
+        loadComponent: () => import('./pages/lab-notes-page/lab-notes-page.component').then(m => m.LabNotesPageComponent)
+      },
+      {
+        path: 'experiments',
+        loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent)
+      },
+      {
+        path: 'archive',
+        loadComponent: () => import('./pages/lab-archive-page/lab-archive-page.component').then(m => m.LabArchivePageComponent)
+      }
+    ]
+  },
+  {
+    path: 'booking',
+    loadComponent: () => import('./pages/facility-booking-page/facility-booking-page.component').then(m => m.FacilityBookingPageComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'booking/nicole',
+    loadComponent: () => import('./pages/nicole-booking/nicole-booking.component').then(m => m.NicoleBookingPageComponent),
+    canActivate: [authGuard]
+  },
+  { 
     path: 'contact',
     loadComponent: () => import('./pages/contact-page/contact-page.component').then(m => m.ContactPageComponent)
   },

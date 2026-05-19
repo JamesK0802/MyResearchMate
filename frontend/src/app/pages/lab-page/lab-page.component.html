@@ -1,0 +1,256 @@
+<div class="lab-container app-page">
+  <header class="page-header">
+    <div class="header-content">
+      <span class="badge">LABORATORY WORKFLOW</span>
+      <h1>Lab Notebook</h1>
+      <p>Experiment-centric workflow tracking and free-form lab notes.</p>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn" [class.active]="activeTab === 'notes'" (click)="setTab('notes')">General Notes</button>
+    <button class="tab-btn" [class.active]="activeTab === 'experiments'" (click)="setTab('experiments')">My Experiments</button>
+    <button class="tab-btn" [class.active]="activeTab === 'archive'" (click)="setTab('archive')">Experiment Archive</button>
+  </div>
+
+  <!-- TAB 1: General Notes -->
+  <div *ngIf="activeTab === 'notes'" class="tab-content notes-layout">
+    
+    <div class="notes-sidebar">
+      <button class="app-btn app-btn-primary add-btn" (click)="createNewNote()">+ New Note</button>
+      <div class="note-list">
+        <div *ngFor="let n of notes" class="note-card" [class.selected]="selectedNote?.id === n.id" (click)="selectNote(n.id)">
+          <div class="note-title">{{ n.title || 'Untitled' }}</div>
+          <div class="note-meta">{{ formatDate(n.updated_at) }}</div>
+          <div class="note-tags" *ngIf="n.tags?.length">
+            <span class="tag" *ngFor="let t of n.tags">{{ t }}</span>
+          </div>
+        </div>
+        <div *ngIf="!notes.length" class="empty-msg">No notes found. Create one!</div>
+      </div>
+    </div>
+
+    <div class="note-editor section-card">
+      <ng-container *ngIf="selectedNote || !notes.length || noteForm.title === 'Untitled Note'">
+        <div class="editor-header">
+          <input class="title-input" [(ngModel)]="noteForm.title" placeholder="Note Title" />
+          <div class="editor-actions">
+            <label class="app-btn app-btn-outline" style="cursor: pointer;">
+              📷 Add Image
+              <input type="file" style="display:none" accept="image/*" (change)="uploadNoteImage($event)" />
+            </label>
+            <button *ngIf="selectedNote" class="app-btn app-btn-danger-outline" (click)="deleteNote(selectedNote.id)">Delete</button>
+            <button class="app-btn app-btn-primary" (click)="saveNote()">Save Note</button>
+          </div>
+        </div>
+        <div class="editor-body">
+          <input class="tags-input" [(ngModel)]="noteForm.tags" placeholder="Tags (comma separated)..." />
+          <textarea class="body-input" [(ngModel)]="noteForm.body" placeholder="Write your free-form lab notes here... Supports Markdown."></textarea>
+        </div>
+      </ng-container>
+      <div *ngIf="!selectedNote && notes.length && noteForm.title !== 'Untitled Note'" class="empty-editor">
+        <p>Select a note from the sidebar or create a new one.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: My Experiments -->
+  <div *ngIf="activeTab === 'experiments'" class="tab-content experiments-layout">
+    
+    <!-- TOP AREA: Controls & Forms -->
+    <div class="top-area section-card">
+      <div class="top-actions">
+        <h2>Active Experiments</h2>
+        <div class="action-buttons">
+          <button class="app-btn app-btn-outline" (click)="toggleCreatePreset()">Manage Presets</button>
+          <button class="app-btn app-btn-primary" (click)="toggleCreateExp()">+ New Experiment</button>
+        </div>
+      </div>
+
+      <!-- Create Preset Form -->
+      <div *ngIf="showCreatePresetForm" class="form-container preset-form">
+        <h3>Create Workflow Preset</h3>
+        <input class="app-input" [(ngModel)]="presetForm.title" placeholder="Preset Title (e.g. Western Blot)" />
+        <input class="app-input" [(ngModel)]="presetForm.description" placeholder="Description" />
+        
+        <div class="steps-builder">
+          <h4>Steps Sequence</h4>
+          <div *ngFor="let step of presetForm.steps; let i = index" class="step-input-row">
+            <span class="step-number">{{ i + 1 }}</span>
+            <input class="app-input" [(ngModel)]="step.title" placeholder="Step Title" />
+            <input class="app-input" [(ngModel)]="step.description" placeholder="Description (optional)" />
+            <button class="icon-btn danger" (click)="removePresetStep(i)">✕</button>
+          </div>
+          <button class="app-btn app-btn-outline app-btn-sm" (click)="addPresetStep()">+ Add Step</button>
+        </div>
+
+        <div class="form-actions">
+          <button class="app-btn" (click)="showCreatePresetForm = false">Cancel</button>
+          <button class="app-btn app-btn-primary" (click)="savePreset()">Save Preset</button>
+        </div>
+
+        <hr />
+        <h4>Existing Presets</h4>
+        <div class="preset-list">
+          <div *ngFor="let p of presets" class="preset-item">
+            <span><strong>{{ p.title }}</strong> ({{ p.steps.length }} steps)</span>
+            <button class="icon-btn danger" (click)="deletePreset(p.id)">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Experiment Form -->
+      <div *ngIf="showCreateExpForm" class="form-container">
+        <h3>Start New Experiment</h3>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Experiment Title</label>
+            <input class="app-input" [(ngModel)]="expForm.title" placeholder="e.g. Multiplex KO efficiency" />
+          </div>
+          <div class="form-group">
+            <label>Work Type / Preset</label>
+            <select class="app-select" [(ngModel)]="expForm.work_type">
+              <option value="">-- Custom (No Preset) --</option>
+              <option *ngFor="let p of presets" [value]="p.id">{{ p.title }}</option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label>Description</label>
+            <input class="app-input" [(ngModel)]="expForm.description" placeholder="Short description" />
+          </div>
+          <div class="form-group">
+            <label>Samples (comma separated)</label>
+            <input class="app-input" [(ngModel)]="expForm.samples" placeholder="SampleA, SampleB" />
+          </div>
+          <div class="form-group">
+            <label>Tags (comma separated)</label>
+            <input class="app-input" [(ngModel)]="expForm.tags" placeholder="crispr, cell-culture" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="app-btn" (click)="showCreateExpForm = false">Cancel</button>
+          <button class="app-btn app-btn-primary" (click)="createExperiment()">Create Experiment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM AREA: Active Experiments List -->
+    <div class="experiments-list">
+      <div *ngIf="!activeExperiments.length" class="empty-msg">No active experiments.</div>
+      
+      <div *ngFor="let exp of activeExperiments" class="experiment-card section-card">
+        <div class="exp-header">
+          <div class="exp-info">
+            <h3 class="exp-title">{{ exp.title }}</h3>
+            <div class="exp-meta">
+              <span *ngIf="exp.work_type" class="badge work-type">{{ getPresetName(exp.work_type) }}</span>
+              <span class="meta-date">Started: {{ formatDate(exp.created_at) }}</span>
+            </div>
+            <p class="exp-desc" *ngIf="exp.description">{{ exp.description }}</p>
+            <div class="exp-tags" *ngIf="exp.samples?.length || exp.tags?.length">
+              <span class="sample-tag" *ngFor="let s of exp.samples">🧪 {{ s }}</span>
+              <span class="tag" *ngFor="let t of exp.tags">#{{ t }}</span>
+            </div>
+          </div>
+          <div class="exp-actions">
+            <button class="app-btn app-btn-sm app-btn-outline" (click)="saveStepChanges(exp)">💾 Save Edits</button>
+            <button class="icon-btn danger" (click)="deleteExperiment(exp.id)" title="Delete Experiment">🗑️</button>
+          </div>
+        </div>
+
+        <!-- LINEAR WORKFLOW SCROLLER -->
+        <div class="workflow-container">
+          <div class="workflow-scroll-area">
+            
+            <div class="step-card" *ngFor="let step of exp.steps; let i = index" [class.active-step]="step.status === 'active'" [class.completed-step]="step.status === 'completed'">
+              
+              <div class="step-header">
+                <div class="step-status-indicator"></div>
+                <input class="step-title-input" [(ngModel)]="step.title" />
+                <div class="step-move-controls">
+                  <button (click)="moveStepLeft(exp, i)" [disabled]="i === 0">◀</button>
+                  <button (click)="moveStepRight(exp, i)" [disabled]="i === exp.steps.length - 1">▶</button>
+                  <button class="danger-text" (click)="removeStep(exp, step.id)">✕</button>
+                </div>
+              </div>
+
+              <textarea class="step-desc-input" [(ngModel)]="step.description" placeholder="Step description..."></textarea>
+              
+              <div class="step-timestamps" *ngIf="step.completed_at">
+                Completed: {{ formatDate(step.completed_at) }}
+              </div>
+
+              <!-- Content Area (Images & Comments) -->
+              <div class="step-content">
+                <div class="comments-list" *ngIf="step.comments?.length">
+                  <div class="comment" *ngFor="let c of step.comments">💬 {{ c }}</div>
+                </div>
+                
+                <div class="images-list" *ngIf="step.images?.length">
+                  <img *ngFor="let img of step.images" [src]="img" class="step-img" />
+                </div>
+              </div>
+
+              <!-- Add Comment / Image -->
+              <div class="step-footer-actions">
+                <div class="add-comment-row">
+                  <input #commentInput placeholder="Add comment..." class="app-input-sm" (keyup.enter)="addComment(exp, step, commentInput)" />
+                </div>
+                <div class="upload-row">
+                  <label class="upload-btn">
+                    <input type="file" style="display:none" accept="image/*" (change)="uploadStepImage($event, exp, step)">
+                    <span *ngIf="uploadingImageForStep === step.id">⏳</span>
+                    <span *ngIf="uploadingImageForStep !== step.id">📷 Add Image</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Completion Button -->
+              <div class="step-complete-action">
+                <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn" (click)="completeStep(exp, step)">✓ Complete Step</button>
+                <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn" (click)="undoCompleteStep(exp, step)">↺ Undo</button>
+              </div>
+            </div>
+
+            <!-- Add Step Button -->
+            <div class="add-step-card" (click)="addStep(exp)">
+              <div class="add-icon">+</div>
+              <div>Add Step</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Experiment Archive -->
+  <div *ngIf="activeTab === 'archive'" class="tab-content archive-layout">
+    <div class="section-card">
+      <h2>Archived Experiments</h2>
+      <div *ngIf="!archivedExperiments.length" class="empty-msg">No archived experiments found.</div>
+
+      <div class="archive-grid">
+        <div *ngFor="let exp of archivedExperiments" class="archive-card data-card" [style.border-top-color]="getScoreColor(exp.success_score)">
+          <div class="archive-header">
+            <h3>{{ exp.title }}</h3>
+            <div class="score-badge" [style.background]="getScoreColor(exp.success_score)">Score: {{ exp.success_score }}/5</div>
+          </div>
+          <div class="archive-meta">
+            <div><strong>Type:</strong> {{ exp.work_type ? getPresetName(exp.work_type) : 'Custom' }}</div>
+            <div><strong>Archived:</strong> {{ formatDate(exp.archived_at) }}</div>
+            <div><strong>Steps:</strong> {{ exp.steps?.length }}</div>
+          </div>
+          <div class="archive-tags">
+             <span class="sample-tag" *ngFor="let s of exp.samples">🧪 {{ s }}</span>
+             <span class="tag" *ngFor="let t of exp.tags">#{{ t }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

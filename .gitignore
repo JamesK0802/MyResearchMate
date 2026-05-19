@@ -7,6 +7,9 @@
 **/.vscode/
 
 # --- Backend (Python) ---
+backend/venv/
+backend/.venv/
+backend/build/
 crispr_backend/venv/
 crispr_backend/.venv/
 # --- Secrets & Environment ---
@@ -36,3 +39,5 @@ crispr_backend/temp/
 *.csv
 *.xlsx
 results/
+data/
+
