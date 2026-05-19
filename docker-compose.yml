@@ -30,7 +30,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://james:nicole102644!@db:5432/myresearchmate
+      - DATABASE_URL=${DATABASE_URL}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
