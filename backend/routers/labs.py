@@ -277,3 +277,99 @@ async def admin_reject_lab(
     req.status = "rejected"
     db.commit()
     return {"message": "Request rejected"}
+
+# =============================================================================
+# 4. JOIN REQUEST APPROVAL & LAB DELETION
+# =============================================================================
+
+@router.post("/labs/join-requests/{request_id}/approve")
+async def approve_join_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    req = db.query(LabJoinRequest).filter(LabJoinRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    # Check authorization (must be leader or admin of this lab)
+    is_leader = db.query(LabMember).filter(
+        LabMember.lab_id == req.lab_id,
+        LabMember.user_id == current_user["id"],
+        LabMember.role_in_lab.in_(["leader", "admin"])
+    ).first()
+    if not is_leader:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Add target user as a member if not already added
+    existing = db.query(LabMember).filter(
+        LabMember.lab_id == req.lab_id,
+        LabMember.user_id == req.user_id
+    ).first()
+    
+    if not existing:
+        u = db.query(User).filter(User.id == req.user_id).first()
+        if u:
+            db.add(LabMember(
+                lab_id=req.lab_id,
+                user_id=req.user_id,
+                uid=u.uid,
+                name=u.name,
+                email=u.email,
+                role_in_lab="member"
+            ))
+            
+    req.status = "approved"
+    db.commit()
+    return {"message": "Join request approved"}
+
+@router.post("/labs/join-requests/{request_id}/reject")
+async def reject_join_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    req = db.query(LabJoinRequest).filter(LabJoinRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    is_leader = db.query(LabMember).filter(
+        LabMember.lab_id == req.lab_id,
+        LabMember.user_id == current_user["id"],
+        LabMember.role_in_lab.in_(["leader", "admin"])
+    ).first()
+    if not is_leader:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    req.status = "rejected"
+    db.commit()
+    return {"message": "Join request rejected"}
+
+@router.delete("/labs/{lab_id}")
+async def delete_lab(
+    lab_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    lab = db.query(Lab).filter(Lab.id == lab_id).first()
+    if not lab:
+        raise HTTPException(status_code=404, detail="Lab not found")
+        
+    # Must be leader of the lab or system admin to delete
+    is_leader = db.query(LabMember).filter(
+        LabMember.lab_id == lab_id,
+        LabMember.user_id == current_user["id"],
+        LabMember.role_in_lab == "leader"
+    ).first()
+    is_admin = current_user.get("role") == "admin"
+    
+    if not is_leader and not is_admin:
+        raise HTTPException(status_code=403, detail="Only lab leaders or system administrators can delete labs")
+        
+    # Delete members, requests and finally the lab
+    db.query(LabMember).filter(LabMember.lab_id == lab_id).delete()
+    db.query(LabJoinRequest).filter(LabJoinRequest.lab_id == lab_id).delete()
+    db.query(Lab).filter(Lab.id == lab_id).delete()
+    
+    db.commit()
+    return {"message": "Lab deleted successfully"}
