@@ -58,7 +58,7 @@ import { RouterLink } from '@angular/router';
 
             <div class="footer-meta">
               <p class="v-text">System Version {{ version }}</p>
-              <p class="copyright">© 2026 MyResearchMate</p>
+              <p class="copyright">© 2026 My Lab Mate</p>
             </div>
           </div>
         </div>
@@ -130,5 +130,5 @@ import { RouterLink } from '@angular/router';
   `]
 })
 export class ContactPageComponent {
-  version = '2.3.0';
+  version = '3.0.0';
 }

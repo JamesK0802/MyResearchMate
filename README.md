@@ -1,6 +1,6 @@
-# MyResearchMate v3.0.0
+# My Lab Mate v3.0.0
 
-**MyResearchMate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
+**My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
 ---
 
@@ -45,7 +45,7 @@ Grade and catalog completed protocols with clean, high-utility UI.
 
 ## 🐳 Deployment Guide (Docker)
 
-This is the recommended method for deploying MyResearchMate on a new server. It packages the database, backend, and frontend into a single manageable unit.
+This is the recommended method for deploying My Lab Mate on a new server. It packages the database, backend, and frontend into a single manageable unit.
 
 ### 1. Prerequisites
 Ensure the server has Docker and Docker Compose installed.
@@ -55,8 +55,8 @@ Ensure the server has Docker and Docker Compose installed.
 ### 2. Setup
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/JamesK0802/MyResearchMate.git
-   cd MyResearchMate
+   git clone https://github.com/JamesK0802/MyLabMate.git
+   cd MyLabMate
    ```
 
 2. **Configure Environment Variables**:
@@ -125,7 +125,7 @@ Set the script to run every 5 minutes (or any interval):
 1.  Open crontab: `crontab -e`
 2.  Add this line (update the path):
      ```cron
-     */5 * * * * /bin/bash /path/to/MyResearchMate/scripts/auto-update.sh >> /path/to/MyResearchMate/auto-update.log 2>&1
+     */5 * * * * /bin/bash /path/to/MyLabMate/scripts/auto-update.sh >> /path/to/MyLabMate/auto-update.log 2>&1
      ```
 
 ### 3. Triggering an Update
@@ -143,7 +143,7 @@ The server will detect the change within 5 minutes, pull the code, and rebuild t
 
 ## 💾 Backup & Migration (Database)
 
-To move MyResearchMate to a different server while preserving data:
+To move My Lab Mate to a different server while preserving data:
 
 ### 1. Backup (Source Server)
 Run this command to create a database dump:

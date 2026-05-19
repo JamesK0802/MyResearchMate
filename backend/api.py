@@ -23,7 +23,7 @@ from database.db import engine, Base
 import database.models # Ensure all models are loaded
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="My Research Mate API")
+app = FastAPI(title="My Lab Mate API")
 
 # ── Main API Router ──────────────────────────────────────────────────────────
 api_router = APIRouter(prefix="/api")
