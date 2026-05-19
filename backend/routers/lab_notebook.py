@@ -12,7 +12,7 @@ from PIL import Image
 from pathlib import Path
 
 # Paths
-BASE_DIR = Path("/Users/james/Desktop/Multi-Reference-CRISPR-Editing-Analysis-Tool/data")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 NOTES_DIR = BASE_DIR / "notes"
 EXP_ACTIVE_DIR = BASE_DIR / "experiments" / "active"
 EXP_ARCHIVE_DIR = BASE_DIR / "experiments" / "archive"
