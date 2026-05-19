@@ -355,11 +355,11 @@ async def delete_lab(
     if not lab:
         raise HTTPException(status_code=404, detail="Lab not found")
         
-    # Must be leader of the lab or system admin to delete
+    # Must be leader/admin of the lab or system admin to delete
     is_leader = db.query(LabMember).filter(
         LabMember.lab_id == lab_id,
         LabMember.user_id == current_user["id"],
-        LabMember.role_in_lab == "leader"
+        LabMember.role_in_lab.in_(["leader", "admin"])
     ).first()
     is_admin = current_user.get("role") == "admin"
     
