@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { AnalysisResponse, BenchmarkResult, SplitPreview } from '../models/analysis.model';
 
@@ -22,6 +22,13 @@ export class AnalysisService {
     return this.http.post<{ task_id: string }>(`${this.apiUrl}/analyze`, formData);
   }
 
+  runAnalysisWithProgress(formData: FormData): Observable<HttpEvent<any>> {
+    return this.http.post(`${this.apiUrl}/analyze`, formData, {
+      reportProgress: true,
+      observe: 'events'
+    });
+  }
+
   getTaskStatus(taskId: string): Observable<TaskStatus> {
     return this.http.get<TaskStatus>(`${this.apiUrl}/status/${taskId}`);
   }
@@ -36,5 +43,12 @@ export class AnalysisService {
   /** Start classification benchmark — returns task_id for polling. */
   runBenchmark(formData: FormData): Observable<{ task_id: string }> {
     return this.http.post<{ task_id: string }>(`${this.apiUrl}/benchmark/run`, formData);
+  }
+
+  runBenchmarkWithProgress(formData: FormData): Observable<HttpEvent<any>> {
+    return this.http.post(`${this.apiUrl}/benchmark/run`, formData, {
+      reportProgress: true,
+      observe: 'events'
+    });
   }
 }

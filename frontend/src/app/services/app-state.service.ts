@@ -283,10 +283,30 @@ export class AppStateService {
   runAnalysis(formData: FormData) {
     this.activateSlot('analysis');
     this.isLoading = true;
-    this.setProgress(5, 'Uploading files…');
-    this.analysisService.runAnalysis(formData).subscribe({
-      next: (res: any) => { this.ngZone.run(() => { this.setProgress(10, 'Request accepted – queued…'); this.startPolling(res.task_id); }); },
-      error: (err) => { this.ngZone.run(() => { this.error = err.message; this.isLoading = false; }); }
+    this.setProgress(0, 'Preparing upload…');
+    
+    this.analysisService.runAnalysisWithProgress(formData).subscribe({
+      next: (event: any) => {
+        this.ngZone.run(() => {
+          if (event.type === 1) { // HttpEventType.UploadProgress
+            if (event.total) {
+              const pct = Math.round((event.loaded / event.total) * 100);
+              // Scale upload progress from 0% to 100% of the uploading phase
+              this.setProgress(pct, `Uploading FASTQ files: ${pct}%`);
+            }
+          } else if (event.type === 4) { // HttpEventType.Response
+            const res = event.body;
+            this.setProgress(100, 'Upload complete! Queueing task…');
+            this.startPolling(res.task_id);
+          }
+        });
+      },
+      error: (err) => {
+        this.ngZone.run(() => {
+          this.error = err?.error?.detail || err?.message || 'Failed to start analysis.';
+          this.isLoading = false;
+        });
+      }
     });
   }
 
@@ -481,10 +501,30 @@ export class AppStateService {
 
   runBenchmark(fd: FormData, subset: 'train' | 'test') {
     this.benchIsLoading = true; this.clearBenchProgress(); this.benchDestroy$.next();
-    this.setBenchProgress(5, `Starting ${subset} benchmark…`);
-    this.analysisService.runBenchmark(fd).subscribe({
-      next: (res) => this.ngZone.run(() => { this.setBenchProgress(10, 'Queued — polling…'); this.startBenchPolling(res.task_id, subset); }),
-      error: (err) => this.ngZone.run(() => { this.benchError = err?.error?.detail || err?.message || 'Failed.'; this.benchIsLoading = false; this.clearBenchProgress(); })
+    this.setBenchProgress(0, `Preparing ${subset} upload…`);
+    
+    this.analysisService.runBenchmarkWithProgress(fd).subscribe({
+      next: (event: any) => {
+        this.ngZone.run(() => {
+          if (event.type === 1) { // HttpEventType.UploadProgress
+            if (event.total) {
+              const pct = Math.round((event.loaded / event.total) * 100);
+              this.setBenchProgress(pct, `Uploading benchmark files: ${pct}%`);
+            }
+          } else if (event.type === 4) { // HttpEventType.Response
+            const res = event.body;
+            this.setBenchProgress(100, 'Upload complete! Queued — polling…');
+            this.startBenchPolling(res.task_id, subset);
+          }
+        });
+      },
+      error: (err) => {
+        this.ngZone.run(() => {
+          this.benchError = err?.error?.detail || err?.message || 'Failed to run benchmark.';
+          this.benchIsLoading = false;
+          this.clearBenchProgress();
+        });
+      }
     });
   }
 
