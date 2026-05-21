@@ -291,13 +291,22 @@ export class AppStateService {
           if (event.type === 1) { // HttpEventType.UploadProgress
             if (event.total) {
               const pct = Math.round((event.loaded / event.total) * 100);
-              // Scale upload progress from 0% to 100% of the uploading phase
-              this.setProgress(pct, `Uploading FASTQ files: ${pct}%`);
+              if (pct === 100) {
+                this.setProgress(100, 'Upload finished! Initializing analysis on server…');
+              } else {
+                this.setProgress(pct, `Uploading FASTQ files: ${pct}%`);
+              }
             }
           } else if (event.type === 4) { // HttpEventType.Response
             const res = event.body;
-            this.setProgress(100, 'Upload complete! Queueing task…');
-            this.startPolling(res.task_id);
+            this.addLog(`Upload complete response received: ${JSON.stringify(res)}`);
+            if (res && res.task_id) {
+              this.setProgress(100, 'Upload complete! Queueing task…');
+              this.startPolling(res.task_id);
+            } else {
+              this.error = 'Invalid server response: task ID is missing.';
+              this.isLoading = false;
+            }
           }
         });
       },
@@ -509,12 +518,22 @@ export class AppStateService {
           if (event.type === 1) { // HttpEventType.UploadProgress
             if (event.total) {
               const pct = Math.round((event.loaded / event.total) * 100);
-              this.setBenchProgress(pct, `Uploading benchmark files: ${pct}%`);
+              if (pct === 100) {
+                this.setBenchProgress(100, 'Upload finished! Initializing benchmark on server…');
+              } else {
+                this.setBenchProgress(pct, `Uploading benchmark files: ${pct}%`);
+              }
             }
           } else if (event.type === 4) { // HttpEventType.Response
             const res = event.body;
-            this.setBenchProgress(100, 'Upload complete! Queued — polling…');
-            this.startBenchPolling(res.task_id, subset);
+            if (res && res.task_id) {
+              this.setBenchProgress(100, 'Upload complete! Queued — polling…');
+              this.startBenchPolling(res.task_id, subset);
+            } else {
+              this.benchError = 'Invalid server response: task ID is missing.';
+              this.benchIsLoading = false;
+              this.clearBenchProgress();
+            }
           }
         });
       },
