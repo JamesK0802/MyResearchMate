@@ -35,8 +35,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── In-Memory Task Storage ────────────────────────────────────────────────────
-tasks = {}
+# ── In-Memory Task Storage (Multiprocessing-Safe State Shared Manager) ───────
+import multiprocessing
+
+if multiprocessing.current_process().name == 'MainProcess':
+    _manager = multiprocessing.Manager()
+    tasks = _manager.dict()
+else:
+    tasks = {}
 
 @api_router.get("/status/{task_id}")
 async def get_task_status(task_id: str):
@@ -55,21 +61,24 @@ JOBS_DIR = os.path.join(BASE_DIR, "data", "jobs")
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 
-# ── Status helper ──
-def update_task(task_id: str, status: str = None, progress: int = None, stage: str = None, result = None, error = None):
-    if task_id in tasks:
-        if status: tasks[task_id]["status"] = status
-        if progress is not None: tasks[task_id]["progress"] = progress
-        if stage: tasks[task_id]["stage"] = stage
-        if result is not None: tasks[task_id]["result"] = result
-        if error: tasks[task_id]["error"] = error
+# ── Status helper (Process-Safe assignment) ──
+def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = None, stage: str = None, result = None, error = None):
+    if tasks_proxy is not None and task_id in tasks_proxy:
+        task_data = dict(tasks_proxy[task_id])
+        if status is not None: task_data["status"] = status
+        if progress is not None: task_data["progress"] = progress
+        if stage is not None: task_data["stage"] = stage
+        if result is not None: task_data["result"] = result
+        if error is not None: task_data["error"] = error
+        tasks_proxy[task_id] = task_data
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CRISPR Analysis Background Worker (Sequential & Memory Efficient)
+# CRISPR Analysis Background Worker (Sandboxed Parallel Process)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def background_analysis(
     task_id: str,
+    tasks_proxy,
     job_dir: str,
     temp_filenames: List[str],
     targets_json: str,
@@ -82,7 +91,7 @@ def background_analysis(
 ):
     import gc
     try:
-        update_task(task_id, status="running", stage="Initializing analysis...")
+        update_task(tasks_proxy, task_id, status="running", stage="Initializing analysis...")
         genes_payload = json.loads(targets_json)
         
         all_results = []
@@ -93,7 +102,7 @@ def background_analysis(
             filepath = os.path.join(job_dir, filename)
             if not os.path.exists(filepath): continue
             
-            update_task(task_id, stage=f"Analyzing file {i+1}/{total_files}: {filename}", progress=int((i/total_files)*100))
+            update_task(tasks_proxy, task_id, stage=f"Analyzing file {i+1}/{total_files}: {filename}", progress=int((i/total_files)*100))
             
             # process_files_multi expects a list of paths, but we give it one to keep it sequential
             file_result = process_files_multi(
@@ -128,13 +137,13 @@ def background_analysis(
             "results": all_results
         }
         
-        update_task(task_id, status="completed", result=final_payload, progress=100, stage="Done")
+        update_task(tasks_proxy, task_id, status="completed", result=final_payload, progress=100, stage="Done")
         
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
         print(f"[ERROR] Analysis failed: {error_msg}")
-        update_task(task_id, status="failed", error=str(e))
+        update_task(tasks_proxy, task_id, status="failed", error=str(e))
     finally:
         # Final Cleanup of the entire job directory
         if os.path.exists(job_dir):
@@ -233,20 +242,25 @@ async def run_analysis_endpoint(
             shutil.rmtree(job_dir)
             raise HTTPException(status_code=400, detail="No files uploaded.")
 
-        # 5. Dispatch Sequential Analysis
-        background_tasks.add_task(
-            background_analysis,
-            task_id,
-            job_dir,
-            temp_filenames,
-            targets,
-            phred,
-            indel,
-            margin,
-            do_analyze,
-            do_rescue,
-            rescue_val
+        # 5. Dispatch Sandboxed Multiprocessing Parallel Analysis
+        import multiprocessing
+        p = multiprocessing.Process(
+            target=background_analysis,
+            args=(
+                task_id,
+                tasks, # Safe multiprocessing proxy dictionary
+                job_dir,
+                temp_filenames,
+                targets,
+                phred,
+                indel,
+                margin,
+                do_analyze,
+                do_rescue,
+                rescue_val
+            )
         )
+        p.start()
 
         return {"task_id": task_id}
 
