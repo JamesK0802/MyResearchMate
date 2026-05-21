@@ -202,18 +202,17 @@ async def run_analysis_endpoint(
                 # We move it to our specific job directory.
                 filename = os.path.basename(value.filename).split("_")[-1]
                 save_path = os.path.join(job_dir, filename)
-                
-                # Stream write from spooled file to our job dir
+                # Stream write from spooled file to our job dir using highly-optimized low-level C shutil
+                await value.seek(0)
                 with open(save_path, "wb") as buffer:
-                    while True:
-                        chunk = await value.read(1024 * 1024) # 1MB chunks
-                        if not chunk: break
-                        buffer.write(chunk)
-                        total_size += len(chunk)
-                        
-                        if total_size > MAX_TOTAL_SIZE:
-                            shutil.rmtree(job_dir)
-                            raise HTTPException(status_code=413, detail=f"Upload too large. Limit is 5GB.")
+                    shutil.copyfileobj(value.file, buffer)
+                
+                # Check Size after copy
+                file_size = os.path.getsize(save_path)
+                total_size += file_size
+                if total_size > MAX_TOTAL_SIZE:
+                    shutil.rmtree(job_dir)
+                    raise HTTPException(status_code=413, detail=f"Upload too large. Limit is 5GB.")
                 
                 temp_filenames.append(filename)
                 await value.close()
