@@ -3,11 +3,7 @@
   <nav class="top-nav">
     <div class="nav-left">
       <a routerLink="/" class="nav-brand">
-        <!-- <span class="brand-dna">⌬</span> -->
-        <div class="brand-text">
-          <span class="brand-title">My Lab Mate</span>
-          <span class="brand-dept">ANU RSB Research Platform</span>
-        </div>
+        <img src="/my-lab-mate-logo.svg" alt="My Lab Mate" class="nav-brand-logo">
       </a>
 
       <!-- Tools dropdown (always visible) -->
@@ -77,20 +73,20 @@
       </ng-container>
 
       <!-- Logged in: Profile dropdown -->
-      <ng-container *ngIf="auth.session$ | async">
-        <div class="nav-dropdown profile-dropdown">
+      <ng-container *ngIf="auth.session$ | async as session">
+        <div class="nav-dropdown profile-dropdown" *ngIf="{ profile: auth.profile$ | async } as state">
           <button class="btn-profile">
-            <span class="profile-avatar">{{ (auth.currentProfile?.name || auth.currentProfile?.email || '?')[0] |
+            <span class="profile-avatar">{{ (state.profile?.name || state.profile?.email || session.user.email || '?')[0] |
               uppercase }}</span>
-            <span class="profile-name">{{ auth.currentProfile?.name || 'Profile' }}</span>
+            <span class="profile-name">{{ state.profile?.name || session.user.user_metadata['name'] || 'Profile' }}</span>
             <span class="dropdown-arrow">▾</span>
           </button>
           <div class="dropdown-content profile-menu">
             <div class="profile-menu-header">
-              <span class="pm-name">{{ auth.currentProfile?.name }}</span>
-              <span class="pm-email">{{ auth.currentProfile?.email }}</span>
-              <span class="pm-role" [class]="'role-' + (auth.currentProfile?.role || 'user')">
-                {{ auth.currentProfile?.role | uppercase }}
+              <span class="pm-name">{{ state.profile?.name || 'Loading Profile...' }}</span>
+              <span class="pm-email">{{ state.profile?.email || session.user.email }}</span>
+              <span class="pm-role" [class]="'role-' + (state.profile.role || 'user')" *ngIf="state.profile">
+                {{ state.profile.role | uppercase }}
               </span>
             </div>
             <div class="profile-menu-divider"></div>

@@ -105,4 +105,53 @@ export class LabNotebookService {
     formData.append('file', file);
     return firstValueFrom(this.http.post<any>(`${this.apiUrl}/assets/upload`, formData, { headers }));
   }
+
+  // --- Comments ---
+  async addArchiveComment(expId: string, text: string) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.post<any>(`${this.apiUrl}/experiments/${expId}/archive/comment`, { text }, { headers }));
+  }
+
+  // --- Preset Transfers ---
+  async sendPreset(presetId: string, toUserId: number) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.post<any>(`${this.apiUrl}/presets/send`, { preset_id: presetId, to_user_id: toUserId }, { headers }));
+  }
+
+  async getIncomingPresetTransfers() {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/presets/transfers/incoming`, { headers }));
+  }
+
+  async acceptPresetTransfer(transferId: string) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.post<any>(`${this.apiUrl}/presets/transfers/${transferId}/accept`, {}, { headers }));
+  }
+
+  async rejectPresetTransfer(transferId: string) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.post<any>(`${this.apiUrl}/presets/transfers/${transferId}/reject`, {}, { headers }));
+  }
+
+  // --- Lab & Individual Sharing ---
+  async getWorkflowShares(workflowId: string) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.get<{ lab_ids: string[], user_ids: string[] }>(`${this.apiUrl}/experiments/${workflowId}/shares`, { headers }));
+  }
+
+  async updateWorkflowShares(workflowId: string, workflowType: string, labIds: string[], userIds: string[] = []) {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.put<any>(`${this.apiUrl}/experiments/${workflowId}/shares`, { 
+      workflow_type: workflowType, 
+      lab_ids: labIds,
+      user_ids: userIds
+    }, { headers }));
+  }
+
+
+  async getSharedWorkflows() {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/experiments/shared`, { headers }));
+  }
 }
+

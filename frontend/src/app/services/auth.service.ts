@@ -43,13 +43,38 @@ export class AuthService {
   private loadingSubject = new BehaviorSubject<boolean>(true);
   public loading$ = this.loadingSubject.asObservable();
 
+  private profilePromise: Promise<UserProfile | null> | null = null;
+  private lastFetchTime = 0;
+
+  private setSession(session: Session | null): void {
+    this.ngZone.run(() => {
+      this.sessionSubject.next(session);
+    });
+  }
+
+  private setProfile(profile: UserProfile | null): void {
+    this.ngZone.run(() => {
+      this.profileSubject.next(profile);
+    });
+  }
+
+  private setLoading(loading: boolean): void {
+    this.ngZone.run(() => {
+      this.loadingSubject.next(loading);
+    });
+  }
+
   /** Quick boolean check */
   get isLoggedIn(): boolean {
     return this.sessionSubject.value !== null;
   }
 
   get currentProfile(): UserProfile | null {
-    return this.profileSubject.value;
+    const profile = this.profileSubject.value;
+    if (!profile && this.isLoggedIn) {
+      this.fetchProfile();
+    }
+    return profile;
   }
 
   get accessToken(): string | null {
@@ -67,17 +92,15 @@ export class AuthService {
 
     // Listen for auth state changes (login, logout, token refresh)
     this.supabase.auth.onAuthStateChange((event, session) => {
-      this.ngZone.run(() => {
-        this.sessionSubject.next(session);
+      this.setSession(session);
 
-        if (session) {
-          this.fetchProfile();
-        } else {
-          this.profileSubject.next(null);
-        }
+      if (session) {
+        this.fetchProfile();
+      } else {
+        this.setProfile(null);
+      }
 
-        this.loadingSubject.next(false);
-      });
+      this.setLoading(false);
     });
 
     // Initial session check
@@ -90,14 +113,14 @@ export class AuthService {
   private async initSession(): Promise<void> {
     try {
       const { data } = await this.supabase.auth.getSession();
-      this.sessionSubject.next(data.session);
+      this.setSession(data.session);
       if (data.session) {
         await this.fetchProfile();
       }
     } catch (err) {
       console.error('[AuthService] Failed to restore session:', err);
     } finally {
-      this.loadingSubject.next(false);
+      this.setLoading(false);
     }
   }
 
@@ -122,9 +145,10 @@ export class AuthService {
    * Requires a valid session token in headers.
    */
   async registerProfile(data: { name: string, email: string, bio?: string }): Promise<UserProfile> {
-    const session = await this.getSession();
+    const token = this.accessToken || (await this.getSession())?.access_token;
+    if (!token) throw new Error('Not authenticated');
     const headers = new HttpHeaders({
-      'Authorization': `Bearer ${session?.access_token}`
+      'Authorization': `Bearer ${token}`
     });
 
     const profile = await firstValueFrom(
@@ -132,7 +156,7 @@ export class AuthService {
     );
 
     // CRITICAL: Update the profile state immediately after successful registration
-    this.profileSubject.next(profile);
+    this.setProfile(profile);
     
     return profile;
   }
@@ -141,16 +165,22 @@ export class AuthService {
    * Update the current user's profile information.
    */
   async updateProfile(data: { name?: string, bio?: string }): Promise<UserProfile> {
-    const session = await this.getSession();
+    console.log('[DEBUG] updateProfile: called with data', data);
+    const token = this.accessToken || (await this.getSession())?.access_token;
+    if (!token) throw new Error('Not authenticated');
+    console.log('[DEBUG] updateProfile: token received', token ? 'exists' : 'null');
     const headers = new HttpHeaders({
-      'Authorization': `Bearer ${session?.access_token}`
+      'Authorization': `Bearer ${token}`
     });
 
+    console.log('[DEBUG] updateProfile: patching via http...', `${environment.apiBaseUrl}/auth/me`);
     const updated = await firstValueFrom(
       this.http.patch<UserProfile>(`${environment.apiBaseUrl}/auth/me`, data, { headers })
     );
+    console.log('[DEBUG] updateProfile: http patch complete, received:', updated);
 
-    this.profileSubject.next(updated);
+    this.setProfile(updated);
+    console.log('[DEBUG] updateProfile: updated profileSubject');
     return updated;
   }
 
@@ -169,7 +199,7 @@ export class AuthService {
   async getUserProfile(): Promise<UserProfile | null> {
     const session = await this.getSession();
     if (!session) {
-      this.profileSubject.next(null);
+      this.setProfile(null);
       return null;
     }
 
@@ -182,7 +212,7 @@ export class AuthService {
         this.http.get<UserProfile>(`${environment.apiBaseUrl}/auth/me`, { headers })
       );
       
-      this.profileSubject.next(profile);
+      this.setProfile(profile);
       return profile;
     } catch (error: any) {
       console.error('Profile fetch failed:', error);
@@ -193,7 +223,7 @@ export class AuthService {
         return null;
       }
       
-      this.profileSubject.next(null);
+      this.setProfile(null);
       return null;
     }
   }
@@ -202,26 +232,47 @@ export class AuthService {
    * Fetch the user profile from our FastAPI backend.
    * This also triggers user creation on first login.
    */
-  private async fetchProfile(): Promise<void> {
+  private async fetchProfile(): Promise<UserProfile | null> {
     const token = this.accessToken;
-    if (!token) return;
-
-    try {
-      const headers = new HttpHeaders({
-        'Authorization': `Bearer ${token}`,
-      });
-      const profile = await firstValueFrom(
-        this.http.get<UserProfile>(`${environment.apiBaseUrl}/auth/me`, { headers })
-      );
-      this.profileSubject.next(profile);
-    } catch (err: any) {
-      console.error('[AuthService] Failed to fetch profile:', err);
-      // If 403, it means authenticated but no profile record
-      if (err?.status === 403) {
-        console.warn('Profile not completed.');
-        // Do NOT sign out here anymore, as we need the session for registration
-      }
+    if (!token) {
+      this.setProfile(null);
+      return null;
     }
+
+    const now = Date.now();
+    if (this.profilePromise) {
+      return this.profilePromise;
+    }
+
+    // Cooldown of 5 seconds to prevent spamming
+    if (now - this.lastFetchTime < 5000) {
+      return null;
+    }
+    this.lastFetchTime = now;
+
+    this.profilePromise = (async () => {
+      try {
+        const headers = new HttpHeaders({
+          'Authorization': `Bearer ${token}`,
+        });
+        const profile = await firstValueFrom(
+          this.http.get<UserProfile>(`${environment.apiBaseUrl}/auth/me`, { headers })
+        );
+        this.setProfile(profile);
+        return profile;
+      } catch (err: any) {
+        console.error('[AuthService] Failed to fetch profile:', err);
+        // If 403, it means authenticated but no profile record
+        if (err?.status === 403) {
+          console.warn('Profile not completed.');
+        }
+        return null;
+      } finally {
+        this.profilePromise = null;
+      }
+    })();
+
+    return this.profilePromise;
   }
 
   /**
@@ -335,7 +386,7 @@ export class AuthService {
           throw new Error(`Only @${environment.allowedEmailDomain} emails are allowed.`);
         }
 
-        this.sessionSubject.next(data.session);
+        this.setSession(data.session);
         await this.fetchProfile();
         return true;
       }
@@ -351,8 +402,8 @@ export class AuthService {
    */
   async signOut(): Promise<void> {
     await this.supabase.auth.signOut();
-    this.sessionSubject.next(null);
-    this.profileSubject.next(null);
+    this.setSession(null);
+    this.setProfile(null);
   }
 
   /**
@@ -380,7 +431,7 @@ export class AuthService {
     const updated = await firstValueFrom(
       this.http.patch<UserProfile>(`${environment.apiBaseUrl}/auth/me`, { name }, { headers })
     );
-    this.profileSubject.next(updated);
+    this.setProfile(updated);
     return updated;
   }
 

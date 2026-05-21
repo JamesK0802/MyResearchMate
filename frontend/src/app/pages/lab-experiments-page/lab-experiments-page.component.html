@@ -6,8 +6,26 @@
     </div>
   </header>
 
+  <!-- View Mode Switch Tabs -->
+  <div class="view-mode-tabs" style="display: flex; gap: 12px; margin-bottom: 20px; animation: fadeIn 0.3s ease-out;">
+    <button class="app-btn" 
+            [class.app-btn-primary]="viewMode === 'my'" 
+            [class.app-btn-outline]="viewMode !== 'my'" 
+            (click)="viewMode = 'my'"
+            style="font-weight: 750; border-radius: 8px;">
+      My Experiments
+    </button>
+    <button class="app-btn" 
+            [class.app-btn-primary]="viewMode === 'shared'" 
+            [class.app-btn-outline]="viewMode !== 'shared'" 
+            (click)="viewMode = 'shared'"
+            style="font-weight: 750; border-radius: 8px;">
+      Shared Experiments
+    </button>
+  </div>
+
   <!-- TOP AREA: Create / Preset forms -->
-  <div class="top-area section-card">
+  <div *ngIf="viewMode === 'my'" class="top-area section-card">
     <div class="top-actions">
       <h2>Experimental Workspaces</h2>
       <div class="action-buttons">
@@ -40,12 +58,33 @@
       </div>
 
       <hr class="separator" />
+
+      <!-- Pending Incoming Preset Transfers -->
+      <div *ngIf="incomingTransfers.length" class="incoming-transfers-panel" style="background: rgba(34, 197, 94, 0.05); border: 1.5px solid #22c55e; border-radius: 8px; padding: 16px; margin-bottom: 20px; animation: fadeIn 0.3s ease-out;">
+        <h4 style="color: #16a34a; margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 850; display: flex; align-items: center; gap: 8px;">
+          📥 Incoming Shared Templates
+        </h4>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div *ngFor="let t of incomingTransfers" style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--color-border-light);">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 0.88rem; font-weight: 800; color: var(--color-text-primary);">{{ t.preset_name }}</span>
+              <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">Shared by: {{ t.sender_name }} • {{ formatDate(t.created_at) }}</span>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button class="app-btn app-btn-success app-btn-sm" (click)="acceptTransfer(t.id)" style="font-size: 0.72rem; padding: 4px 10px; font-weight: 800; border-radius: 4px;">Accept</button>
+              <button class="app-btn app-btn-danger-outline app-btn-sm" (click)="rejectTransfer(t.id)" style="font-size: 0.72rem; padding: 4px 10px; font-weight: 800; border-radius: 4px;">Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <h4>Available Lab Templates</h4>
       <div class="preset-list">
         <div *ngFor="let p of presets" class="preset-item">
           <span><strong>{{ p.title }}</strong> ({{ p.steps.length }} sequence steps)</span>
-          <div class="preset-actions">
+          <div class="preset-actions" style="display: flex; gap: 6px; align-items: center;">
             <button class="icon-btn edit-btn" (click)="editPreset(p)">Edit</button>
+            <button class="icon-btn share-btn" (click)="openSharePresetModal(p)">Share</button>
             <button class="icon-btn danger" (click)="deletePreset(p.id)">Delete</button>
           </div>
         </div>
@@ -87,138 +126,340 @@
 
   <!-- BOTTOM AREA: Active experiments list with scrollers -->
   <div class="experiments-list">
-    <div *ngIf="!activeExperiments.length" class="empty-msg section-card">
-      <p>No active sequences running currently. Tap <strong>New Experiment</strong> to spin up a workflow!</p>
-    </div>
-    
-    <div *ngFor="let exp of activeExperiments" class="experiment-card section-card">
-      
-      <!-- Card Header Info (Exactly 2 compact rows with customized side column) -->
-      <div class="exp-header-compact">
-        
-        <!-- Row 1: Title on the left, Sync + Buttons + Date stacked on the right -->
-        <div class="exp-header-row-one">
-          <div class="exp-title-date-group">
-            <input class="inline-exp-title" 
-                   [(ngModel)]="exp.title" 
-                   (input)="onExperimentChange(exp)" 
-                   placeholder="Experiment Title..." />
-          </div>
-          
-          <div class="exp-actions-inline-group">
-            <!-- Top: Saved to cloud -->
-            <div class="exp-sync-pill">
-              <div *ngIf="syncStates[exp.id] === 'saved'" class="status-indicator-wrapper">
-                <span class="status-dot dot-saved"></span>
-                <span class="status-text text-saved">Saved to Cloud</span>
-              </div>
-              <div *ngIf="syncStates[exp.id] === 'saving'" class="status-indicator-wrapper">
-                <span class="spinner-small"></span>
-                <span class="status-text text-saving">Saving...</span>
-              </div>
-              <div *ngIf="syncStates[exp.id] === 'error'" class="status-indicator-wrapper">
-                <span class="status-dot dot-error"></span>
-                <span class="status-text text-error">Sync Error</span>
-              </div>
-            </div>
-            
-            <!-- Middle: Action buttons -->
-            <div class="exp-action-buttons-row">
-              <button class="app-btn app-btn-success-outline app-btn-sm complete-all-btn" (click)="completeAllSteps(exp)" title="Complete all steps in sequence">
-                Complete All
-              </button>
-              <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="openExperimentDetails(exp)">
-                View Details
-              </button>
-              <button class="app-btn app-btn-danger-outline app-btn-sm delete-btn-inline" (click)="deleteExperiment(exp.id)">
-                Delete
-              </button>
-            </div>
-            
-            <!-- Bottom: Date under delete -->
-            <span class="meta-date-inline">Started: {{ formatDate(exp.created_at) }}</span>
-          </div>
-        </div>
-
-        <!-- Row 2: Samples Tag Chips list only -->
-        <div class="exp-header-row-two">
-          <div class="samples-tags-container">
-            <div *ngFor="let sample of exp.samples; let sIdx = index" class="sample-tag-chip">
-              <span class="tag-text">{{ sample }}</span>
-              <button class="remove-tag-btn" (click)="removeSampleTag(exp, sIdx)" title="Remove Sample">✕</button>
-            </div>
-            <div class="add-tag-wrapper">
-              <input #newSampleInput 
-                     class="add-tag-inline-input" 
-                     placeholder="+ Add sample..."
-                     (keyup.enter)="addSampleTag(exp, newSampleInput)"
-                     (blur)="addSampleTag(exp, newSampleInput)" />
-            </div>
-          </div>
-        </div>
+    <!-- User's own active experiments -->
+    <ng-container *ngIf="viewMode === 'my'">
+      <div *ngIf="!activeExperiments.length" class="empty-msg section-card">
+        <p>No active sequences running currently. Tap <strong>New Experiment</strong> to spin up a workflow!</p>
       </div>
-
-      <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
-      <div class="workflow-container">
-        <div class="workflow-scroll-area">
+      
+      <div *ngFor="let exp of activeExperiments" class="experiment-card section-card">
+        
+        <!-- Card Header Info (Exactly 2 compact rows with customized side column) -->
+        <div class="exp-header-compact">
           
-          <!-- Start Adder Connector -->
-          <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
-            <span class="plus-icon">+</span>
+          <!-- Row 1: Title on the left, Sync + Buttons + Date stacked on the right -->
+          <div class="exp-header-row-one">
+            <div class="exp-title-date-group" style="display: flex; align-items: center; gap: 8px;">
+              <input class="inline-exp-title" 
+                     [(ngModel)]="exp.title" 
+                     (input)="onExperimentChange(exp)" 
+                     placeholder="Experiment Title..." />
+              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
+                👥 Shared ({{ getSharedNames(exp).length }})
+                <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
+                  <strong>Shared with:</strong>
+                  <span *ngFor="let name of getSharedNames(exp)" style="display: block; margin-top: 2px;">• {{ name }}</span>
+                </span>
+              </span>
+            </div>
+            
+            <div class="exp-actions-inline-group">
+              <!-- Top: Saved to cloud -->
+              <div class="exp-sync-pill">
+                <div *ngIf="syncStates[exp.id] === 'saved'" class="status-indicator-wrapper">
+                  <span class="status-dot dot-saved"></span>
+                  <span class="status-text text-saved">Saved to Cloud</span>
+                </div>
+                <div *ngIf="syncStates[exp.id] === 'saving'" class="status-indicator-wrapper">
+                  <span class="spinner-small"></span>
+                  <span class="status-text text-saving">Saving...</span>
+                </div>
+                <div *ngIf="syncStates[exp.id] === 'error'" class="status-indicator-wrapper">
+                  <span class="status-dot dot-error"></span>
+                  <span class="status-text text-error">Sync Error</span>
+                </div>
+              </div>
+              
+              <!-- Middle: Action buttons -->
+              <div class="exp-action-buttons-row" style="display: flex; gap: 6px; align-items: center;">
+                <button class="app-btn app-btn-success-outline app-btn-sm complete-all-btn" (click)="completeAllSteps(exp)" title="Complete all steps in sequence">
+                  Complete All
+                </button>
+                <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="openExperimentDetails(exp)">
+                  View Details
+                </button>
+                <button class="app-btn app-btn-outline app-btn-sm" (click)="openShareModal(exp, $event)">
+                  Share
+                </button>
+                <button class="app-btn app-btn-danger-outline app-btn-sm delete-btn-inline" (click)="deleteExperiment(exp.id)">
+                  Delete
+                </button>
+              </div>
+              
+              <!-- Bottom: Date under delete -->
+              <span class="meta-date-inline">Started: {{ formatDate(exp.created_at) }}</span>
+            </div>
           </div>
 
-          <ng-container *ngFor="let step of exp.steps; let i = index">
-            
-            <div class="step-card compact-step" 
-                 draggable="true" 
-                 (dragstart)="onDragStart(exp, i)" 
-                 (dragover)="$event.preventDefault()" 
-                 (drop)="onDrop(exp, i)"
-                 [class.active-step]="step.status === 'active'" 
-                 [class.completed-step]="step.status === 'completed'">
-              
-              <div class="step-header">
-                <span class="step-number-badge">{{ i + 1 }}</span>
-                <input class="step-title-input" 
-                       [(ngModel)]="step.title" 
-                       (input)="onExperimentChange(exp)" 
-                       placeholder="Step title..." />
-                <button class="danger-text remove-step-btn" (click)="removeStep(exp, step.id)" title="Remove Step">✕</button>
+          <!-- Row 2: Samples Tag Chips list only -->
+          <div class="exp-header-row-two">
+            <div class="samples-tags-container">
+              <div *ngFor="let sample of exp.samples; let sIdx = index" class="sample-tag-chip">
+                <span class="tag-text">{{ sample }}</span>
+                <button class="remove-tag-btn" (click)="removeSampleTag(exp, sIdx)" title="Remove Sample">✕</button>
               </div>
-
-              <!-- Single line comment view -->
-              <div class="compact-comment-view" *ngIf="step.comments?.length">
-                <span class="comment-text" [title]="step.comments[step.comments.length - 1]">
-                  💬 {{ step.comments[step.comments.length - 1] }}
-                </span>
-              </div>
-
-              <!-- Compact inline comment input -->
-              <div class="compact-comment-input-row">
-                <input #commentInput 
-                       placeholder="Add comment..." 
-                       class="compact-comment-input" 
-                       (keyup.enter)="addComment(exp, step, commentInput)" 
-                       (blur)="addComment(exp, step, commentInput)" />
-              </div>
-
-              <!-- Step Actions -->
-              <div class="step-complete-action">
-                <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn app-btn-sm" (click)="completeStep(exp, step)">✓ Complete</button>
-                <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn app-btn-sm" (click)="undoCompleteStep(exp, step)">↺ Undo</button>
+              <div class="add-tag-wrapper">
+                <input #newSampleInput 
+                       class="add-tag-inline-input" 
+                       placeholder="+ Add sample..."
+                       (keyup.enter)="addSampleTag(exp, newSampleInput)"
+                       (blur)="addSampleTag(exp, newSampleInput)" />
               </div>
             </div>
+          </div>
+        </div>
 
-            <!-- Intermediary Step Connector Adder -->
-            <div class="insert-step-divider" (click)="insertStepAt(exp, i + 1)" title="Insert Step here">
+        <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
+        <div class="workflow-container">
+          <div class="workflow-scroll-area">
+            
+            <!-- Start Adder Connector -->
+            <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
               <span class="plus-icon">+</span>
             </div>
 
-          </ng-container>
+            <ng-container *ngFor="let step of exp.steps; let i = index">
+              
+              <div class="step-card compact-step" 
+                   draggable="true" 
+                   (dragstart)="onDragStart(exp, i)" 
+                   (dragover)="$event.preventDefault()" 
+                   (drop)="onDrop(exp, i)"
+                   [class.active-step]="step.status === 'active'" 
+                   [class.completed-step]="step.status === 'completed'">
+                
+                <div class="step-header">
+                  <span class="step-number-badge">{{ i + 1 }}</span>
+                  <input class="step-title-input" 
+                         [(ngModel)]="step.title" 
+                         (input)="onExperimentChange(exp)" 
+                         placeholder="Step title..." />
+                  <button class="danger-text remove-step-btn" (click)="removeStep(exp, step.id)" title="Remove Step">✕</button>
+                </div>
 
+                <!-- Single line comment view -->
+                <div class="compact-comment-view" *ngIf="step.comments?.length">
+                  <span class="comment-text" [title]="step.comments[step.comments.length - 1]">
+                    💬 {{ step.comments[step.comments.length - 1] }}
+                  </span>
+                </div>
+
+                <!-- Compact inline comment input -->
+                <div class="compact-comment-input-row">
+                  <input #commentInput 
+                         placeholder="Add comment..." 
+                         class="compact-comment-input" 
+                         (keyup.enter)="addComment(exp, step, commentInput)" 
+                         (blur)="addComment(exp, step, commentInput)" />
+                </div>
+
+                <!-- Step Actions -->
+                <div class="step-complete-action">
+                  <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn app-btn-sm" (click)="completeStep(exp, step)">✓ Complete</button>
+                  <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn app-btn-sm" (click)="undoCompleteStep(exp, step)">↺ Undo</button>
+                </div>
+              </div>
+
+              <!-- Intermediary Step Connector Adder -->
+              <div class="insert-step-divider" (click)="insertStepAt(exp, i + 1)" title="Insert Step here">
+                <span class="plus-icon">+</span>
+              </div>
+
+            </ng-container>
+
+          </div>
         </div>
+
+        <!-- RECENT COMMENTS PREVIEW CONTAINER (Sleek Glassmorphic Accordion Style) -->
+        <div class="comments-preview-card" *ngIf="getRecentComments(exp).length > 0" style="margin-top: 14px; padding: 12px 14px; background: rgba(248, 250, 252, 0.7); border-radius: 10px; border: 1.5px solid rgba(226, 232, 240, 0.8); display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(4px);">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 850; color: var(--color-primary);">
+            <span>💬 Recent Comments ({{ getRecentComments(exp).length }})</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div *ngFor="let comment of getRecentComments(exp) | slice:-3" style="font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.45; display: flex; align-items: flex-start; gap: 6px;">
+              <span style="font-weight: 800; color: var(--color-text-primary); white-space: nowrap; background: rgba(148, 163, 184, 0.12); padding: 2px 6px; border-radius: 4px; font-size: 0.74rem;">
+                {{ comment.author }}
+              </span>
+              <span (click)="toggleCommentExpand(comment.id, $event)"
+                    [style.display]="expandedComments[comment.id] ? 'block' : '-webkit-box'"
+                    [style.-webkit-line-clamp]="expandedComments[comment.id] ? 'none' : '2'"
+                    [style.-webkit-box-orient]="'vertical'"
+                    [style.overflow]="expandedComments[comment.id] ? 'visible' : 'hidden'"
+                    style="font-style: italic; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; flex: 1;"
+                    title="Click to toggle full comment">
+                "{{ comment.text }}"
+              </span>
+            </div>
+          </div>
+        </div>
+
       </div>
-    </div>
+    </ng-container>
+
+    <!-- Shared active experiments -->
+    <ng-container *ngIf="viewMode === 'shared'">
+      <div *ngIf="!sharedExperiments.length" class="empty-msg section-card">
+        <p>No active experiments shared with your labs by other researchers.</p>
+      </div>
+      
+      <div *ngFor="let exp of sharedExperiments" class="experiment-card section-card">
+        
+        <!-- Card Header Info (Exactly 2 compact rows with customized side column) -->
+        <div class="exp-header-compact">
+          
+          <!-- Row 1: Title on the left, Sync + Buttons + Date stacked on the right -->
+          <div class="exp-header-row-one">
+            <div class="exp-title-date-group" style="display: flex; align-items: center; gap: 8px;">
+              <input class="inline-exp-title" 
+                     [(ngModel)]="exp.title" 
+                     (input)="onExperimentChange(exp)" 
+                     placeholder="Experiment Title..." />
+              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
+                👥 Shared ({{ getSharedNames(exp).length }})
+                <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
+                  <strong>Shared with:</strong>
+                  <span *ngFor="let name of getSharedNames(exp)" style="display: block; margin-top: 2px;">• {{ name }}</span>
+                </span>
+              </span>
+            </div>
+            
+            <div class="exp-actions-inline-group">
+              <!-- Top: Saved to cloud -->
+              <div class="exp-sync-pill">
+                <div *ngIf="syncStates[exp.id] === 'saved'" class="status-indicator-wrapper">
+                  <span class="status-dot dot-saved"></span>
+                  <span class="status-text text-saved">Saved to Cloud</span>
+                </div>
+                <div *ngIf="syncStates[exp.id] === 'saving'" class="status-indicator-wrapper">
+                  <span class="spinner-small"></span>
+                  <span class="status-text text-saving">Saving...</span>
+                </div>
+                <div *ngIf="syncStates[exp.id] === 'error'" class="status-indicator-wrapper">
+                  <span class="status-dot dot-error"></span>
+                  <span class="status-text text-error">Sync Error</span>
+                </div>
+              </div>
+              
+              <!-- Middle: Action buttons -->
+              <div class="exp-action-buttons-row" style="display: flex; gap: 6px; align-items: center;">
+                <button class="app-btn app-btn-success-outline app-btn-sm complete-all-btn" (click)="completeAllSteps(exp)" title="Complete all steps in sequence">
+                  Complete All
+                </button>
+                <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="openExperimentDetails(exp)">
+                  View Details
+                </button>
+              </div>
+              
+              <!-- Bottom: Shared by and Date -->
+              <span class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-primary); font-weight: 850; white-space: nowrap; margin-bottom: 2px; margin-top: 4px;">👤 Shared by: {{ exp.shared_by_name }}</span>
+              <span class="meta-date-inline">Started: {{ formatDate(exp.created_at) }}</span>
+            </div>
+          </div>
+
+          <!-- Row 2: Samples Tag Chips list only -->
+          <div class="exp-header-row-two">
+            <div class="samples-tags-container">
+              <div *ngFor="let sample of exp.samples; let sIdx = index" class="sample-tag-chip">
+                <span class="tag-text">{{ sample }}</span>
+                <button class="remove-tag-btn" (click)="removeSampleTag(exp, sIdx)" title="Remove Sample">✕</button>
+              </div>
+              <div class="add-tag-wrapper">
+                <input #newSampleInput 
+                       class="add-tag-inline-input" 
+                       placeholder="+ Add sample..."
+                       (keyup.enter)="addSampleTag(exp, newSampleInput)"
+                       (blur)="addSampleTag(exp, newSampleInput)" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
+        <div class="workflow-container">
+          <div class="workflow-scroll-area">
+            
+            <!-- Start Adder Connector -->
+            <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
+              <span class="plus-icon">+</span>
+            </div>
+
+            <ng-container *ngFor="let step of exp.steps; let i = index">
+              
+              <div class="step-card compact-step" 
+                   draggable="true" 
+                   (dragstart)="onDragStart(exp, i)" 
+                   (dragover)="$event.preventDefault()" 
+                   (drop)="onDrop(exp, i)"
+                   [class.active-step]="step.status === 'active'" 
+                   [class.completed-step]="step.status === 'completed'">
+                
+                <div class="step-header">
+                  <span class="step-number-badge">{{ i + 1 }}</span>
+                  <input class="step-title-input" 
+                         [(ngModel)]="step.title" 
+                         (input)="onExperimentChange(exp)" 
+                         placeholder="Step title..." />
+                  <button class="danger-text remove-step-btn" (click)="removeStep(exp, step.id)" title="Remove Step">✕</button>
+                </div>
+
+                <!-- Single line comment view -->
+                <div class="compact-comment-view" *ngIf="step.comments?.length">
+                  <span class="comment-text" [title]="step.comments[step.comments.length - 1]">
+                    💬 {{ step.comments[step.comments.length - 1] }}
+                  </span>
+                </div>
+
+                <!-- Compact inline comment input -->
+                <div class="compact-comment-input-row">
+                  <input #commentInput 
+                         placeholder="Add comment..." 
+                         class="compact-comment-input" 
+                         (keyup.enter)="addComment(exp, step, commentInput)" 
+                         (blur)="addComment(exp, step, commentInput)" />
+                </div>
+
+                <!-- Step Actions -->
+                <div class="step-complete-action">
+                  <button *ngIf="step.status !== 'completed'" class="app-btn app-btn-success complete-btn app-btn-sm" (click)="completeStep(exp, step)">✓ Complete</button>
+                  <button *ngIf="step.status === 'completed'" class="app-btn app-btn-outline undo-btn app-btn-sm" (click)="undoCompleteStep(exp, step)">↺ Undo</button>
+                </div>
+              </div>
+
+              <!-- Intermediary Step Connector Adder -->
+              <div class="insert-step-divider" (click)="insertStepAt(exp, i + 1)" title="Insert Step here">
+                <span class="plus-icon">+</span>
+              </div>
+
+            </ng-container>
+
+          </div>
+        </div>
+
+        <!-- RECENT COMMENTS PREVIEW CONTAINER (Sleek Glassmorphic Accordion Style) -->
+        <div class="comments-preview-card" *ngIf="getRecentComments(exp).length > 0" style="margin-top: 14px; padding: 12px 14px; background: rgba(248, 250, 252, 0.7); border-radius: 10px; border: 1.5px solid rgba(226, 232, 240, 0.8); display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(4px);">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 850; color: var(--color-primary);">
+            <span>💬 Recent Comments ({{ getRecentComments(exp).length }})</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div *ngFor="let comment of getRecentComments(exp) | slice:-3" style="font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.45; display: flex; align-items: flex-start; gap: 6px;">
+              <span style="font-weight: 800; color: var(--color-text-primary); white-space: nowrap; background: rgba(148, 163, 184, 0.12); padding: 2px 6px; border-radius: 4px; font-size: 0.74rem;">
+                {{ comment.author }}
+              </span>
+              <span (click)="toggleCommentExpand(comment.id, $event)"
+                    [style.display]="expandedComments[comment.id] ? 'block' : '-webkit-box'"
+                    [style.-webkit-line-clamp]="expandedComments[comment.id] ? 'none' : '2'"
+                    [style.-webkit-box-orient]="'vertical'"
+                    [style.overflow]="expandedComments[comment.id] ? 'visible' : 'hidden'"
+                    style="font-style: italic; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; flex: 1;"
+                    title="Click to toggle full comment">
+                "{{ comment.text }}"
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </ng-container>
   </div>
 
   <!-- STUNNING FULL-SCREEN DETAILED MODAL OVERLAY -->
@@ -228,19 +469,29 @@
       <!-- Modal Header -->
       <div class="modal-header">
         <div class="modal-title-area">
-          <input class="modal-exp-title" 
+          <span *ngIf="isExperimentReadOnly(selectedExperiment)" class="modal-exp-title-readonly" style="font-size: 1.6rem; font-weight: 850; color: var(--color-text-primary); padding: 4px 0; display: inline-block;">{{ selectedExperiment.title }}</span>
+          <input *ngIf="!isExperimentReadOnly(selectedExperiment)" class="modal-exp-title" 
                  [(ngModel)]="selectedExperiment.title" 
                  (input)="onExperimentChange(selectedExperiment)" 
                  placeholder="Experiment Title..." />
-          <div class="modal-exp-meta">
+          <div class="modal-exp-meta" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <span *ngIf="selectedExperiment.work_type" class="badge work-type">{{ getPresetName(selectedExperiment.work_type) }}</span>
             <span class="meta-date">Started: {{ formatDate(selectedExperiment.created_at) }}</span>
+            <ng-container>
+              <span *ngIf="getSharedNames(selectedExperiment).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); cursor: help; position: relative; overflow: visible;">
+                👥 Shared ({{ getSharedNames(selectedExperiment).length }})
+                <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
+                  <strong>Shared with:</strong>
+                  <span *ngFor="let name of getSharedNames(selectedExperiment)" style="display: block; margin-top: 2px;">• {{ name }}</span>
+                </span>
+              </span>
+            </ng-container>
           </div>
         </div>
         
         <div class="modal-header-actions">
           <!-- Sync Status -->
-          <div class="exp-sync-pill">
+          <div class="exp-sync-pill" *ngIf="!isExperimentReadOnly(selectedExperiment)">
             <div *ngIf="syncStates[selectedExperiment.id] === 'saved'" class="status-indicator-wrapper">
               <span class="status-dot dot-saved"></span>
               <span class="status-text text-saved">Saved to Cloud</span>
@@ -266,7 +517,10 @@
         <div class="modal-sidebar-panel">
           <div class="sidebar-block">
             <label class="block-label">Protocol Description</label>
-            <textarea class="modal-desc-textarea" 
+            <p *ngIf="isExperimentReadOnly(selectedExperiment)" style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.6; margin: 0; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--color-border-light);">
+              {{ selectedExperiment.description || 'No description provided.' }}
+            </p>
+            <textarea *ngIf="!isExperimentReadOnly(selectedExperiment)" class="modal-desc-textarea" 
                       [(ngModel)]="selectedExperiment.description" 
                       (input)="onExperimentChange(selectedExperiment)" 
                       placeholder="Add an experiment description..."></textarea>
@@ -277,15 +531,16 @@
             <div class="samples-tags-container">
               <div *ngFor="let sample of selectedExperiment.samples; let sIdx = index" class="sample-tag-chip">
                 <span class="tag-text">{{ sample }}</span>
-                <button class="remove-tag-btn" (click)="removeSampleTag(selectedExperiment, sIdx)" title="Remove Sample">✕</button>
+                <button *ngIf="!isExperimentReadOnly(selectedExperiment)" class="remove-tag-btn" (click)="removeSampleTag(selectedExperiment, sIdx)" title="Remove Sample">✕</button>
               </div>
-              <div class="add-tag-wrapper">
+              <div *ngIf="!isExperimentReadOnly(selectedExperiment)" class="add-tag-wrapper">
                 <input #newSampleInputModal 
                        class="add-tag-inline-input" 
                        placeholder="+ Add sample..."
                        (keyup.enter)="addSampleTag(selectedExperiment, newSampleInputModal)"
                        (blur)="addSampleTag(selectedExperiment, newSampleInputModal)" />
               </div>
+              <span *ngIf="isExperimentReadOnly(selectedExperiment) && !selectedExperiment.samples?.length" style="font-size: 0.88rem; color: var(--color-text-tertiary); font-style: italic;">No samples listed.</span>
             </div>
           </div>
 
@@ -311,7 +566,7 @@
           <div class="vertical-timeline-container">
             
             <!-- Start Intermediary Step Connector Adder -->
-            <div class="vertical-step-connector start-connector" (click)="insertStepAt(selectedExperiment, 0)" title="Insert Step at the beginning">
+            <div *ngIf="!isExperimentReadOnly(selectedExperiment)" class="vertical-step-connector start-connector" (click)="insertStepAt(selectedExperiment, 0)" title="Insert Step at the beginning">
               <div class="connector-line"></div>
               <button class="connector-add-btn">+</button>
             </div>
@@ -325,21 +580,23 @@
                 
                 <!-- Left indicator & numbering -->
                 <div class="step-side-indicator">
-                  <span class="step-badge">{{ i + 1 }}</span>
+                  <span class="step-badge" [style.background]="step.status === 'completed' ? '#22c55e' : (step.status === 'active' ? 'var(--color-primary)' : '#94a3b8')" style="color: white; border-color: transparent;">{{ i + 1 }}</span>
                   <div class="step-status-dot"></div>
                 </div>
                 
                 <!-- Step Main Content Area -->
                 <div class="step-card-content">
                   <div class="step-card-header">
-                    <input class="step-title-input" 
+                    <span *ngIf="isExperimentReadOnly(selectedExperiment)" style="font-size: 0.95rem; font-weight: 800; color: var(--color-text-primary);">{{ step.title }}</span>
+                    <input *ngIf="!isExperimentReadOnly(selectedExperiment)" class="step-title-input" 
                            [(ngModel)]="step.title" 
                            (input)="onExperimentChange(selectedExperiment)" 
                            placeholder="Step title..." />
-                    <button class="danger-text remove-step-btn" (click)="removeStep(selectedExperiment, step.id)" title="Remove Step">✕</button>
+                    <button *ngIf="!isExperimentReadOnly(selectedExperiment)" class="danger-text remove-step-btn" (click)="removeStep(selectedExperiment, step.id)" title="Remove Step">✕</button>
                   </div>
                   
-                  <textarea class="step-desc-input" 
+                  <p *ngIf="isExperimentReadOnly(selectedExperiment) && step.description" style="font-size: 0.84rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0; padding-top: 4px;">{{ step.description }}</p>
+                  <textarea *ngIf="!isExperimentReadOnly(selectedExperiment)" class="step-desc-input" 
                             [(ngModel)]="step.description" 
                             (input)="onExperimentChange(selectedExperiment)" 
                             placeholder="Add step description..."></textarea>
@@ -360,7 +617,7 @@
                   </div>
                   
                   <!-- Step Actions Foot -->
-                  <div class="step-card-actions">
+                  <div class="step-card-actions" *ngIf="!isExperimentReadOnly(selectedExperiment)">
                     <div class="add-comment-row">
                       <input #commentInput placeholder="Type comment & press Enter..." class="app-input-sm" (keyup.enter)="addComment(selectedExperiment, step, commentInput)" />
                     </div>
@@ -380,9 +637,12 @@
               </div>
               
               <!-- Intermediary Step Connector Adder -->
-              <div class="vertical-step-connector" (click)="insertStepAt(selectedExperiment, i + 1)" title="Insert Step here">
+              <div *ngIf="!isExperimentReadOnly(selectedExperiment)" class="vertical-step-connector" (click)="insertStepAt(selectedExperiment, i + 1)" title="Insert Step here">
                 <div class="connector-line"></div>
                 <button class="connector-add-btn">+</button>
+              </div>
+              <div *ngIf="isExperimentReadOnly(selectedExperiment) && i < selectedExperiment.steps.length - 1" class="vertical-step-connector-readonly" style="height: 20px; display: flex; align-items: center; justify-content: center; position: relative;">
+                <div style="width: 2px; height: 100%; background: #e2e8f0; margin-left: 20px;"></div>
               </div>
               
             </ng-container>
@@ -448,6 +708,141 @@
     <div class="lightbox-content" (click)="$event.stopPropagation()" style="position: relative; max-width: 90%; max-height: 90%; display: flex; align-items: center; justify-content: center;">
       <button class="lightbox-close-btn" (click)="closeImagePreview()" style="position: absolute; top: -40px; right: 0; background: transparent; border: none; font-size: 1.5rem; color: white; cursor: pointer; font-weight: 700;">✕ Close</button>
       <img [src]="previewImageUrl" class="lightbox-img" style="max-width: 100%; max-height: 80vh; border-radius: var(--radius-lg); box-shadow: var(--shadow-2xl); border: 2px solid rgba(255, 255, 255, 0.1);" />
+    </div>
+  </div>
+
+  <!-- INDIVIDUAL TEMPLATE SHARING MODAL -->
+  <div class="exp-modal-overlay" *ngIf="showSharePresetModal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+    <div class="exp-modal-card" style="background: white; border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 32px; width: 90%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; position: relative;">
+      
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid var(--color-border-light); padding-bottom: 12px;">
+        <h3 style="font-size: 1.25rem; font-weight: 850; color: var(--color-text-primary); margin: 0;">Share Template</h3>
+        <button class="close-modal-btn" (click)="closeSharePresetModal()" style="background: transparent; border: none; font-size: 1.15rem; font-weight: 700; color: var(--color-text-tertiary); cursor: pointer;">✕</button>
+      </div>
+      
+      <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">
+        Send **"{{ sharingPreset?.title }}"** directly to another researcher's inbox. Once accepted, they can use it as a starting workflow preset.
+      </p>
+
+      <!-- User Search -->
+      <div class="search-user-wrapper" style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 0.8rem; font-weight: 700; color: var(--color-text-secondary);">Search Researcher</label>
+        <input class="app-input" 
+               [(ngModel)]="presetSearchQuery" 
+               (input)="filterPresetUsers()" 
+               placeholder="Type name or email..." 
+               style="width: 100%;" />
+      </div>
+      
+      <!-- Users List -->
+      <div class="users-scroll-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding: 4px;">
+        <div *ngIf="!filteredUsers.length" style="font-style: italic; color: var(--color-text-tertiary); font-size: 0.88rem; text-align: center; padding: 16px;">
+          No matching researchers found.
+        </div>
+        
+        <div *ngFor="let user of filteredUsers" 
+             style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1.5px solid var(--color-border-light); border-radius: 8px; background: white;">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 0.88rem; font-weight: 800; color: var(--color-text-primary);">{{ user.name }}</span>
+            <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">{{ user.email }}</span>
+          </div>
+          <button class="app-btn app-btn-primary app-btn-sm" 
+                  (click)="sendPresetTemplate(user.id)"
+                  style="font-size: 0.72rem; padding: 4px 10px; font-weight: 800; border-radius: 4px;">
+            Send
+          </button>
+        </div>
+      </div>
+      
+      <!-- Actions -->
+      <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1.5px solid var(--color-border-light); padding-top: 16px;">
+        <button class="app-btn app-btn-outline" (click)="closeSharePresetModal()">Close</button>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- REVOCABLE LAB SHARING MODAL -->
+  <div class="exp-modal-overlay" *ngIf="showShareModal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+    <div class="exp-modal-card" style="background: white; border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 32px; width: 90%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; position: relative;">
+      
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid var(--color-border-light); padding-bottom: 12px;">
+        <h3 style="font-size: 1.25rem; font-weight: 850; color: var(--color-text-primary); margin: 0;">Share Active Workspace</h3>
+        <button class="close-modal-btn" (click)="closeShareModal()" style="background: transparent; border: none; font-size: 1.15rem; font-weight: 700; color: var(--color-text-tertiary); cursor: pointer;">✕</button>
+      </div>
+      
+      <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">
+        Select the research labs you want to share **"{{ sharingExp?.title }}"** with. Shared members can review steps, images, and leave discussion comments. You can revoke access at any time.
+      </p>
+      
+      <!-- Labs Checklist -->
+      <div class="labs-checklist-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto; padding: 4px;">
+        <div *ngIf="!myLabs.length" style="font-style: italic; color: var(--color-text-tertiary); font-size: 0.88rem; text-align: center; padding: 16px;">
+          You are not currently a member of any research lab. Join a lab in the Lab portal first.
+        </div>
+        
+        <div *ngFor="let lab of myLabs" 
+             (click)="toggleLabShare(lab.id)"
+             class="lab-checkbox-row" 
+             style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1.5px solid; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+             [style.background]="isLabShared(lab.id) ? 'rgba(22, 101, 52, 0.04)' : 'white'"
+             [style.border-color]="isLabShared(lab.id) ? 'var(--color-primary)' : 'var(--color-border-light)'">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 0.9rem; font-weight: 800; color: var(--color-text-primary);">{{ lab.lab_name }}</span>
+            <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">{{ lab.lab_tagline || 'Research Group' }}</span>
+          </div>
+          <div class="checkbox-indicator" 
+               style="width: 20px; height: 20px; border-radius: 4px; border: 1.5px solid; display: flex; align-items: center; justify-content: center; font-size: 0.76rem; font-weight: 800; transition: all 0.2s;"
+               [style.background]="isLabShared(lab.id) ? 'var(--color-primary)' : 'white'"
+               [style.border-color]="isLabShared(lab.id) ? 'var(--color-primary)' : 'var(--color-border)'"
+               [style.color]="isLabShared(lab.id) ? 'white' : 'transparent'">✓</div>
+        </div>
+      </div>
+      
+      <!-- Researchers Selection -->
+      <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--color-border-light); padding-top: 14px;">
+        <span style="font-size: 0.88rem; font-weight: 850; color: var(--color-text-secondary);">Share with Researchers</span>
+        <input type="text" 
+               [(ngModel)]="researcherSearchQuery" 
+               (input)="filterResearchers()" 
+               placeholder="Search researchers by name or email..." 
+               class="app-input" 
+               style="width: 100%; padding: 8px 12px; border: 1.5px solid var(--color-border-light); border-radius: 8px; font-size: 0.82rem; outline: none; transition: border-color 0.2s;" />
+        
+        <div class="researchers-checklist-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding: 4px; border: 1.5px solid var(--color-border-light); border-radius: 8px; background: #fafafa; padding: 8px;">
+          <div *ngIf="!filteredResearchers.length" style="font-style: italic; color: var(--color-text-tertiary); font-size: 0.8rem; text-align: center; padding: 12px;">
+            No researchers found.
+          </div>
+          
+          <div *ngFor="let user of filteredResearchers" 
+               (click)="toggleUserShare(user.id)"
+               class="user-checkbox-row" 
+               style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1.5px solid; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: white;"
+               [style.background]="isUserShared(user.id) ? 'rgba(22, 101, 52, 0.04)' : 'white'"
+               [style.border-color]="isUserShared(user.id) ? 'var(--color-primary)' : 'var(--color-border-light)'">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 0.84rem; font-weight: 800; color: var(--color-text-primary);">{{ user.name }}</span>
+              <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">{{ user.email }}</span>
+            </div>
+            <div class="checkbox-indicator" 
+                 style="width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; transition: all 0.2s;"
+                 [style.background]="isUserShared(user.id) ? 'var(--color-primary)' : 'white'"
+                 [style.border-color]="isUserShared(user.id) ? 'var(--color-primary)' : 'var(--color-border)'"
+                 [style.color]="isUserShared(user.id) ? 'white' : 'transparent'">✓</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Actions -->
+      <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1.5px solid var(--color-border-light); padding-top: 16px;">
+        <button class="app-btn app-btn-outline" (click)="closeShareModal()">Cancel</button>
+        <button class="app-btn app-btn-primary" 
+                (click)="saveWorkflowShares()" 
+                [disabled]="savingShares">
+          {{ savingShares ? 'Saving...' : 'Save Shares' }}
+        </button>
+      </div>
+      
     </div>
   </div>
 </div>

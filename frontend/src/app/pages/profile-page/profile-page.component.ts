@@ -2,7 +2,7 @@
  * ProfilePageComponent — User profile page.
  * Displays user info, role, and allows name editing.
  */
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -158,15 +158,20 @@ export class ProfilePageComponent implements OnInit {
   constructor(
     private auth: AuthService,
     private router: Router,
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit() {
     this.auth.profile$.subscribe(p => {
-      this.profile = p;
-      if (p) {
-        this.editName = p.name;
-        this.editBio = p.bio || '';
-      }
+      this.ngZone.run(() => {
+        this.profile = p;
+        if (p) {
+          this.editName = p.name;
+          this.editBio = p.bio || '';
+        }
+        this.cdr.detectChanges();
+      });
     });
   }
 
@@ -196,23 +201,28 @@ export class ProfilePageComponent implements OnInit {
     this.saving = true;
     this.message = '';
     try {
-      // Update name if changed
-      if (this.editName.trim() !== this.profile?.name) {
-        await this.auth.updateName(this.editName.trim());
-      }
-      // Update bio (using generic update logic if available, or just updateName if that's all we have)
-      // Since we added update_user_bio to backend, we should use it.
-      // For now, let's assume updateProfile handles both or we call separate.
-      await this.auth.updateProfile({ name: this.editName.trim(), bio: this.editBio.trim() });
-      
-      this.editing = false;
-      this.message = 'Profile updated successfully.';
-      this.isError = false;
-    } catch {
-      this.message = 'Failed to update profile.';
-      this.isError = true;
+      console.log('[DEBUG] saveProfile: calling updateProfile', { name: this.editName.trim(), bio: this.editBio.trim() });
+      const res = await this.auth.updateProfile({ name: this.editName.trim(), bio: this.editBio.trim() });
+      console.log('[DEBUG] saveProfile: updateProfile finished', res);
+      this.ngZone.run(() => {
+        this.editing = false;
+        this.message = 'Profile updated successfully.';
+        this.isError = false;
+        this.cdr.detectChanges();
+      });
+    } catch (err) {
+      console.error('[DEBUG] saveProfile error:', err);
+      this.ngZone.run(() => {
+        this.message = 'Failed to update profile.';
+        this.isError = true;
+        this.cdr.detectChanges();
+      });
     } finally {
-      this.saving = false;
+      console.log('[DEBUG] saveProfile finally: setting saving = false');
+      this.ngZone.run(() => {
+        this.saving = false;
+        this.cdr.detectChanges();
+      });
     }
   }
 

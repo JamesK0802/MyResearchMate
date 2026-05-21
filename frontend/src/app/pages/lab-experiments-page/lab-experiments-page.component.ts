@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LabNotebookService } from '../../services/lab-notebook.service';
+import { LabService } from '../../services/lab.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 
@@ -16,6 +17,30 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   activeExperiments: any[] = [];
   presets: any[] = [];
   
+  // Multi-user & Lab context
+  allUsers: any[] = [];
+  myLabs: any[] = [];
+  
+  // Individual preset sharing
+  showSharePresetModal = false;
+  sharingPreset: any = null;
+  presetSearchQuery = '';
+  filteredUsers: any[] = [];
+  incomingTransfers: any[] = [];
+
+  // Active workflow lab sharing
+  showShareModal = false;
+  sharingExp: any = null;
+  sharedLabIds: string[] = [];
+  sharedUserIds: string[] = [];
+  researcherSearchQuery = '';
+  filteredResearchers: any[] = [];
+  savingShares = false;
+
+  // View mode & Shared active workflows
+  viewMode: 'my' | 'shared' = 'my';
+  sharedExperiments: any[] = [];
+
   // Forms state
   showCreateExpForm = false;
   showCreatePresetForm = false;
@@ -59,6 +84,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
 
   constructor(
     private labService: LabNotebookService,
+    private coreLabService: LabService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -81,20 +107,87 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
 
   async loadData() {
     try {
-      this.activeExperiments = await this.labService.getActiveExperiments();
-      this.presets = await this.labService.getPresets();
-      
-      // Initialize sync states and samples_raw
+      this.activeExperiments = await this.labService.getActiveExperiments().catch(e => {
+        console.error('Failed to load active experiments:', e);
+        return [];
+      });
+    } catch (e) {
+      this.activeExperiments = [];
+    }
+
+    try {
+      this.presets = await this.labService.getPresets().catch(e => {
+        console.error('Failed to load presets:', e);
+        return [];
+      });
+    } catch (e) {
+      this.presets = [];
+    }
+
+    try {
+      this.myLabs = await this.coreLabService.getMyLabs().catch(e => {
+        console.error('Failed to load my labs:', e);
+        return [];
+      });
+    } catch (e) {
+      this.myLabs = [];
+    }
+
+    try {
+      this.allUsers = await this.coreLabService.getAllUsers().catch(e => {
+        console.error('Failed to load all users:', e);
+        return [];
+      });
+    } catch (e) {
+      this.allUsers = [];
+    }
+
+    try {
+      const allShared = await this.labService.getSharedWorkflows().catch(e => {
+        console.error('Failed to load shared workflows:', e);
+        return [];
+      });
+      this.sharedExperiments = allShared.filter(e => e.workflow_type === 'active');
+    } catch (e) {
+      this.sharedExperiments = [];
+    }
+
+    try {
+      this.incomingTransfers = await this.labService.getIncomingPresetTransfers().catch(e => {
+        console.error('Failed to load incoming transfers:', e);
+        return [];
+      });
+    } catch (e) {
+      this.incomingTransfers = [];
+    }
+
+    // Initialize sync states and samples_raw
+    if (this.activeExperiments) {
       for (const exp of this.activeExperiments) {
         if (!this.syncStates[exp.id]) {
           this.syncStates[exp.id] = 'saved';
         }
         exp.samples_raw = (exp.samples || []).join(', ');
       }
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.error(e);
     }
+
+    if (this.sharedExperiments) {
+      for (const exp of this.sharedExperiments) {
+        if (!this.syncStates[exp.id]) {
+          this.syncStates[exp.id] = 'saved';
+        }
+        exp.samples_raw = (exp.samples || []).join(', ');
+      }
+    }
+
+    this.cdr.detectChanges();
+  }
+
+  getSharedNames(exp: any): string[] {
+    if (!exp) return [];
+    const labs = (exp.shared_labs && exp.shared_labs.length) ? exp.shared_labs : (exp.shared_with_labs || []);
+    const users = (exp.shared_users && exp.shared_users.length) ? exp.shared_users : (exp.shared_with_users || []);
+    return [...labs, ...users];
   }
 
   toggleCreateExp() {
@@ -436,8 +529,171 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     this.selectedExperiment = null;
   }
 
+  isExperimentReadOnly(exp: any): boolean {
+    return false; // Active experiments are always co-editable!
+  }
+
+  expandedComments: { [commentId: string]: boolean } = {};
+
+  toggleCommentExpand(commentId: string, event: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.expandedComments[commentId] = !this.expandedComments[commentId];
+  }
+
+  getRecentComments(exp: any): { id: string, author?: string, text: string }[] {
+    const comments: { id: string, author?: string, text: string }[] = [];
+    if (exp && exp.comments && exp.comments.length) {
+      for (const c of exp.comments) {
+        comments.push({
+          id: c.id,
+          author: c.user_name || 'Discussion',
+          text: c.comment || c.text || ''
+        });
+      }
+    }
+    return comments;
+  }
+
+  filterPresetUsers() {
+    const q = this.presetSearchQuery.trim().toLowerCase();
+    if (!q) {
+      this.filteredUsers = this.allUsers;
+    } else {
+      this.filteredUsers = this.allUsers.filter(u => 
+        u.name?.toLowerCase().includes(q) || 
+        u.email?.toLowerCase().includes(q)
+      );
+    }
+  }
+
+  openSharePresetModal(preset: any) {
+    this.sharingPreset = preset;
+    this.showSharePresetModal = true;
+    this.presetSearchQuery = '';
+    this.filterPresetUsers();
+    this.cdr.detectChanges();
+  }
+
+  closeSharePresetModal() {
+    this.showSharePresetModal = false;
+    this.sharingPreset = null;
+  }
+
+  async sendPresetTemplate(userId: number) {
+    if (!this.sharingPreset) return;
+    try {
+      await this.labService.sendPreset(this.sharingPreset.id, userId);
+      alert('Template preset sent successfully!');
+      this.closeSharePresetModal();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to send template preset.');
+    }
+  }
+
+  async acceptTransfer(transferId: string) {
+    try {
+      await this.labService.acceptPresetTransfer(transferId);
+      alert('Template accepted and added to your collection!');
+      await this.loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to accept template.');
+    }
+  }
+
+  async rejectTransfer(transferId: string) {
+    if (!confirm('Reject this template transfer?')) return;
+    try {
+      await this.labService.rejectPresetTransfer(transferId);
+      await this.loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to reject template.');
+    }
+  }
+
+  async openShareModal(exp: any, event: Event) {
+    event.stopPropagation();
+    this.sharingExp = exp;
+    this.showShareModal = true;
+    this.researcherSearchQuery = '';
+    try {
+      const res = await this.labService.getWorkflowShares(exp.id);
+      this.sharedLabIds = res.lab_ids || [];
+      this.sharedUserIds = res.user_ids || [];
+    } catch (e) {
+      console.error(e);
+      this.sharedLabIds = [];
+      this.sharedUserIds = [];
+    }
+    this.filterResearchers();
+    this.cdr.detectChanges();
+  }
+
+  closeShareModal() {
+    this.showShareModal = false;
+    this.sharingExp = null;
+  }
+
+  toggleLabShare(labId: string) {
+    const index = this.sharedLabIds.indexOf(labId);
+    if (index > -1) {
+      this.sharedLabIds.splice(index, 1);
+    } else {
+      this.sharedLabIds.push(labId);
+    }
+  }
+
+  isLabShared(labId: string): boolean {
+    return this.sharedLabIds.includes(labId);
+  }
+
+  filterResearchers() {
+    const q = this.researcherSearchQuery.trim().toLowerCase();
+    if (!q) {
+      this.filteredResearchers = this.allUsers;
+    } else {
+      this.filteredResearchers = this.allUsers.filter(u =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
+      );
+    }
+  }
+
+  toggleUserShare(userId: any) {
+    const uIdStr = String(userId);
+    const index = this.sharedUserIds.indexOf(uIdStr);
+    if (index > -1) {
+      this.sharedUserIds.splice(index, 1);
+    } else {
+      this.sharedUserIds.push(uIdStr);
+    }
+  }
+
+  isUserShared(userId: any): boolean {
+    return this.sharedUserIds.includes(String(userId));
+  }
+
+  async saveWorkflowShares() {
+    if (!this.sharingExp) return;
+    this.savingShares = true;
+    try {
+      await this.labService.updateWorkflowShares(this.sharingExp.id, 'active', this.sharedLabIds, this.sharedUserIds);
+      this.closeShareModal();
+      await this.loadData();
+    } catch (e) {
+      console.error('Failed to save sharing', e);
+    } finally {
+      this.savingShares = false;
+    }
+  }
+
   formatDate(d: string) {
     if (!d) return '';
     return new Date(d).toLocaleString();
   }
+
 }

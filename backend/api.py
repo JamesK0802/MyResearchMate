@@ -23,6 +23,17 @@ from database.db import engine, Base
 import database.models # Ensure all models are loaded
 Base.metadata.create_all(bind=engine)
 
+# Self-healing DB check for WorkflowShare updates (supporting individual researcher shares)
+from sqlalchemy import text
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE workflow_shares ADD COLUMN IF NOT EXISTS shared_with_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE"))
+        conn.execute(text("ALTER TABLE workflow_shares ALTER COLUMN lab_id DROP NOT NULL"))
+        conn.commit()
+    print("[DB] Self-healing workflow_shares migration executed successfully.")
+except Exception as e:
+    print(f"[DB] Self-healing workflow_shares migration: {e}")
+
 app = FastAPI(title="My Lab Mate API")
 
 # ── Main API Router ──────────────────────────────────────────────────────────
@@ -422,4 +433,4 @@ async def legacy_status(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

@@ -2,6 +2,7 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LabNotebookService } from '../../services/lab-notebook.service';
+import { LabService } from '../../services/lab.service';
 
 @Component({
   selector: 'app-lab-archive-page',
@@ -12,8 +13,13 @@ import { LabNotebookService } from '../../services/lab-notebook.service';
 })
 export class LabArchivePageComponent implements OnInit {
   archivedExperiments: any[] = [];
+  sharedExperiments: any[] = [];
   filteredExperiments: any[] = [];
   presets: any[] = [];
+  myLabs: any[] = [];
+
+  // View Mode: 'my' or 'shared'
+  viewMode: 'my' | 'shared' = 'my';
 
   // Search and Filter controls
   searchQuery = '';
@@ -26,11 +32,25 @@ export class LabArchivePageComponent implements OnInit {
   // Detailed modal view
   selectedExp: any = null;
 
+  // New global outcome comment text
+  newCommentText = '';
+
+  // Revocable sharing modal properties
+  showShareModal = false;
+  sharingExp: any = null;
+  sharedLabIds: string[] = [];
+  sharedUserIds: string[] = [];
+  researcherSearchQuery = '';
+  filteredResearchers: any[] = [];
+  allUsers: any[] = [];
+  savingShares = false;
+
   // Lightbox preview url
   previewImageUrl: string | null = null;
 
   constructor(
-    private labService: LabNotebookService,
+    private labNotebookService: LabNotebookService,
+    private labService: LabService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -40,16 +60,94 @@ export class LabArchivePageComponent implements OnInit {
 
   async loadData() {
     try {
-      this.archivedExperiments = await this.labService.getArchiveExperiments();
-      this.presets = await this.labService.getPresets();
-      this.applyFilters();
+      this.archivedExperiments = await this.labNotebookService.getArchiveExperiments().catch(e => {
+        console.error('Failed to load archived experiments:', e);
+        return [];
+      });
     } catch (e) {
-      console.error(e);
+      this.archivedExperiments = [];
     }
+
+    try {
+      this.presets = await this.labNotebookService.getPresets().catch(e => {
+        console.error('Failed to load presets:', e);
+        return [];
+      });
+    } catch (e) {
+      this.presets = [];
+    }
+
+    try {
+      this.myLabs = await this.labService.getMyLabs().catch(e => {
+        console.error('Failed to load my labs:', e);
+        return [];
+      });
+    } catch (e) {
+      this.myLabs = [];
+    }
+
+    try {
+      this.allUsers = await this.labService.getAllUsers().catch(e => {
+        console.error('Failed to load all users:', e);
+        return [];
+      });
+    } catch (e) {
+      this.allUsers = [];
+    }
+    
+    try {
+      const allShared = await this.labNotebookService.getSharedWorkflows().catch(e => {
+        console.error('Failed to load shared workflows:', e);
+        return [];
+      });
+      this.sharedExperiments = allShared.filter(e => e.workflow_type === 'archive');
+    } catch (e) {
+      this.sharedExperiments = [];
+    }
+    
+    this.applyFilters();
+    this.cdr.detectChanges();
+  }
+
+
+  getSharedNames(exp: any): string[] {
+    if (!exp) return [];
+    const labs = (exp.shared_labs && exp.shared_labs.length) ? exp.shared_labs : (exp.shared_with_labs || []);
+    const users = (exp.shared_users && exp.shared_users.length) ? exp.shared_users : (exp.shared_with_users || []);
+    return [...labs, ...users];
+  }
+
+  expandedComments: { [commentId: string]: boolean } = {};
+
+  toggleCommentExpand(commentId: string, event: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.expandedComments[commentId] = !this.expandedComments[commentId];
+  }
+
+  getRecentComments(exp: any): { id: string, author?: string, text: string }[] {
+    const comments: { id: string, author?: string, text: string }[] = [];
+    if (exp && exp.comments && exp.comments.length) {
+      for (const c of exp.comments) {
+        comments.push({
+          id: c.id || c.text || Math.random().toString(),
+          author: c.user_name || 'Discussion',
+          text: c.comment || c.text || ''
+        });
+      }
+    }
+    return comments;
+  }
+
+  switchViewMode(mode: 'my' | 'shared') {
+    this.viewMode = mode;
+    this.applyFilters();
   }
 
   applyFilters() {
-    let list = [...this.archivedExperiments];
+    const sourceList = this.viewMode === 'my' ? this.archivedExperiments : this.sharedExperiments;
+    let list = [...sourceList];
 
     // Search query
     if (this.searchQuery.trim()) {
@@ -113,10 +211,106 @@ export class LabArchivePageComponent implements OnInit {
 
   viewDetails(exp: any) {
     this.selectedExp = exp;
+    this.newCommentText = '';
   }
 
   closeModal() {
     this.selectedExp = null;
+  }
+
+  async addComment() {
+    if (!this.newCommentText.trim() || !this.selectedExp) return;
+    try {
+      const added = await this.labNotebookService.addArchiveComment(this.selectedExp.id, this.newCommentText.trim());
+      if (!this.selectedExp.comments) {
+        this.selectedExp.comments = [];
+      }
+      this.selectedExp.comments.push(added);
+      this.newCommentText = '';
+      this.cdr.detectChanges();
+      
+      // Update list state
+      await this.loadData();
+    } catch (e) {
+      console.error('Failed to add comment', e);
+    }
+  }
+
+  // Sharing Modal
+  async openShareModal(exp: any, event: Event) {
+    event.stopPropagation();
+    this.sharingExp = exp;
+    this.showShareModal = true;
+    this.researcherSearchQuery = '';
+    try {
+      const res = await this.labNotebookService.getWorkflowShares(exp.id);
+      this.sharedLabIds = res.lab_ids || [];
+      this.sharedUserIds = res.user_ids || [];
+    } catch (e) {
+      console.error(e);
+      this.sharedLabIds = [];
+      this.sharedUserIds = [];
+    }
+    this.filterResearchers();
+    this.cdr.detectChanges();
+  }
+
+  closeShareModal() {
+    this.showShareModal = false;
+    this.sharingExp = null;
+  }
+
+  toggleLabShare(labId: string) {
+    const index = this.sharedLabIds.indexOf(labId);
+    if (index > -1) {
+      this.sharedLabIds.splice(index, 1);
+    } else {
+      this.sharedLabIds.push(labId);
+    }
+  }
+
+  isLabShared(labId: string): boolean {
+    return this.sharedLabIds.includes(labId);
+  }
+
+  filterResearchers() {
+    const q = this.researcherSearchQuery.trim().toLowerCase();
+    if (!q) {
+      this.filteredResearchers = this.allUsers;
+    } else {
+      this.filteredResearchers = this.allUsers.filter(u =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
+      );
+    }
+  }
+
+  toggleUserShare(userId: any) {
+    const uIdStr = String(userId);
+    const index = this.sharedUserIds.indexOf(uIdStr);
+    if (index > -1) {
+      this.sharedUserIds.splice(index, 1);
+    } else {
+      this.sharedUserIds.push(uIdStr);
+    }
+  }
+
+  isUserShared(userId: any): boolean {
+    return this.sharedUserIds.includes(String(userId));
+  }
+
+  async saveWorkflowShares() {
+    if (!this.sharingExp) return;
+    this.savingShares = true;
+    try {
+      await this.labNotebookService.updateWorkflowShares(this.sharingExp.id, 'archive', this.sharedLabIds, this.sharedUserIds);
+      this.closeShareModal();
+      await this.loadData();
+    } catch (e) {
+      console.error('Failed to save sharing', e);
+    } finally {
+      this.savingShares = false;
+    }
   }
 
   // Lightbox control
@@ -150,3 +344,4 @@ export class LabArchivePageComponent implements OnInit {
     });
   }
 }
+

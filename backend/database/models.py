@@ -168,3 +168,24 @@ class FacilityBooking(Base):
     created_by_name = Column(String, nullable=True)          # Name of the user who created it
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class WorkflowPresetTransfer(Base):
+    __tablename__ = "workflow_preset_transfers"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    preset_id = Column(String)
+    preset_data = Column(JSON)
+    sender_user_id = Column(BigInteger, ForeignKey("users.id"))
+    receiver_user_id = Column(BigInteger, ForeignKey("users.id"))
+    status = Column(String, default="pending")  # pending, accepted, rejected
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class WorkflowShare(Base):
+    __tablename__ = "workflow_shares"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_id = Column(String, index=True)
+    workflow_type = Column(String)  # "active" or "archive"
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

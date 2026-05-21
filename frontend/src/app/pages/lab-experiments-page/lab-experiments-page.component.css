@@ -155,7 +155,7 @@
   gap: 12px;
 }
 
-.edit-btn {
+.edit-btn, .share-btn {
   color: var(--color-primary);
   font-weight: 700;
   font-size: 0.85rem;
@@ -165,7 +165,7 @@
   transition: all 0.15s ease;
 }
 
-.edit-btn:hover {
+.edit-btn:hover, .share-btn:hover {
   text-decoration: underline;
   transform: scale(1.05);
 }

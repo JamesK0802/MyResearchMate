@@ -6,6 +6,24 @@
     </div>
   </header>
 
+  <!-- View Mode Switch Tabs -->
+  <div class="view-mode-tabs" style="display: flex; gap: 12px; margin-bottom: 20px; animation: fadeIn 0.3s ease-out;">
+    <button class="app-btn" 
+            [class.app-btn-primary]="viewMode === 'my'" 
+            [class.app-btn-outline]="viewMode !== 'my'" 
+            (click)="switchViewMode('my')"
+            style="font-weight: 750; border-radius: 8px;">
+      My Archive
+    </button>
+    <button class="app-btn" 
+            [class.app-btn-primary]="viewMode === 'shared'" 
+            [class.app-btn-outline]="viewMode !== 'shared'" 
+            (click)="switchViewMode('shared')"
+            style="font-weight: 750; border-radius: 8px;">
+      Shared Experiments
+    </button>
+  </div>
+
   <!-- Filter & Search Controls -->
   <div class="controls-card section-card">
     <div class="search-row">
@@ -67,9 +85,16 @@
         
         <!-- Row 1: Title on the left, Success Score and Action stacked on the right -->
         <div class="exp-header-row-one" style="display: flex; justify-content: space-between; align-items: center; gap: 20px; width: 100%;">
-          <div class="exp-title-date-group" style="display: flex; align-items: center; gap: 12px; flex: 1; padding-top: 0px; margin-bottom: -6px;">
+          <div class="exp-title-date-group" style="display: flex; align-items: center; gap: 12px; flex: 1; padding-top: 0px; margin-bottom: -6px; flex-wrap: wrap;">
             <span class="inline-exp-title" style="font-size: 1.35rem; font-weight: 850; color: var(--color-text-primary); border: none; background: transparent; padding: 2px 4px;">
               {{ exp.title }}
+            </span>
+            <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
+              👥 Shared ({{ getSharedNames(exp).length }})
+              <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
+                <strong>Shared with:</strong>
+                <span *ngFor="let name of getSharedNames(exp)" style="display: block; margin-top: 2px;">• {{ name }}</span>
+              </span>
             </span>
           </div>
           
@@ -86,9 +111,15 @@
               <button class="app-btn app-btn-primary app-btn-sm detail-btn-inline" (click)="viewDetails(exp)">
                 View Details
               </button>
+              <button *ngIf="viewMode === 'my'" class="app-btn app-btn-outline app-btn-sm" (click)="openShareModal(exp, $event)">
+                Share
+              </button>
             </div>
             
             <!-- Bottom: Dates stacked under button -->
+            <span *ngIf="viewMode === 'shared'" class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-primary); font-weight: 850; white-space: nowrap; margin-bottom: 2px;">
+              👤 Shared by: {{ exp.shared_by_name }}
+            </span>
             <span class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-text-tertiary); font-weight: 600; white-space: nowrap;">Started: {{ formatDate(exp.created_at) }}</span>
             <span class="meta-date-inline" style="font-size: 0.72rem; color: var(--color-primary); font-weight: 600; white-space: nowrap;">Archived: {{ formatDate(exp.archived_at) }}</span>
           </div>
@@ -139,6 +170,30 @@
           </ng-container>
         </div>
       </div>
+
+      <!-- RECENT COMMENTS PREVIEW CONTAINER (Sleek Glassmorphic Accordion Style) -->
+      <div class="comments-preview-card" *ngIf="getRecentComments(exp).length > 0" style="margin-top: 14px; padding: 12px 14px; background: rgba(248, 250, 252, 0.7); border-radius: 10px; border: 1.5px solid rgba(226, 232, 240, 0.8); display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(4px);">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 850; color: var(--color-primary);">
+          <span>💬 Recent Comments ({{ getRecentComments(exp).length }})</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div *ngFor="let comment of getRecentComments(exp) | slice:-3" style="font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.45; display: flex; align-items: flex-start; gap: 6px;">
+            <span style="font-weight: 800; color: var(--color-text-primary); white-space: nowrap; background: rgba(148, 163, 184, 0.12); padding: 2px 6px; border-radius: 4px; font-size: 0.74rem;">
+              {{ comment.author }}
+            </span>
+            <span (click)="toggleCommentExpand(comment.id, $event)"
+                  [style.display]="expandedComments[comment.id] ? 'block' : '-webkit-box'"
+                  [style.-webkit-line-clamp]="expandedComments[comment.id] ? 'none' : '2'"
+                  [style.-webkit-box-orient]="'vertical'"
+                  [style.overflow]="expandedComments[comment.id] ? 'visible' : 'hidden'"
+                  style="font-style: italic; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; flex: 1;"
+                  title="Click to toggle full comment">
+              "{{ comment.text }}"
+            </span>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -150,12 +205,21 @@
       <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 1.5px solid var(--color-border-light); padding-bottom: 16px;">
         <div class="modal-title-area" style="display: flex; flex-direction: column; gap: 8px;">
           <h3 style="font-size: 1.6rem; font-weight: 850; color: var(--color-text-primary); margin: 0;">{{ selectedExp.title }}</h3>
-          <div class="modal-exp-meta" style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-exp-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
             <span class="score-pill-badge" [style.background]="getScoreColor(selectedExp.success_score)" style="color: white; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800;">
               Success Rate: {{ selectedExp.success_score }}/5
             </span>
             <span class="meta-date" style="font-size: 0.8rem; color: var(--color-text-tertiary); font-weight: 600;">Started: {{ formatDate(selectedExp.created_at) }}</span>
             <span class="meta-date" style="font-size: 0.8rem; color: var(--color-primary); font-weight: 600;">Archived: {{ formatDate(selectedExp.archived_at) }}</span>
+            <ng-container>
+              <span *ngIf="getSharedNames(selectedExp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); cursor: help; position: relative; overflow: visible;">
+                👥 Shared ({{ getSharedNames(selectedExp).length }})
+                <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
+                  <strong>Shared with:</strong>
+                  <span *ngFor="let name of getSharedNames(selectedExp)" style="display: block; margin-top: 2px;">• {{ name }}</span>
+                </span>
+              </span>
+            </ng-container>
           </div>
         </div>
         
@@ -227,6 +291,126 @@
           </div>
         </div>
       </div>
+      
+      <!-- Global Outcome Comments Section -->
+      <div class="global-comments-section" style="border-top: 1.5px solid var(--color-border-light); padding-top: 24px; display: flex; flex-direction: column; gap: 16px; margin-top: 12px; width: 100%;">
+        <h4 style="font-size: 1.25rem; font-weight: 850; color: var(--color-text-primary); margin: 0; display: flex; align-items: center; gap: 8px;">
+          💬 Outcome Discussion / Comments
+        </h4>
+        
+        <div class="comments-container" style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 8px;">
+          <div *ngIf="!selectedExp.comments?.length" style="color: var(--color-text-tertiary); font-style: italic; font-size: 0.88rem; padding: 16px; background: #f8fafc; border-radius: 8px; text-align: center; border: 1.5px dashed var(--color-border-light);">
+            No global comments added yet. Start the scientific conversation below.
+          </div>
+          
+          <div *ngFor="let comment of selectedExp.comments" class="global-comment-bubble" style="background: #f8fafc; border: 1.5px solid var(--color-border-light); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); animation: fadeIn 0.2s ease-out;">
+            <div class="comment-author-row" style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.88rem; font-weight: 850; color: var(--color-primary);">{{ comment.user_name }}</span>
+              <span style="font-size: 0.72rem; color: var(--color-text-tertiary); font-weight: 600;">{{ formatDate(comment.created_at) }}</span>
+            </div>
+            <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0; white-space: pre-wrap; font-weight: 500;">{{ comment.text }}</p>
+          </div>
+        </div>
+        
+        <!-- Add Comment Form -->
+        <div class="add-comment-form" style="display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; width: 100%;">
+          <textarea class="app-input" 
+                    [(ngModel)]="newCommentText" 
+                    placeholder="Type a constructive scientific review, observation, or question about this outcome..." 
+                    style="flex-grow: 1; min-height: 60px; resize: vertical; padding: 12px 14px; font-size: 0.88rem; border-radius: 8px; font-family: var(--font-sans); color: var(--color-text-body); box-sizing: border-box;"></textarea>
+          <button class="app-btn app-btn-primary" 
+                  (click)="addComment()" 
+                  [disabled]="!newCommentText.trim()"
+                  style="height: 60px; padding: 0 24px; font-weight: 800; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0;">
+            Post Comment
+          </button>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- REVOCABLE LAB SHARING MODAL -->
+  <div class="exp-modal-overlay" *ngIf="showShareModal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+    <div class="exp-modal-card" style="background: white; border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 32px; width: 90%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; position: relative;">
+      
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid var(--color-border-light); padding-bottom: 12px;">
+        <h3 style="font-size: 1.25rem; font-weight: 850; color: var(--color-text-primary); margin: 0;">Share Workflow</h3>
+        <button class="close-modal-btn" (click)="closeShareModal()" style="background: transparent; border: none; font-size: 1.15rem; font-weight: 700; color: var(--color-text-tertiary); cursor: pointer;">✕</button>
+      </div>
+      
+      <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">
+        Select the research labs you want to share **"{{ sharingExp?.title }}"** with. Shared members can review steps, images, and leave discussion comments. You can revoke access at any time.
+      </p>
+      
+      <!-- Labs Checklist -->
+      <div class="labs-checklist-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto; padding: 4px;">
+        <div *ngIf="!myLabs.length" style="font-style: italic; color: var(--color-text-tertiary); font-size: 0.88rem; text-align: center; padding: 16px;">
+          You are not currently a member of any research lab. Join a lab in the Lab portal first.
+        </div>
+        
+        <div *ngFor="let lab of myLabs" 
+             (click)="toggleLabShare(lab.id)"
+             class="lab-checkbox-row" 
+             style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1.5px solid; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+             [style.background]="isLabShared(lab.id) ? 'rgba(22, 101, 52, 0.04)' : 'white'"
+             [style.border-color]="isLabShared(lab.id) ? 'var(--color-primary)' : 'var(--color-border-light)'">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 0.9rem; font-weight: 800; color: var(--color-text-primary);">{{ lab.lab_name }}</span>
+            <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">{{ lab.lab_tagline || 'Research Group' }}</span>
+          </div>
+          <div class="checkbox-indicator" 
+               style="width: 20px; height: 20px; border-radius: 4px; border: 1.5px solid; display: flex; align-items: center; justify-content: center; font-size: 0.76rem; font-weight: 800; transition: all 0.2s;"
+               [style.background]="isLabShared(lab.id) ? 'var(--color-primary)' : 'white'"
+               [style.border-color]="isLabShared(lab.id) ? 'var(--color-primary)' : 'var(--color-border)'"
+               [style.color]="isLabShared(lab.id) ? 'white' : 'transparent'">✓</div>
+        </div>
+      </div>
+      
+      <!-- Researchers Selection -->
+      <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--color-border-light); padding-top: 14px;">
+        <span style="font-size: 0.88rem; font-weight: 850; color: var(--color-text-secondary);">Share with Researchers</span>
+        <input type="text" 
+               [(ngModel)]="researcherSearchQuery" 
+               (input)="filterResearchers()" 
+               placeholder="Search researchers by name or email..." 
+               class="app-input" 
+               style="width: 100%; padding: 8px 12px; border: 1.5px solid var(--color-border-light); border-radius: 8px; font-size: 0.82rem; outline: none; transition: border-color 0.2s;" />
+        
+        <div class="researchers-checklist-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding: 4px; border: 1.5px solid var(--color-border-light); border-radius: 8px; background: #fafafa; padding: 8px;">
+          <div *ngIf="!filteredResearchers.length" style="font-style: italic; color: var(--color-text-tertiary); font-size: 0.8rem; text-align: center; padding: 12px;">
+            No researchers found.
+          </div>
+          
+          <div *ngFor="let user of filteredResearchers" 
+               (click)="toggleUserShare(user.id)"
+               class="user-checkbox-row" 
+               style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1.5px solid; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: white;"
+               [style.background]="isUserShared(user.id) ? 'rgba(22, 101, 52, 0.04)' : 'white'"
+               [style.border-color]="isUserShared(user.id) ? 'var(--color-primary)' : 'var(--color-border-light)'">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 0.84rem; font-weight: 800; color: var(--color-text-primary);">{{ user.name }}</span>
+              <span style="font-size: 0.72rem; color: var(--color-text-tertiary);">{{ user.email }}</span>
+            </div>
+            <div class="checkbox-indicator" 
+                 style="width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; transition: all 0.2s;"
+                 [style.background]="isUserShared(user.id) ? 'var(--color-primary)' : 'white'"
+                 [style.border-color]="isUserShared(user.id) ? 'var(--color-primary)' : 'var(--color-border)'"
+                 [style.color]="isUserShared(user.id) ? 'white' : 'transparent'">✓</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Actions -->
+      <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1.5px solid var(--color-border-light); padding-top: 16px;">
+        <button class="app-btn app-btn-outline" (click)="closeShareModal()">Cancel</button>
+        <button class="app-btn app-btn-primary" 
+                (click)="saveWorkflowShares()" 
+                [disabled]="savingShares">
+          {{ savingShares ? 'Saving...' : 'Save Shares' }}
+        </button>
+      </div>
+      
     </div>
   </div>
 

@@ -76,8 +76,10 @@ async def get_current_user(
             "email": local_user.email,
             "name": local_user.name,
             "role": local_user.role,
+            "bio": local_user.bio,
             "created_at": local_user.created_at,
-            "profile_completed": True if local_user.name else False
+            "last_login": local_user.last_login,
+            "profile_completed": local_user.profile_completed or (True if local_user.name else False)
         }
     except Exception as e:
         print(f"[AUTH] Error in get_current_user: {str(e)}")

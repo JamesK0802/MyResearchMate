@@ -139,7 +139,20 @@ def update_user_profile(auth_id_str: str, name: str = None, bio: str = None):
             if bio is not None: user.bio = bio
             db.commit()
             db.refresh(user)
-            return user
+            return {
+                "id": user.id,
+                "uid": user.uid,
+                "auth_id": str(user.auth_id or user.supabase_auth_id),
+                "supabase_auth_id": str(user.supabase_auth_id or user.auth_id),
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "bio": user.bio,
+                "profile_completed": user.profile_completed or (True if user.name else False),
+                "created_at": user.created_at,
+                "last_login": user.last_login
+            }
         return None
     finally:
         db.close()
+

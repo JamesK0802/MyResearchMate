@@ -53,9 +53,15 @@ async def get_profile_by_uid(uid: str, db: Session = Depends(get_db)):
     return {
         "id": user.id,
         "uid": user.uid,
-        "name": user.name,
+        "auth_id": str(user.auth_id or user.supabase_auth_id) if (user.auth_id or user.supabase_auth_id) else None,
+        "supabase_auth_id": str(user.supabase_auth_id or user.auth_id) if (user.supabase_auth_id or user.auth_id) else None,
         "email": user.email,
-        "role": user.role
+        "name": user.name,
+        "role": user.role,
+        "bio": user.bio,
+        "profile_completed": user.profile_completed or (True if user.name else False),
+        "created_at": user.created_at,
+        "last_login": user.last_login
     }
 
 @router.post("/register-profile", response_model=UserResponse)

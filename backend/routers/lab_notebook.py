@@ -10,6 +10,10 @@ from auth.dependencies import get_current_user
 import yaml
 from PIL import Image
 from pathlib import Path
+from sqlalchemy.orm import Session
+from database.db import get_db
+from database.models import User, Lab, LabMember, WorkflowPresetTransfer, WorkflowShare
+
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -63,6 +67,19 @@ class ExperimentUpdate(BaseModel):
 class ArchiveRequest(BaseModel):
     success_score: int
 
+class CommentCreate(BaseModel):
+    text: str
+
+class PresetTransferRequest(BaseModel):
+    preset_id: str
+    to_user_id: int
+
+class WorkflowShareUpdate(BaseModel):
+    workflow_type: str  # "active" or "archive"
+    lab_ids: List[str] = []
+    user_ids: List[str] = []
+
+
 import re
 
 # --- Helper Functions ---
@@ -74,6 +91,38 @@ def generate_id():
 
 def now_iso():
     return datetime.now().isoformat()
+
+def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, directory: Path):
+    user_id = get_user_id(current_user)
+    
+    # 1. Direct ownership
+    personal_file = directory / str(user_id) / f"{exp_id}.json"
+    if personal_file.exists():
+        return personal_file, user_id
+        
+    # 2. Shared access
+    lab_memberships = db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()
+    lab_ids = [m[0] for m in lab_memberships]
+    
+    from sqlalchemy import or_
+    share = db.query(WorkflowShare).filter(
+        WorkflowShare.workflow_id == exp_id,
+        or_(
+            WorkflowShare.lab_id.in_(lab_ids) if lab_ids else False,
+            WorkflowShare.shared_with_user_id == current_user["id"],
+            WorkflowShare.shared_by_user_id == current_user["id"]
+        )
+    ).first()
+    
+    if share:
+        owner = db.query(User).filter(User.id == share.shared_by_user_id).first()
+        if owner:
+            owner_folder_id = owner.uid or owner.id
+            shared_file = directory / str(owner_folder_id) / f"{exp_id}.json"
+            if shared_file.exists():
+                return shared_file, owner_folder_id
+                
+    return None, None
 
 def delete_asset_file(user_id: Any, year: str, month: str, filename: str):
     file_path = ASSETS_DIR / str(user_id) / year / month / filename
@@ -255,29 +304,35 @@ async def list_presets(current_user: dict = Depends(get_current_user)):
         default_presets = [
             {
                 "id": generate_id(),
-                "title": "Western Blot",
-                "description": "Standard Western Blot protocol",
+                "title": "Plant CRISPR Editing Full Workflow",
+                "description": "Full plant CRISPR workflow from target selection and cloning, through E. coli plasmid amplification, Agrobacterium transformation, plant infection, plant DNA extraction, sequencing, and CRISPR editing analysis.",
                 "steps": [
-                    {"id": generate_id(), "title": "Sample preparation", "description": "Lyse cells and quantify protein"},
-                    {"id": generate_id(), "title": "Gel loading", "description": "Load samples onto SDS-PAGE gel"},
-                    {"id": generate_id(), "title": "Transfer", "description": "Transfer proteins to membrane"},
-                    {"id": generate_id(), "title": "Blocking", "description": "Block membrane in 5% milk"},
-                    {"id": generate_id(), "title": "Primary antibody incubation", "description": "Incubate overnight at 4C"},
-                    {"id": generate_id(), "title": "Washing", "description": "Wash 3x with TBST"},
-                    {"id": generate_id(), "title": "Secondary antibody incubation", "description": "Incubate for 1 hr at RT"},
-                    {"id": generate_id(), "title": "Imaging", "description": "Develop and image"},
-                    {"id": generate_id(), "title": "Analysis", "description": "Quantify bands"}
-                ]
-            },
-            {
-                "id": generate_id(),
-                "title": "PCR",
-                "description": "Polymerase Chain Reaction",
-                "steps": [
-                    {"id": generate_id(), "title": "Master Mix prep", "description": "Prepare master mix"},
-                    {"id": generate_id(), "title": "Template addition", "description": "Add DNA template"},
-                    {"id": generate_id(), "title": "Thermocycling", "description": "Run PCR program"},
-                    {"id": generate_id(), "title": "Gel check", "description": "Run agarose gel to verify product"}
+                    {"id": generate_id(), "title": "Target Selection", "description": "Choose the gene or genomic region to edit. Confirm the editing goal such as knockout, insertion, or mutation."},
+                    {"id": generate_id(), "title": "gRNA Design", "description": "Design the guide RNA sequence for the selected target. Check PAM site, specificity, and possible off-targets."},
+                    {"id": generate_id(), "title": "Cloning Setup", "description": "Prepare vector and insert. Assemble the gRNA or target insert into the CRISPR plasmid by ligation or assembly."},
+                    {"id": generate_id(), "title": "E. coli Transformation", "description": "Introduce the assembled plasmid into competent E. coli using heat shock or electroporation."},
+                    {"id": generate_id(), "title": "Antibiotic Plate Selection", "description": "Plate transformed E. coli on LB agar with the correct antibiotic such as Amp, Kan, or Cm."},
+                    {"id": generate_id(), "title": "Colony Picking & Overnight Culture", "description": "Pick a single colony, streak a backup plate, and inoculate LB liquid culture with the correct antibiotic for overnight shaking incubation."},
+                    {"id": generate_id(), "title": "Miniprep", "description": "Extract plasmid DNA from overnight E. coli culture using centrifugation, lysis buffer, purification column, wash, and elution."},
+                    {"id": generate_id(), "title": "Nanodrop", "description": "Measure plasmid DNA concentration and purity. Record concentration, 260/280, and 260/230 values."},
+                    {"id": generate_id(), "title": "PCR Setup", "description": "Prepare PCR reaction using plasmid DNA template, primers, mastermix, and nuclease-free water."},
+                    {"id": generate_id(), "title": "PCR Amplification", "description": "Run thermocycler to amplify the target region or insert using denaturation, annealing, and extension cycles."},
+                    {"id": generate_id(), "title": "Gel Electrophoresis", "description": "Run agarose gel to check PCR success and confirm expected DNA fragment size."},
+                    {"id": generate_id(), "title": "PCR Cleanup", "description": "Purify PCR product to remove primers, enzymes, salts, and buffer components before sequencing."},
+                    {"id": generate_id(), "title": "Plasmid Sequencing Verification", "description": "Submit cleaned PCR product or plasmid sample for sequencing to confirm correct gRNA or insert sequence."},
+                    {"id": generate_id(), "title": "Agrobacterium Transformation", "description": "Introduce verified CRISPR plasmid into Agrobacterium for plant delivery."},
+                    {"id": generate_id(), "title": "Agrobacterium Selection & Culture", "description": "Select transformed Agrobacterium on antibiotic plate, pick colony, and prepare liquid Agro culture."},
+                    {"id": generate_id(), "title": "Plant Infection / Transformation", "description": "Infect plant tissue using Agrobacterium-mediated transformation. Tissue may be leaf, root, callus, or other protocol-specific material."},
+                    {"id": generate_id(), "title": "T-DNA Transfer", "description": "Allow Agrobacterium to transfer T-DNA carrying the CRISPR construct into plant cells."},
+                    {"id": generate_id(), "title": "Genome Editing", "description": "Cas9 and gRNA are expressed in plant cells. Target DNA is cut and repaired, creating possible indels or mutations."},
+                    {"id": generate_id(), "title": "Plant Tissue Collection", "description": "Collect infected or transformed plant tissue for downstream DNA extraction."},
+                    {"id": generate_id(), "title": "Plant DNA Extraction", "description": "Extract genomic DNA from plant tissue using grinding, lysis buffer, debris removal, and DNA purification."},
+                    {"id": generate_id(), "title": "Plant PCR Setup", "description": "Prepare PCR reaction using plant genomic DNA as template and primers targeting the edited region."},
+                    {"id": generate_id(), "title": "Plant PCR Amplification", "description": "Amplify the edited target region from plant genomic DNA."},
+                    {"id": generate_id(), "title": "Plant Gel Electrophoresis", "description": "Run gel to confirm plant PCR product size and amplification success."},
+                    {"id": generate_id(), "title": "Plant PCR Cleanup", "description": "Purify plant PCR product for sequencing by removing contaminants, primers, enzymes, and salts."},
+                    {"id": generate_id(), "title": "Plant Sequencing", "description": "Submit purified plant PCR product for Nanopore, Sanger, or NGS sequencing."},
+                    {"id": generate_id(), "title": "CRISPR Analysis", "description": "Analyze sequencing reads against WT/reference sequence. Detect indels or mutations and calculate editing efficiency."}
                 ]
             }
         ]
@@ -349,8 +404,93 @@ async def delete_preset(preset_id: str, current_user: dict = Depends(get_current
     return {"status": "success"}
 
 # --- Experiments ---
+@router.get("/experiments/shared")
+async def get_shared_workflows(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    from sqlalchemy import or_
+    # Find all labs that current_user is member of
+    lab_memberships = db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()
+    lab_ids = [m[0] for m in lab_memberships]
+    
+    # Query database shares (matching lab memberships, direct user shares, or shared by the user)
+    shares = db.query(WorkflowShare).filter(
+        or_(
+            WorkflowShare.lab_id.in_(lab_ids) if lab_ids else False,
+            WorkflowShare.shared_with_user_id == current_user["id"],
+            WorkflowShare.shared_by_user_id == current_user["id"]
+        )
+    ).all()
+    
+    shared_workflows = []
+    processed_workflow_ids = set()
+    
+    for share in shares:
+        if share.workflow_id in processed_workflow_ids:
+            continue
+            
+        # Get the owner details
+        owner = db.query(User).filter(User.id == share.shared_by_user_id).first()
+        if not owner:
+            continue
+            
+        owner_folder_id = owner.uid or owner.id
+        
+        # Read the file - dynamically search active and archive directories for high robustness
+        filepath = EXP_ACTIVE_DIR / str(owner_folder_id) / f"{share.workflow_id}.json"
+        workflow_type = "active"
+        if not filepath.exists():
+            filepath = EXP_ARCHIVE_DIR / str(owner_folder_id) / f"{share.workflow_id}.json"
+            workflow_type = "archive"
+            
+        if not filepath.exists():
+            continue
+            
+        try:
+            data = json.loads(filepath.read_text())
+            if owner.id == current_user["id"]:
+                data["shared_by_name"] = "You"
+            else:
+                data["shared_by_name"] = owner.name or owner.email or "Unknown Researcher"
+            data["workflow_type"] = workflow_type
+            
+            # Fetch all lab names this workflow is shared with
+            lab_shares_query = db.query(Lab.lab_name).join(
+                WorkflowShare, Lab.id == WorkflowShare.lab_id
+            ).filter(
+                WorkflowShare.workflow_id == share.workflow_id
+            )
+            # If not owner, filter lab names to only ones the current user is member of
+            if owner.id != current_user["id"]:
+                lab_shares_query = lab_shares_query.filter(WorkflowShare.lab_id.in_(lab_ids))
+            data["shared_with_labs"] = [l[0] for l in lab_shares_query.all()]
+            data["shared_labs"] = data["shared_with_labs"]
+            
+            # Fetch all individual user names/emails this workflow is shared with
+            user_shares_query = db.query(User.name, User.email).join(
+                WorkflowShare, User.id == WorkflowShare.shared_with_user_id
+            ).filter(
+                WorkflowShare.workflow_id == share.workflow_id
+            ).all()
+            data["shared_with_users"] = [u[0] or u[1] for u in user_shares_query]
+            data["shared_users"] = data["shared_with_users"]
+            
+            shared_workflows.append(data)
+            processed_workflow_ids.add(share.workflow_id)
+        except Exception as e:
+            continue
+            
+    shared_workflows.sort(key=lambda x: x.get("updated_at", x.get("created_at", "")), reverse=True)
+    return shared_workflows
+
+
+
 @router.get("/experiments/active")
-async def list_active_experiments(current_user: dict = Depends(get_current_user)):
+async def list_active_experiments(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     user_id = get_user_id(current_user)
     dir_path = EXP_ACTIVE_DIR / str(user_id)
     if not dir_path.exists():
@@ -359,15 +499,40 @@ async def list_active_experiments(current_user: dict = Depends(get_current_user)
     exps = []
     for f in dir_path.glob("*.json"):
         try:
-            exps.append(json.loads(f.read_text()))
-        except:
+            exp_data = json.loads(f.read_text())
+            shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_data["id"]).all()
+            exp_data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
+            exp_data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+            
+            # Fetch lab names
+            shared_lab_ids = [s.lab_id for s in shares if s.lab_id]
+            if shared_lab_ids:
+                labs = db.query(Lab.lab_name).filter(Lab.id.in_(shared_lab_ids)).all()
+                exp_data["shared_labs"] = [l[0] for l in labs]
+            else:
+                exp_data["shared_labs"] = []
+                
+            # Fetch user names/emails
+            shared_user_ids = [s.shared_with_user_id for s in shares if s.shared_with_user_id]
+            if shared_user_ids:
+                users = db.query(User.name, User.email).filter(User.id.in_(shared_user_ids)).all()
+                exp_data["shared_users"] = [u[0] or u[1] for u in users]
+            else:
+                exp_data["shared_users"] = []
+                
+            exps.append(exp_data)
+        except Exception as e:
+            print(f"Error loading active experiment: {e}")
             pass
     
     exps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return exps
 
 @router.get("/experiments/archive")
-async def list_archived_experiments(current_user: dict = Depends(get_current_user)):
+async def list_archived_experiments(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     user_id = get_user_id(current_user)
     dir_path = EXP_ARCHIVE_DIR / str(user_id)
     if not dir_path.exists():
@@ -376,12 +541,35 @@ async def list_archived_experiments(current_user: dict = Depends(get_current_use
     exps = []
     for f in dir_path.glob("*.json"):
         try:
-            exps.append(json.loads(f.read_text()))
-        except:
+            exp_data = json.loads(f.read_text())
+            shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_data["id"]).all()
+            exp_data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
+            exp_data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+            
+            # Fetch lab names
+            shared_lab_ids = [s.lab_id for s in shares if s.lab_id]
+            if shared_lab_ids:
+                labs = db.query(Lab.lab_name).filter(Lab.id.in_(shared_lab_ids)).all()
+                exp_data["shared_labs"] = [l[0] for l in labs]
+            else:
+                exp_data["shared_labs"] = []
+                
+            # Fetch user names/emails
+            shared_user_ids = [s.shared_with_user_id for s in shares if s.shared_with_user_id]
+            if shared_user_ids:
+                users = db.query(User.name, User.email).filter(User.id.in_(shared_user_ids)).all()
+                exp_data["shared_users"] = [u[0] or u[1] for u in users]
+            else:
+                exp_data["shared_users"] = []
+                
+            exps.append(exp_data)
+        except Exception as e:
+            print(f"Error loading archived experiment: {e}")
             pass
             
     exps.sort(key=lambda x: x.get("archived_at", ""), reverse=True)
     return exps
+
 
 @router.post("/experiments")
 async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(get_current_user)):
@@ -442,27 +630,41 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
     return data
 
 @router.get("/experiments/{exp_id}")
-async def get_experiment(exp_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    
+async def get_experiment(
+    exp_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     # Check active first
-    f = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if f.exists():
-        return json.loads(f.read_text())
+    f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ACTIVE_DIR)
+    if f and f.exists():
+        data = json.loads(f.read_text())
+        shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
+        data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
+        data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+        return data
         
     # Check archive
-    f = EXP_ARCHIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if f.exists():
-        return json.loads(f.read_text())
+    f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ARCHIVE_DIR)
+    if f and f.exists():
+        data = json.loads(f.read_text())
+        shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
+        data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
+        data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+        return data
         
     raise HTTPException(status_code=404, detail="Experiment not found")
 
 @router.put("/experiments/{exp_id}")
-async def update_experiment(exp_id: str, exp_update: ExperimentUpdate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    f = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if not f.exists():
-        raise HTTPException(status_code=404, detail="Active experiment not found")
+async def update_experiment(
+    exp_id: str, 
+    exp_update: ExperimentUpdate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ACTIVE_DIR)
+    if not f or not f.exists():
+        raise HTTPException(status_code=404, detail="Active experiment not found or unauthorized")
         
     data = json.loads(f.read_text())
     
@@ -479,7 +681,7 @@ async def update_experiment(exp_id: str, exp_update: ExperimentUpdate, current_u
                 new_images.add(img)
                 
         deleted_images = old_images - new_images
-        pattern = re.compile(rf"/api/lab-notebook/assets/{user_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
+        pattern = re.compile(rf"/api/lab-notebook/assets/{owner_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
         for img_url in deleted_images:
             matches = pattern.findall(img_url)
             for year, month, filename in matches:
@@ -491,8 +693,8 @@ async def update_experiment(exp_id: str, exp_update: ExperimentUpdate, current_u
                     if "." in filename:
                         parts = filename.rsplit(".", 1)
                         thumb_name = f"{parts[0]}_thumb.{parts[1]}"
-                    delete_asset_file(user_id, year, month, thumb_name)
-                delete_asset_file(user_id, year, month, base_name)
+                    delete_asset_file(owner_id, year, month, thumb_name)
+                delete_asset_file(owner_id, year, month, base_name)
 
     if exp_update.title is not None: data["title"] = exp_update.title
     if exp_update.description is not None: data["description"] = exp_update.description
@@ -537,15 +739,19 @@ async def delete_experiment(exp_id: str, current_user: dict = Depends(get_curren
     return {"status": "success"}
 
 @router.post("/experiments/{exp_id}/archive")
-async def archive_experiment(exp_id: str, req: ArchiveRequest, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    active_f = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
-    archive_dir = EXP_ARCHIVE_DIR / str(user_id)
+async def archive_experiment(
+    exp_id: str, 
+    req: ArchiveRequest, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    active_f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ACTIVE_DIR)
+    if not active_f or not active_f.exists():
+        raise HTTPException(status_code=404, detail="Active experiment not found or unauthorized")
+        
+    archive_dir = EXP_ARCHIVE_DIR / str(owner_id)
     archive_dir.mkdir(parents=True, exist_ok=True)
     
-    if not active_f.exists():
-        raise HTTPException(status_code=404, detail="Active experiment not found")
-        
     data = json.loads(active_f.read_text())
     data["success_score"] = req.success_score
     data["archived_at"] = now_iso()
@@ -556,6 +762,7 @@ async def archive_experiment(exp_id: str, req: ArchiveRequest, current_user: dic
     
     active_f.unlink() # Remove from active
     return data
+
 
 # --- Assets ---
 @router.post("/assets/upload")
@@ -630,4 +837,224 @@ async def get_asset(user_id: str, year: str, month: str, filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Asset not found")
     return FileResponse(path=file_path)
+
+# --- Archived Experiment Comments ---
+@router.post("/experiments/{exp_id}/archive/comment")
+async def add_archive_comment(
+    exp_id: str,
+    comment: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    # Find experiment JSON file in archive
+    archive_file = None
+    for f in EXP_ARCHIVE_DIR.glob(f"**/{exp_id}.json"):
+        archive_file = f
+        break
+        
+    if not archive_file or not archive_file.exists():
+        # Check active directory just in case the experiment is not yet archived
+        for f in EXP_ACTIVE_DIR.glob(f"**/{exp_id}.json"):
+            archive_file = f
+            break
+            
+    if not archive_file or not archive_file.exists():
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    try:
+        data = json.loads(archive_file.read_text())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read experiment: {str(e)}")
+        
+    # Append the comment
+    if "comments" not in data:
+        data["comments"] = []
+        
+    new_comment = {
+        "id": str(uuid.uuid4()),
+        "text": comment.text,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name") or current_user.get("email") or "Unknown",
+        "created_at": now_iso()
+    }
+    data["comments"].append(new_comment)
+    data["updated_at"] = now_iso()
+    
+    # Save back to disk
+    try:
+        archive_file.write_text(json.dumps(data, indent=2))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save comment: {str(e)}")
+        
+    return new_comment
+
+# --- Workflow Preset Transfers ---
+@router.post("/presets/send")
+async def send_workflow_preset(
+    req: PresetTransferRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = get_user_id(current_user)
+    # Verify the preset file exists and is owned by current_user
+    preset_file = PRESETS_DIR / str(user_id) / f"{req.preset_id}.json"
+    if not preset_file.exists():
+        raise HTTPException(status_code=404, detail="Preset template not found or unauthorized")
+        
+    try:
+        preset_data = json.loads(preset_file.read_text())
+    except:
+        raise HTTPException(status_code=500, detail="Failed to parse preset template")
+        
+    # Create DB entry for transfer
+    transfer = WorkflowPresetTransfer(
+        preset_id=req.preset_id,
+        preset_data=preset_data,
+        sender_user_id=current_user["id"],
+        receiver_user_id=req.to_user_id,
+        status="pending"
+    )
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+    
+    return {"message": "Preset transfer sent successfully", "transfer_id": str(transfer.id)}
+
+@router.get("/presets/transfers/incoming")
+async def get_incoming_workflow_transfers(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    transfers = db.query(WorkflowPresetTransfer).filter(
+        WorkflowPresetTransfer.receiver_user_id == current_user["id"],
+        WorkflowPresetTransfer.status == "pending"
+    ).all()
+    
+    result = []
+    for t in transfers:
+        sender = db.query(User).filter(User.id == t.sender_user_id).first()
+        result.append({
+            "id": str(t.id),
+            "preset_id": t.preset_id,
+            "preset_name": t.preset_data.get("title") or "Unnamed Template",
+            "sender_name": sender.name if sender else "Unknown",
+            "created_at": t.created_at
+        })
+    return result
+
+@router.post("/presets/transfers/{transfer_id}/accept")
+async def accept_workflow_transfer(
+    transfer_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    transfer = db.query(WorkflowPresetTransfer).filter(
+        WorkflowPresetTransfer.id == uuid.UUID(transfer_id),
+        WorkflowPresetTransfer.receiver_user_id == current_user["id"],
+        WorkflowPresetTransfer.status == "pending"
+    ).first()
+    
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer request not found or already processed")
+        
+    user_id = get_user_id(current_user)
+    user_presets_dir = PRESETS_DIR / str(user_id)
+    user_presets_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save the preset template to user directory
+    new_preset_id = generate_id()
+    preset_data = dict(transfer.preset_data)
+    preset_data["id"] = new_preset_id
+    preset_data["title"] = f"{preset_data.get('title', 'Template')} (Shared)"
+    preset_data["created_at"] = now_iso()
+    
+    preset_file = user_presets_dir / f"{new_preset_id}.json"
+    preset_file.write_text(json.dumps(preset_data, indent=2))
+    
+    # Update transfer status
+    transfer.status = "accepted"
+    db.commit()
+    
+    return {"message": "Preset template accepted successfully", "preset_id": new_preset_id}
+
+@router.post("/presets/transfers/{transfer_id}/reject")
+async def reject_workflow_transfer(
+    transfer_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    transfer = db.query(WorkflowPresetTransfer).filter(
+        WorkflowPresetTransfer.id == uuid.UUID(transfer_id),
+        WorkflowPresetTransfer.receiver_user_id == current_user["id"]
+    ).first()
+    
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer request not found")
+        
+    transfer.status = "rejected"
+    db.commit()
+    
+    return {"message": "Preset template transfer rejected"}
+
+# --- Revocable Lab Workflow Sharing ---
+@router.get("/experiments/{exp_id}/shares")
+async def get_workflow_shares(
+    exp_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
+    return {
+        "lab_ids": [str(s.lab_id) for s in shares if s.lab_id],
+        "user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+    }
+
+@router.put("/experiments/{exp_id}/shares")
+async def update_workflow_shares(
+    exp_id: str,
+    payload: WorkflowShareUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = get_user_id(current_user)
+    
+    # Verify that the user owns the experiment
+    active_path = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
+    archive_path = EXP_ARCHIVE_DIR / str(user_id) / f"{exp_id}.json"
+    if not active_path.exists() and not archive_path.exists():
+        raise HTTPException(status_code=403, detail="Not authorized to share this workflow")
+        
+    # Delete existing shares
+    db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).delete()
+    
+    # Create new lab shares
+    for lab_id_str in payload.lab_ids:
+        try:
+            db.add(WorkflowShare(
+                workflow_id=exp_id,
+                workflow_type=payload.workflow_type,
+                lab_id=uuid.UUID(lab_id_str),
+                shared_by_user_id=current_user["id"]
+            ))
+        except Exception as e:
+            continue
+            
+    # Create new individual user shares
+    for user_id_str in payload.user_ids:
+        try:
+            db.add(WorkflowShare(
+                workflow_id=exp_id,
+                workflow_type=payload.workflow_type,
+                shared_with_user_id=int(user_id_str),
+                shared_by_user_id=current_user["id"]
+            ))
+        except Exception as e:
+            continue
+            
+    db.commit()
+    return {"message": "Workflow sharing configuration updated successfully"}
+
+
+
+
 

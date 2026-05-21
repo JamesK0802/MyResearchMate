@@ -244,6 +244,40 @@ a { color: inherit; }
   border-color: #ef4444;
 }
 
+.app-btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--color-primary);
+  color: var(--color-primary);
+}
+.app-btn-outline:hover:not(:disabled) {
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.app-btn-success-outline {
+  background: transparent;
+  border: 1.5px solid var(--color-success);
+  color: var(--color-success);
+}
+.app-btn-success-outline:hover:not(:disabled) {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.app-btn-danger-outline {
+  background: transparent;
+  border: 1.5px solid var(--color-error);
+  color: var(--color-error);
+}
+.app-btn-danger-outline:hover:not(:disabled) {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+
 .app-btn-sm { padding: 7px 14px; font-size: var(--text-sm); border-radius: var(--radius-sm); }
 .app-btn-lg { padding: 14px 32px; font-size: var(--text-md); border-radius: var(--radius-lg); }
 
@@ -628,7 +662,8 @@ a { color: inherit; }
   border-color: #1e293b transparent transparent transparent;
 }
 
-.info-icon:hover .tooltip-text {
+.info-icon:hover .tooltip-text,
+.badge-shared:hover .tooltip-text {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%) translateY(0);
