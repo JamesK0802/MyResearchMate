@@ -61,6 +61,19 @@ JOBS_DIR = os.path.join(BASE_DIR, "data", "jobs")
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 
+# Startup Clean: Sweep any leftover folders from previously crashed server sessions
+if os.path.exists(JOBS_DIR):
+    try:
+        for item in os.listdir(JOBS_DIR):
+            item_path = os.path.join(JOBS_DIR, item)
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            else:
+                os.remove(item_path)
+        print(f"[INIT] 100% Cleaned up orphaned job folders in {JOBS_DIR}")
+    except Exception as e:
+        print(f"[WARNING] Failed to clean up orphaned jobs: {str(e)}")
+
 # ── Status helper (Process-Safe assignment) ──
 def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = None, stage: str = None, result = None, error = None):
     if tasks_proxy is not None and task_id in tasks_proxy:

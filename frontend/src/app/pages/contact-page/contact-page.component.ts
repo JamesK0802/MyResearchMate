@@ -130,5 +130,5 @@ import { RouterLink } from '@angular/router';
   `]
 })
 export class ContactPageComponent {
-  version = '3.1.1';
+  version = '3.1.2';
 }

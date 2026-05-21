@@ -4,7 +4,7 @@
  */
 export const environment = {
   production: true,
-  version: '3.1.1',
+  version: '3.1.2',
   supabaseUrl: 'https://your-project-id.supabase.co',
   supabaseAnonKey: 'your-anon-key-here',
   allowedEmailDomain: 'anu.edu.au',
