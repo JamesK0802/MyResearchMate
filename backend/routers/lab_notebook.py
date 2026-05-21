@@ -16,7 +16,8 @@ from database.models import User, Lab, LabMember, WorkflowPresetTransfer, Workfl
 
 
 # Paths
-BASE_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+BASE_DIR = Path(os.getenv("LAB_NOTEBOOK_DATA_DIR", str(DEFAULT_DATA_DIR))).resolve()
 NOTES_DIR = BASE_DIR / "notes"
 EXP_ACTIVE_DIR = BASE_DIR / "experiments" / "active"
 EXP_ARCHIVE_DIR = BASE_DIR / "experiments" / "archive"
@@ -26,6 +27,7 @@ ASSETS_DIR = BASE_DIR / "assets"
 # Ensure dirs exist
 for d in [NOTES_DIR, EXP_ACTIVE_DIR, EXP_ARCHIVE_DIR, PRESETS_DIR, ASSETS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+print(f"[LAB_NOTEBOOK] Using data directory: {BASE_DIR}")
 
 router = APIRouter(prefix="/lab-notebook", tags=["lab-notebook"])
 
@@ -82,9 +84,67 @@ class WorkflowShareUpdate(BaseModel):
 
 import re
 
+ASSET_URL_PATTERN = re.compile(r"/api/lab-notebook/assets/([^/]+)/(\d{4})/(\d{2})/([^)\"\s>]+)")
+
 # --- Helper Functions ---
 def get_user_id(current_user: dict):
     return current_user.get("uid") or current_user.get("id")
+
+def get_storage_keys(*values):
+    keys = []
+    for value in values:
+        if value is None:
+            continue
+        key = str(value)
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+def get_user_storage_keys(current_user: dict):
+    return get_storage_keys(current_user.get("uid"), current_user.get("id"))
+
+def get_primary_user_storage_key(current_user: dict):
+    keys = get_user_storage_keys(current_user)
+    if not keys:
+        raise HTTPException(status_code=400, detail="User storage key is missing")
+    return keys[0]
+
+def get_existing_user_dirs(base_dir: Path, current_user: dict):
+    dirs = []
+    for key in get_user_storage_keys(current_user):
+        dir_path = base_dir / key
+        if dir_path.exists() and dir_path.is_dir():
+            dirs.append(dir_path)
+    return dirs
+
+def get_user_dir(base_dir: Path, current_user: dict, create: bool = False):
+    existing_dirs = get_existing_user_dirs(base_dir, current_user)
+    if existing_dirs:
+        return existing_dirs[0]
+
+    dir_path = base_dir / get_primary_user_storage_key(current_user)
+    if create:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
+
+def find_user_file(base_dir: Path, current_user: dict, filename: str):
+    for key in get_user_storage_keys(current_user):
+        file_path = base_dir / key / filename
+        if file_path.exists():
+            return file_path, key
+    return None, None
+
+def iter_user_files(base_dir: Path, current_user: dict, pattern: str):
+    seen = set()
+    for dir_path in get_existing_user_dirs(base_dir, current_user):
+        for file_path in dir_path.glob(pattern):
+            if file_path in seen:
+                continue
+            seen.add(file_path)
+            yield file_path
+
+def iter_asset_matches(content: str):
+    return ASSET_URL_PATTERN.findall(content)
 
 def generate_id():
     return str(uuid.uuid4())
@@ -93,12 +153,11 @@ def now_iso():
     return datetime.now().isoformat()
 
 def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, directory: Path):
-    user_id = get_user_id(current_user)
-    
     # 1. Direct ownership
-    personal_file = directory / str(user_id) / f"{exp_id}.json"
-    if personal_file.exists():
-        return personal_file, user_id
+    for user_key in get_user_storage_keys(current_user):
+        personal_file = directory / user_key / f"{exp_id}.json"
+        if personal_file.exists():
+            return personal_file, user_key
         
     # 2. Shared access
     lab_memberships = db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()
@@ -117,25 +176,23 @@ def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, 
     if share:
         owner = db.query(User).filter(User.id == share.shared_by_user_id).first()
         if owner:
-            owner_folder_id = owner.uid or owner.id
-            shared_file = directory / str(owner_folder_id) / f"{exp_id}.json"
-            if shared_file.exists():
-                return shared_file, owner_folder_id
+            for owner_key in get_storage_keys(owner.uid, owner.id):
+                shared_file = directory / owner_key / f"{exp_id}.json"
+                if shared_file.exists():
+                    return shared_file, owner_key
                 
     return None, None
 
-def delete_asset_file(user_id: Any, year: str, month: str, filename: str):
-    file_path = ASSETS_DIR / str(user_id) / year / month / filename
+def delete_asset_file(owner_key: Any, year: str, month: str, filename: str):
+    file_path = ASSETS_DIR / str(owner_key) / year / month / filename
     if file_path.exists():
         try:
             file_path.unlink()
         except Exception as e:
             print(f"Error deleting asset file {file_path}: {e}")
 
-def delete_assets_from_content(content: str, user_id: Any):
-    pattern = re.compile(rf"/api/lab-notebook/assets/{user_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
-    matches = pattern.findall(content)
-    for year, month, filename in matches:
+def delete_assets_from_content(content: str, user_id: Any = None):
+    for owner_key, year, month, filename in iter_asset_matches(content):
         base_name = filename
         if "_thumb" in filename:
             base_name = filename.replace("_thumb", "")
@@ -144,15 +201,13 @@ def delete_assets_from_content(content: str, user_id: Any):
             if "." in filename:
                 parts = filename.rsplit(".", 1)
                 thumb_name = f"{parts[0]}_thumb.{parts[1]}"
-            delete_asset_file(user_id, year, month, thumb_name)
-        delete_asset_file(user_id, year, month, base_name)
+            delete_asset_file(owner_key, year, month, thumb_name)
+        delete_asset_file(owner_key, year, month, base_name)
 
-def delete_assets_from_experiment(data: dict, user_id: Any):
-    pattern = re.compile(rf"/api/lab-notebook/assets/{user_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
+def delete_assets_from_experiment(data: dict, user_id: Any = None):
     for step in data.get("steps", []):
         for img_url in step.get("images", []):
-            matches = pattern.findall(img_url)
-            for year, month, filename in matches:
+            for owner_key, year, month, filename in iter_asset_matches(img_url):
                 base_name = filename
                 if "_thumb" in filename:
                     base_name = filename.replace("_thumb", "")
@@ -161,19 +216,18 @@ def delete_assets_from_experiment(data: dict, user_id: Any):
                     if "." in filename:
                         parts = filename.rsplit(".", 1)
                         thumb_name = f"{parts[0]}_thumb.{parts[1]}"
-                    delete_asset_file(user_id, year, month, thumb_name)
-                delete_asset_file(user_id, year, month, base_name)
+                    delete_asset_file(owner_key, year, month, thumb_name)
+                delete_asset_file(owner_key, year, month, base_name)
 
 # --- Notes ---
 @router.get("/notes")
 async def list_notes(current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    user_notes_dir = NOTES_DIR / str(user_id)
-    if not user_notes_dir.exists():
+    user_note_dirs = get_existing_user_dirs(NOTES_DIR, current_user)
+    if not user_note_dirs:
         return []
     
-    notes = []
-    for f in user_notes_dir.glob("*.md"):
+    notes_by_id = {}
+    for f in iter_user_files(NOTES_DIR, current_user, "*.md"):
         try:
             content = f.read_text()
             if content.startswith("---"):
@@ -181,19 +235,21 @@ async def list_notes(current_user: dict = Depends(get_current_user)):
                 if len(parts) >= 3:
                     meta = yaml.safe_load(parts[1])
                     if meta:
-                        notes.append(meta)
+                        note_id = meta.get("id") or f.stem
+                        previous = notes_by_id.get(note_id)
+                        if not previous or meta.get("updated_at", "") >= previous.get("updated_at", ""):
+                            notes_by_id[note_id] = meta
         except Exception as e:
             print(f"Error reading note {f}: {e}")
     
+    notes = list(notes_by_id.values())
     # Sort by updated_at descending
     notes.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
     return notes
 
 @router.post("/notes")
 async def create_note(note: NoteCreate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    user_notes_dir = NOTES_DIR / str(user_id)
-    user_notes_dir.mkdir(parents=True, exist_ok=True)
+    user_notes_dir = get_user_dir(NOTES_DIR, current_user, create=True)
     
     note_id = generate_id()
     now = now_iso()
@@ -215,9 +271,8 @@ async def create_note(note: NoteCreate, current_user: dict = Depends(get_current
 
 @router.get("/notes/{note_id}")
 async def get_note(note_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    note_file = NOTES_DIR / str(user_id) / f"{note_id}.md"
-    if not note_file.exists():
+    note_file, _ = find_user_file(NOTES_DIR, current_user, f"{note_id}.md")
+    if not note_file:
         raise HTTPException(status_code=404, detail="Note not found")
     
     content = note_file.read_text()
@@ -232,9 +287,8 @@ async def get_note(note_id: str, current_user: dict = Depends(get_current_user))
 
 @router.put("/notes/{note_id}")
 async def update_note(note_id: str, note: NoteCreate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    note_file = NOTES_DIR / str(user_id) / f"{note_id}.md"
-    if not note_file.exists():
+    note_file, _ = find_user_file(NOTES_DIR, current_user, f"{note_id}.md")
+    if not note_file:
         raise HTTPException(status_code=404, detail="Note not found")
         
     created_at = now_iso()
@@ -248,11 +302,10 @@ async def update_note(note_id: str, note: NoteCreate, current_user: dict = Depen
                 old_body = parts[2]
                 
                 # Check for removed images
-                pattern = re.compile(rf"/api/lab-notebook/assets/{user_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
-                old_imgs = set(pattern.findall(old_body))
-                new_imgs = set(pattern.findall(note.body))
+                old_imgs = set(iter_asset_matches(old_body))
+                new_imgs = set(iter_asset_matches(note.body))
                 deleted_imgs = old_imgs - new_imgs
-                for year, month, filename in deleted_imgs:
+                for owner_key, year, month, filename in deleted_imgs:
                     base_name = filename
                     if "_thumb" in filename:
                         base_name = filename.replace("_thumb", "")
@@ -261,8 +314,8 @@ async def update_note(note_id: str, note: NoteCreate, current_user: dict = Depen
                         if "." in filename:
                             parts = filename.rsplit(".", 1)
                             thumb_name = f"{parts[0]}_thumb.{parts[1]}"
-                        delete_asset_file(user_id, year, month, thumb_name)
-                    delete_asset_file(user_id, year, month, base_name)
+                        delete_asset_file(owner_key, year, month, thumb_name)
+                    delete_asset_file(owner_key, year, month, base_name)
     except Exception as e:
         print(f"Error checking deleted note body images: {e}")
         
@@ -282,12 +335,11 @@ async def update_note(note_id: str, note: NoteCreate, current_user: dict = Depen
 
 @router.delete("/notes/{note_id}")
 async def delete_note(note_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    note_file = NOTES_DIR / str(user_id) / f"{note_id}.md"
-    if note_file.exists():
+    note_file, _ = find_user_file(NOTES_DIR, current_user, f"{note_id}.md")
+    if note_file and note_file.exists():
         try:
             content = note_file.read_text()
-            delete_assets_from_content(content, user_id)
+            delete_assets_from_content(content)
         except Exception as e:
             print(f"Error scanning deleted note assets: {e}")
         note_file.unlink()
@@ -296,11 +348,10 @@ async def delete_note(note_id: str, current_user: dict = Depends(get_current_use
 # --- Workflow Presets ---
 @router.get("/presets")
 async def list_presets(current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    user_presets_dir = PRESETS_DIR / str(user_id)
-    if not user_presets_dir.exists():
+    user_presets_dirs = get_existing_user_dirs(PRESETS_DIR, current_user)
+    if not user_presets_dirs:
         # Create some default presets if empty
-        user_presets_dir.mkdir(parents=True, exist_ok=True)
+        user_presets_dir = get_user_dir(PRESETS_DIR, current_user, create=True)
         default_presets = [
             {
                 "id": generate_id(),
@@ -339,19 +390,18 @@ async def list_presets(current_user: dict = Depends(get_current_user)):
         for preset in default_presets:
             (user_presets_dir / f"{preset['id']}.json").write_text(json.dumps(preset, indent=2))
             
-    presets = []
-    for f in user_presets_dir.glob("*.json"):
+    presets_by_id = {}
+    for f in iter_user_files(PRESETS_DIR, current_user, "*.json"):
         try:
-            presets.append(json.loads(f.read_text()))
+            preset_data = json.loads(f.read_text())
+            presets_by_id[preset_data["id"]] = preset_data
         except:
             pass
-    return presets
+    return list(presets_by_id.values())
 
 @router.post("/presets")
 async def create_preset(preset: PresetCreate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    user_presets_dir = PRESETS_DIR / str(user_id)
-    user_presets_dir.mkdir(parents=True, exist_ok=True)
+    user_presets_dir = get_user_dir(PRESETS_DIR, current_user, create=True)
     
     preset_id = generate_id()
     
@@ -374,9 +424,8 @@ async def create_preset(preset: PresetCreate, current_user: dict = Depends(get_c
 
 @router.put("/presets/{preset_id}")
 async def update_preset(preset_id: str, preset: PresetCreate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    preset_file = PRESETS_DIR / str(user_id) / f"{preset_id}.json"
-    if not preset_file.exists():
+    preset_file, _ = find_user_file(PRESETS_DIR, current_user, f"{preset_id}.json")
+    if not preset_file:
         raise HTTPException(status_code=404, detail="Preset not found")
         
     steps = preset.steps
@@ -397,9 +446,8 @@ async def update_preset(preset_id: str, preset: PresetCreate, current_user: dict
 
 @router.delete("/presets/{preset_id}")
 async def delete_preset(preset_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    preset_file = PRESETS_DIR / str(user_id) / f"{preset_id}.json"
-    if preset_file.exists():
+    preset_file, _ = find_user_file(PRESETS_DIR, current_user, f"{preset_id}.json")
+    if preset_file and preset_file.exists():
         preset_file.unlink()
     return {"status": "success"}
 
@@ -435,16 +483,22 @@ async def get_shared_workflows(
         if not owner:
             continue
             
-        owner_folder_id = owner.uid or owner.id
-        
-        # Read the file - dynamically search active and archive directories for high robustness
-        filepath = EXP_ACTIVE_DIR / str(owner_folder_id) / f"{share.workflow_id}.json"
+        filepath = None
         workflow_type = "active"
-        if not filepath.exists():
-            filepath = EXP_ARCHIVE_DIR / str(owner_folder_id) / f"{share.workflow_id}.json"
-            workflow_type = "archive"
-            
-        if not filepath.exists():
+        for owner_key in get_storage_keys(owner.uid, owner.id):
+            candidate = EXP_ACTIVE_DIR / owner_key / f"{share.workflow_id}.json"
+            if candidate.exists():
+                filepath = candidate
+                workflow_type = "active"
+                break
+
+            candidate = EXP_ARCHIVE_DIR / owner_key / f"{share.workflow_id}.json"
+            if candidate.exists():
+                filepath = candidate
+                workflow_type = "archive"
+                break
+
+        if not filepath or not filepath.exists():
             continue
             
         try:
@@ -491,15 +545,17 @@ async def list_active_experiments(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    user_id = get_user_id(current_user)
-    dir_path = EXP_ACTIVE_DIR / str(user_id)
-    if not dir_path.exists():
+    if not get_existing_user_dirs(EXP_ACTIVE_DIR, current_user):
         return []
     
     exps = []
-    for f in dir_path.glob("*.json"):
+    seen_exp_ids = set()
+    for f in iter_user_files(EXP_ACTIVE_DIR, current_user, "*.json"):
         try:
             exp_data = json.loads(f.read_text())
+            if exp_data["id"] in seen_exp_ids:
+                continue
+            seen_exp_ids.add(exp_data["id"])
             shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_data["id"]).all()
             exp_data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
             exp_data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
@@ -533,15 +589,17 @@ async def list_archived_experiments(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    user_id = get_user_id(current_user)
-    dir_path = EXP_ARCHIVE_DIR / str(user_id)
-    if not dir_path.exists():
+    if not get_existing_user_dirs(EXP_ARCHIVE_DIR, current_user):
         return []
     
     exps = []
-    for f in dir_path.glob("*.json"):
+    seen_exp_ids = set()
+    for f in iter_user_files(EXP_ARCHIVE_DIR, current_user, "*.json"):
         try:
             exp_data = json.loads(f.read_text())
+            if exp_data["id"] in seen_exp_ids:
+                continue
+            seen_exp_ids.add(exp_data["id"])
             shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_data["id"]).all()
             exp_data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
             exp_data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
@@ -573,8 +631,8 @@ async def list_archived_experiments(
 
 @router.post("/experiments")
 async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    dir_path = EXP_ACTIVE_DIR / str(user_id)
+    user_storage_key = get_primary_user_storage_key(current_user)
+    dir_path = EXP_ACTIVE_DIR / user_storage_key
     dir_path.mkdir(parents=True, exist_ok=True)
     
     exp_id = generate_id()
@@ -583,8 +641,8 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
     # Load preset steps if applicable
     steps = []
     if exp.work_type:
-        preset_file = PRESETS_DIR / str(user_id) / f"{exp.work_type}.json"
-        if preset_file.exists():
+        preset_file, _ = find_user_file(PRESETS_DIR, current_user, f"{exp.work_type}.json")
+        if preset_file and preset_file.exists():
             preset_data = json.loads(preset_file.read_text())
             # Deep copy and reset status/timestamps, generate new IDs for steps
             for preset_step in preset_data.get("steps", []):
@@ -681,10 +739,8 @@ async def update_experiment(
                 new_images.add(img)
                 
         deleted_images = old_images - new_images
-        pattern = re.compile(rf"/api/lab-notebook/assets/{owner_id}/(\d{{4}})/(\d{{2}})/([^)\"\s>]+)")
         for img_url in deleted_images:
-            matches = pattern.findall(img_url)
-            for year, month, filename in matches:
+            for owner_key, year, month, filename in iter_asset_matches(img_url):
                 base_name = filename
                 if "_thumb" in filename:
                     base_name = filename.replace("_thumb", "")
@@ -693,8 +749,8 @@ async def update_experiment(
                     if "." in filename:
                         parts = filename.rsplit(".", 1)
                         thumb_name = f"{parts[0]}_thumb.{parts[1]}"
-                    delete_asset_file(owner_id, year, month, thumb_name)
-                delete_asset_file(owner_id, year, month, base_name)
+                    delete_asset_file(owner_key, year, month, thumb_name)
+                delete_asset_file(owner_key, year, month, base_name)
 
     if exp_update.title is not None: data["title"] = exp_update.title
     if exp_update.description is not None: data["description"] = exp_update.description
@@ -716,22 +772,20 @@ async def update_experiment(
 
 @router.delete("/experiments/{exp_id}")
 async def delete_experiment(exp_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
-    
-    f1 = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if f1.exists():
+    f1, _ = find_user_file(EXP_ACTIVE_DIR, current_user, f"{exp_id}.json")
+    if f1 and f1.exists():
         try:
             data = json.loads(f1.read_text())
-            delete_assets_from_experiment(data, user_id)
+            delete_assets_from_experiment(data)
         except Exception as e:
             print(f"Error cleaning active experiment assets: {e}")
         f1.unlink()
         
-    f2 = EXP_ARCHIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if f2.exists():
+    f2, _ = find_user_file(EXP_ARCHIVE_DIR, current_user, f"{exp_id}.json")
+    if f2 and f2.exists():
         try:
             data = json.loads(f2.read_text())
-            delete_assets_from_experiment(data, user_id)
+            delete_assets_from_experiment(data)
         except Exception as e:
             print(f"Error cleaning archived experiment assets: {e}")
         f2.unlink()
@@ -767,7 +821,7 @@ async def archive_experiment(
 # --- Assets ---
 @router.post("/assets/upload")
 async def upload_asset(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    user_id = get_user_id(current_user)
+    user_id = get_primary_user_storage_key(current_user)
     now = datetime.now()
     year_month = now.strftime("%Y/%m")
     asset_dir = ASSETS_DIR / str(user_id) / year_month
@@ -895,10 +949,9 @@ async def send_workflow_preset(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    user_id = get_user_id(current_user)
     # Verify the preset file exists and is owned by current_user
-    preset_file = PRESETS_DIR / str(user_id) / f"{req.preset_id}.json"
-    if not preset_file.exists():
+    preset_file, _ = find_user_file(PRESETS_DIR, current_user, f"{req.preset_id}.json")
+    if not preset_file:
         raise HTTPException(status_code=404, detail="Preset template not found or unauthorized")
         
     try:
@@ -957,9 +1010,7 @@ async def accept_workflow_transfer(
     if not transfer:
         raise HTTPException(status_code=404, detail="Transfer request not found or already processed")
         
-    user_id = get_user_id(current_user)
-    user_presets_dir = PRESETS_DIR / str(user_id)
-    user_presets_dir.mkdir(parents=True, exist_ok=True)
+    user_presets_dir = get_user_dir(PRESETS_DIR, current_user, create=True)
     
     # Save the preset template to user directory
     new_preset_id = generate_id()
@@ -1016,12 +1067,10 @@ async def update_workflow_shares(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    user_id = get_user_id(current_user)
-    
     # Verify that the user owns the experiment
-    active_path = EXP_ACTIVE_DIR / str(user_id) / f"{exp_id}.json"
-    archive_path = EXP_ARCHIVE_DIR / str(user_id) / f"{exp_id}.json"
-    if not active_path.exists() and not archive_path.exists():
+    active_path, _ = find_user_file(EXP_ACTIVE_DIR, current_user, f"{exp_id}.json")
+    archive_path, _ = find_user_file(EXP_ARCHIVE_DIR, current_user, f"{exp_id}.json")
+    if not active_path and not archive_path:
         raise HTTPException(status_code=403, detail="Not authorized to share this workflow")
         
     # Delete existing shares
@@ -1053,8 +1102,4 @@ async def update_workflow_shares(
             
     db.commit()
     return {"message": "Workflow sharing configuration updated successfully"}
-
-
-
-
 
