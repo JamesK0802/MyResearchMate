@@ -62,7 +62,7 @@ JOBS_DIR = os.path.join(BASE_DIR, "data", "jobs")
 os.makedirs(JOBS_DIR, exist_ok=True)
 
 # Startup Clean: Sweep any leftover folders from previously crashed server sessions
-if os.path.exists(JOBS_DIR):
+if multiprocessing.current_process().name == 'MainProcess' and os.path.exists(JOBS_DIR):
     try:
         for item in os.listdir(JOBS_DIR):
             item_path = os.path.join(JOBS_DIR, item)
