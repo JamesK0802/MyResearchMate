@@ -1,4 +1,4 @@
-# My Lab Mate v3.0.0
+# My Lab Mate v3.2.0
 
 **My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
@@ -18,19 +18,30 @@ Precision protocol planning with personalized preset management.
 - **Cloud Sync**: Access your presets from any device via secure Supabase integration.
 - **Researcher Sharing**: Instantly send and receive custom PCR presets with colleagues.
 
-### 3. Lab Notebook & Experiments (New in v3.0)
+### 3. Lab Notebook & Experiments
 A robust workspace for tracking real-time linear protocol flows.
 - **Active Workspaces**: Initialize experiments from custom presets or ad-hoc templates with visual, multi-line protocol briefs.
 - **Compact Horizontal Flow**: Track linear steps horizontally in a clean scroller with quick inline comments and status progression.
 - **Complete All Sequence**: Mark all sequence steps complete instantly with a single button.
 - **Detailed Step Ledger**: Immersion panel showing step descriptions, completion timestamps, custom logs, and evidence photos.
 - **Lightbox Image Viewer**: Click on any uploaded result image to zoom and preview in a high-fidelity lightbox overlay.
+- **Default Template**: Ships with a comprehensive **Plant CRISPR Editing Full Workflow** preset (26 steps) covering target selection, gRNA design, cloning, E. coli transformation, miniprep, Agrobacterium delivery, plant infection, DNA extraction, sequencing, and CRISPR analysis.
 
-### 4. Interactive Success Rate Archiving (New in v3.0)
+### 4. Interactive Success Rate Archiving
 Grade and catalog completed protocols with clean, high-utility UI.
 - **Gradient Star Rating**: Clickable 1-5 star success rates representing a smooth spectrum from Low (Red) to High (Green).
 - **Archive Ledger**: Dedicated completed repository displaying past experiments in the exact same premium card and scroller UI as active workspaces for complete consistency.
 - **Search & Filter**: Sift through past runs by Success Rate, Work Type, tags, samples, and archive date.
+- **Outcome Comments**: Post-completion discussion threads on archived experiments for scientific review and notes.
+
+### 5. Collaborative Sharing (New in v3.2)
+Share research workspaces with labs and individual researchers.
+- **Lab Sharing**: Share active experiments and archived records with entire research labs. All lab members gain read access to view steps, images, and comments.
+- **Individual Sharing**: Share directly with specific researchers by name or email, ideal for small 1–2 person collaborations.
+- **Revocable Access**: Toggle lab and researcher access on/off at any time via a clean checklist modal.
+- **Shared Experiments Tab**: Dedicated view showing all experiments shared with you, clearly badged with sharer identity.
+- **Visual Sharing Badges**: Instant CSS-based hover tooltips on cards and modals listing who has access, with premium glassmorphic styling.
+- **Template Sharing**: Send workflow preset templates directly to another researcher's inbox for them to accept or reject.
 
 ---
 
@@ -134,7 +145,7 @@ To deploy a new version:
 2.  Commit and push:
      ```bash
      git add VERSION
-     git commit -m "Bump version to 3.0.0"
+     git commit -m "Bump version to 3.2.0"
      git push origin main
      ```
 The server will detect the change within 5 minutes, pull the code, and rebuild the containers automatically.
@@ -165,6 +176,25 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 - **Port Conflict**: Change `FRONTEND_PORT` in `.env` if another web server (like Nginx) is already running on port 80.
 - **Database Connection**: Ensure `DATABASE_URL` in `.env` uses `db:5432` as the host (this is the internal Docker network name).
 - **Permissions**: If uploads fail, check write permissions for the `backend/data` directory on the host.
+
+---
+
+## 📋 Changelog
+
+### v3.2.0
+- **Collaborative Sharing**: Lab-level and individual researcher sharing for active experiments and archives with revocable access control.
+- **Shared Experiments Tab**: Dedicated view for experiments shared with you, with sharer identity badges.
+- **Visual Sharing Badges**: Premium CSS-based hover tooltips on cards/modals showing sharing recipients.
+- **Template Sharing**: Send and receive workflow preset templates between researchers.
+- **Outcome Comments**: Post-completion discussion threads on archived experiments.
+- **Global Outline Buttons**: Unified `.app-btn-outline`, `.app-btn-success-outline`, `.app-btn-danger-outline` design system classes.
+- **Plant CRISPR Default Template**: Comprehensive 26-step Plant CRISPR Editing Full Workflow as the default preset.
+- **UI Fixes**: NgZone wrapping for Supabase auth callbacks, isolated API error handling to prevent empty pages, auth reload race condition fix.
+
+### v3.0.0
+- Lab Notebook & Experiments module with active workspaces, horizontal step flow, and detailed step ledger.
+- Interactive success rate archiving with gradient star ratings.
+- PCR Setup Calculator with personalized presets and cloud sync.
 
 ---
 *Developed for Australian National University · Research School of Biology*
