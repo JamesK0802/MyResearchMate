@@ -829,3 +829,42 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def process_single_file_worker(
+    filepath: str,
+    genes_payload: list,
+    phred_threshold: int,
+    indel_threshold: float,
+    assignment_margin: float,
+    analyze_ambiguous: bool,
+    rescue_ambiguous: bool,
+    rescue_threshold: int
+) -> dict:
+    import os
+    import gc
+    
+    # Delay import of process_files_multi to avoid circular dependency issues
+    from run_local import process_files_multi
+    
+    file_result = process_files_multi(
+        file_paths=[filepath],
+        genes_payload=genes_payload,
+        phred_threshold=phred_threshold,
+        indel_threshold=indel_threshold,
+        margin_threshold=assignment_margin,
+        analyze_ambiguous=analyze_ambiguous,
+        rescue_ambiguous=rescue_ambiguous,
+        rescue_threshold=rescue_threshold,
+        progress_callback=None
+    )
+    
+    # Clean up file immediately to save disk space
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except:
+        pass
+    
+    gc.collect()
+    return file_result
+
