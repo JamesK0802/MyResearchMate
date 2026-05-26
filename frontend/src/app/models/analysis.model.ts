@@ -77,6 +77,7 @@ export interface GeneResult {
   is_rescued_derived?: boolean;
   analysis_result: {
     targets: TargetResult[];
+    multi_target_summary?: MultiTargetSummary;
   };
 }
 
@@ -95,6 +96,41 @@ export interface MultiReferenceResponse {
       number_of_targets_analyzed: number;
     }>;
   };
+}
+
+// ── Multi-Target Read-Level Types (One-Read-Many-Targets) ────────────────────
+
+export interface TargetEvaluation {
+  target_id: string;
+  evaluated: boolean;
+  eval_fail_reason: string;
+  classification: string | null;
+  has_substitution: boolean;
+  net_indel: number;
+  similarity: number;
+  edited: boolean;
+}
+
+export interface ReadLevelResult {
+  read_index: number;
+  target_results: TargetEvaluation[];
+}
+
+export interface CoEditingEntry {
+  target_a: string;
+  target_b: string;
+  co_edited_reads: number;
+}
+
+export interface MultiTargetSummary {
+  total_reads: number;
+  reads_evaluated: number;
+  reads_with_0_edits: number;
+  reads_with_1_edit: number;
+  reads_with_2_edits: number;
+  reads_with_3_plus_edits: number;
+  edit_distribution: Record<number, number>;
+  co_editing_matrix: CoEditingEntry[];
 }
 
 // A file result in multi-ref mode wraps the above

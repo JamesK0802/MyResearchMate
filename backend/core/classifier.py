@@ -11,6 +11,7 @@ Provides unified logic for:
 import difflib
 import statistics
 import random
+import functools
 from typing import List, Dict, Tuple, Optional, Any
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -164,17 +165,27 @@ def _eval_anchors(seq: str, qual, ref_window: str, phred_threshold: float) -> Di
                 return {'fail': 'quality'}
 
     # Similarity check
-    shorter = ref_inner if len(ref_inner) <= len(read_inner) else read_inner
-    longer  = read_inner if len(ref_inner) <= len(read_inner) else ref_inner
+    len_ref = len(ref_inner)
+    len_read = len(read_inner)
+    
+    # Mathematical optimization: If length ratio is too divergent, similarity cannot possibly be >= INNER_SIMILARITY_MIN (0.85).
+    # Since ratio = 2 * matching_chars / (len_ref + len_read) <= 2 * min(len_ref, len_read) / (len_ref + len_read).
+    # For ratio >= 0.85, min_len / max_len must be >= 0.85 / 1.15 (~0.739).
+    # This simple check avoids calling extremely slow difflib.SequenceMatcher on bad alignments.
+    if min(len_ref, len_read) < 0.74 * max(len_ref, len_read):
+        return {'fail': 'similarity', 'sim': 0.0}
+
+    shorter = ref_inner if len_ref <= len_read else read_inner
+    longer  = read_inner if len_ref <= len_read else ref_inner
     sim = difflib.SequenceMatcher(None, shorter, longer).ratio()
 
     return {'fail': None, 'ref_inner': ref_inner, 'read_inner': read_inner, 'sim': sim}
 
-def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float) -> Tuple[bool, str, Optional[Dict]]:
-    """Tries fwd and RC. Returns (usable, reason, best_res_dict)."""
-    fw_res = _eval_anchors(seq, qual, ref_window, phred_threshold)
+@functools.lru_cache(maxsize=131072)
+def _is_read_usable_cached(seq: str, qual_tuple: Optional[Tuple[int, ...]], ref_window: str, phred_threshold: float) -> Tuple[bool, str, Optional[Dict]]:
+    fw_res = _eval_anchors(seq, qual_tuple, ref_window, phred_threshold)
     rc_seq = reverse_complement(seq)
-    rc_qual = list(reversed(qual)) if isinstance(qual, (list, tuple)) else None
+    rc_qual = tuple(reversed(qual_tuple)) if qual_tuple is not None else None
     rc_res = _eval_anchors(rc_seq, rc_qual, ref_window, phred_threshold)
 
     best_res = None
@@ -185,8 +196,9 @@ def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float) -> T
             is_rc = True
         else:
             best_res = fw_res
-    elif fw_res['fail'] is None: best_res = fw_res
-    elif rc_res['fail'] is None: 
+    elif fw_res['fail'] is None:
+        best_res = fw_res
+    elif rc_res['fail'] is None:
         best_res = rc_res
         is_rc = True
 
@@ -197,8 +209,23 @@ def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float) -> T
     if best_res['sim'] < INNER_SIMILARITY_MIN:
         return False, 'similarity', None
 
-    best_res['is_rc'] = is_rc
-    return True, 'ok', best_res
+    # Copy the dictionary to prevent external mutation of the cached value
+    best_res_copy = dict(best_res)
+    best_res_copy['is_rc'] = is_rc
+    return True, 'ok', best_res_copy
+
+def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float) -> Tuple[bool, str, Optional[Dict]]:
+    """Tries fwd and RC. Returns (usable, reason, best_res_dict). Cached via _is_read_usable_cached."""
+    qual_tuple = tuple(qual) if qual is not None else None
+    usable, reason, best_res = _is_read_usable_cached(seq, qual_tuple, ref_window, phred_threshold)
+    if best_res is not None:
+        # Return a copy of the dictionary to ensure cache safety
+        return usable, reason, dict(best_res)
+    return usable, reason, None
+
+def clear_classifier_cache():
+    """Clears the classifier lru cache to prevent unbounded growth."""
+    _is_read_usable_cached.cache_clear()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Scoring & Classification
@@ -288,3 +315,142 @@ def apply_classification(
         }
     
     return {'assigned': False, 'reason': 'ambiguous', 'top1_score': round(top1_score, 4)}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gene-Level Classification (One-Read-Many-Targets Support)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def apply_gene_classification(
+    read_seq: str,
+    read_qual: Any,
+    gene_classes: Dict[str, List[Dict]],
+    phred_threshold: float,
+    margin: float
+) -> Dict:
+    """
+    Gene/reference-level classification. Assigns a read to a GENE, not a target.
+
+    Algorithm:
+      1. For each gene, score the read against every target window in that gene.
+      2. Collapse to gene-level: gene_score = max(target window scores).
+         Target windows within the same gene are evidence, not competitors.
+      3. Margin check between top-1 and top-2 gene-level scores.
+      4. After assignment, downstream analysis evaluates all targets independently.
+
+    Returns dict with 'assigned', 'predicted_gene', 'top1_score', and 'debug'.
+    """
+    gene_names = list(gene_classes.keys())
+
+    # ── Single-gene shortcut ─────────────────────────────────────────────────
+    if len(gene_names) == 1:
+        gene_name = gene_names[0]
+        for t in gene_classes[gene_name]:
+            usable, _, _ = is_read_usable(read_seq, read_qual, t['ref_window'], phred_threshold)
+            if usable:
+                return {
+                    'assigned': True,
+                    'predicted_gene': gene_name,
+                    'top1_score': 1.0,
+                    'debug': {
+                        'gene_scores': {gene_name: {'best_score': 1.0, 'best_target': t['target'], 'usable': 1, 'total': len(gene_classes[gene_name])}},
+                        'best_gene': gene_name, 'second_gene': None, 'gap': None, 'margin': margin,
+                        'outcome': 'assigned_single_gene'
+                    }
+                }
+        return {
+            'assigned': False, 'reason': 'filtered',
+            'debug': {
+                'gene_scores': {gene_name: {'best_score': None, 'best_target': None, 'usable': 0, 'total': len(gene_classes[gene_name])}},
+                'best_gene': None, 'second_gene': None, 'gap': None, 'margin': margin,
+                'outcome': 'filtered_no_usable_window'
+            }
+        }
+
+    # ── Multi-gene: score each gene by its best target window ────────────────
+    gene_scores = []
+    gene_debug = {}
+    any_usable = False
+
+    for gene_name, targets in gene_classes.items():
+        best_score = -1.0
+        best_target = None
+        gene_usable = False
+        usable_count = 0
+
+        for t in targets:
+            usable, _, _ = is_read_usable(read_seq, read_qual, t['ref_window'], phred_threshold)
+            if usable:
+                gene_usable = True
+                any_usable = True
+                usable_count += 1
+                score = score_read_against_window(read_seq, t['ref_window'])
+                if score > best_score:
+                    best_score = score
+                    best_target = t['target']
+
+        gene_debug[gene_name] = {
+            'best_score': round(best_score, 4) if best_score >= 0 else None,
+            'best_target': best_target,
+            'usable': usable_count,
+            'total': len(targets)
+        }
+
+        if gene_usable:
+            gene_scores.append((best_score, gene_name))
+
+    if not any_usable:
+        return {
+            'assigned': False, 'reason': 'filtered',
+            'debug': {
+                'gene_scores': gene_debug,
+                'best_gene': None, 'second_gene': None, 'gap': None, 'margin': margin,
+                'outcome': 'filtered_no_usable_window'
+            }
+        }
+
+    # Sort by score descending
+    gene_scores.sort(reverse=True)
+    top1_score, top1_gene = gene_scores[0]
+
+    if len(gene_scores) == 1:
+        return {
+            'assigned': True,
+            'predicted_gene': top1_gene,
+            'top1_score': round(top1_score, 4),
+            'debug': {
+                'gene_scores': gene_debug,
+                'best_gene': top1_gene, 'second_gene': None, 'gap': None, 'margin': margin,
+                'outcome': 'assigned_only_one_gene_usable'
+            }
+        }
+
+    # Margin check between top-1 and top-2 genes
+    top2_score, top2_gene = gene_scores[1]
+    gap = top1_score - top2_score
+
+    debug_block = {
+        'gene_scores': gene_debug,
+        'best_gene': top1_gene, 'second_gene': top2_gene,
+        'gap': round(gap, 4), 'margin': margin,
+    }
+
+    if gap >= margin:
+        debug_block['outcome'] = 'assigned_margin_pass'
+        return {
+            'assigned': True,
+            'predicted_gene': top1_gene,
+            'top1_score': round(top1_score, 4),
+            'top2_score': round(top2_score, 4),
+            'gap': round(gap, 4),
+            'debug': debug_block
+        }
+
+    debug_block['outcome'] = 'ambiguous_margin_fail'
+    return {
+        'assigned': False, 'reason': 'ambiguous',
+        'top1_score': round(top1_score, 4),
+        'top2_score': round(top2_score, 4),
+        'gap': round(gap, 4),
+        'debug': debug_block
+    }
+

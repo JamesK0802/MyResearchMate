@@ -13,15 +13,39 @@ from core.multi_reference_assigner import assign_reads_to_references
 import core.classifier as classifier
 
 
+def _unpack_analysis_result(result):
+    """
+    Normalizes the return value of run_analysis_on_reads().
+    
+    Single-target mode returns a plain list of target results.
+    Multi-target mode returns a dict with 'target_results', 'multi_target_summary',
+    and 'read_level_results'.
+    
+    Returns (target_results_list, multi_target_extras_dict_or_None).
+    """
+    if isinstance(result, dict) and 'target_results' in result:
+        return result['target_results'], {
+            'multi_target_summary': result.get('multi_target_summary'),
+            'read_level_results': result.get('read_level_results')
+        }
+    return result, None
+
+
 def run_analysis(fastq_file, targets, phred_threshold=10, indel_threshold=1.0):
     print(f"  [RUN_ANALYSIS] Parsing {fastq_file}...")
     data = parse_fastq(fastq_file)
     print(f"  [RUN_ANALYSIS] Found {len(data)} sequences.")
 
+    raw_result = run_analysis_on_reads(data, targets, phred_threshold, indel_threshold)
+    target_results, multi_target_extras = _unpack_analysis_result(raw_result)
+
     final_output = {
         "fastq_file": fastq_file,
-        "target_results": run_analysis_on_reads(data, targets, phred_threshold, indel_threshold)
+        "target_results": target_results
     }
+    # Include multi-target cross-correlation data when available
+    if multi_target_extras:
+        final_output["multi_target_summary"] = multi_target_extras.get("multi_target_summary")
     return final_output
 
 def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0):
@@ -44,6 +68,12 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
 
     total_reads = len(data)
     target_results_list = []
+
+    # ── Multi-Target Read-Level Accumulator ────────────────────────────────────
+    # Tracks per-read evaluations across ALL targets for cross-target correlation.
+    # Only populated when multiple targets exist (backward compatible).
+    has_multiple_targets = len(targets) > 1
+    read_results = {}  # read_index -> {read_index, target_results: [...]}
 
     print(f"  [RUN_ANALYSIS_ON_READS] Starting analysis for {len(targets)} targets on {len(data)} reads.")
     for target in targets:
@@ -122,6 +152,21 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
                     counts["fail_quality"] += 1
                 else: 
                     counts[f"fail_{reason}"] += 1
+
+                # Record failed evaluation in read_results for multi-target tracking
+                if has_multiple_targets:
+                    if i not in read_results:
+                        read_results[i] = {'read_index': i, 'target_results': []}
+                    read_results[i]['target_results'].append({
+                        'target_id': target_id,
+                        'evaluated': False,
+                        'eval_fail_reason': reason,
+                        'classification': None,
+                        'has_substitution': False,
+                        'net_indel': 0,
+                        'similarity': 0.0,
+                        'edited': False
+                    })
                 continue
                 
             counts["aligned_reads"] += 1
@@ -152,6 +197,22 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
                     "tokens": read_tokens
                 }
             groups_dict[key]["read_count"] += 1
+
+            # ── Multi-Target: Record per-target evaluation for this read ──────
+            if has_multiple_targets:
+                is_edited = (category != 'no_indel') or has_sub
+                if i not in read_results:
+                    read_results[i] = {'read_index': i, 'target_results': []}
+                read_results[i]['target_results'].append({
+                    'target_id': target_id,
+                    'evaluated': True,
+                    'eval_fail_reason': 'ok',
+                    'classification': category,
+                    'has_substitution': has_sub,
+                    'net_indel': net_indel,
+                    'similarity': round(sim, 4),
+                    'edited': is_edited
+                })
 
             # orientation is ignored for now as we normalize to forward
 
@@ -272,6 +333,57 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
 
         target_results_list.append(target_result)
 
+    # ── Multi-Target Summary ──────────────────────────────────────────────────
+    # When multiple targets exist, compute cross-target read-level statistics.
+    # This enables answering: "How many reads were edited at BOTH Target A and B?"
+    if has_multiple_targets and read_results:
+        # Compute per-read edit counts
+        edit_distribution = {}  # num_edits -> count
+        co_editing_matrix = {}  # (target_a, target_b) -> count of reads edited at both
+        target_ids = [t.get('target_id') for t in targets if t.get('reference_seq')]
+
+        for rr in read_results.values():
+            evaluated_targets = [tr for tr in rr['target_results'] if tr['evaluated']]
+            edited_targets = [tr for tr in evaluated_targets if tr['edited']]
+            n_edited = len(edited_targets)
+            edit_distribution[n_edited] = edit_distribution.get(n_edited, 0) + 1
+
+            # Build co-editing pairs
+            edited_ids = [tr['target_id'] for tr in edited_targets]
+            for ai in range(len(edited_ids)):
+                for bi in range(ai + 1, len(edited_ids)):
+                    pair = tuple(sorted([edited_ids[ai], edited_ids[bi]]))
+                    co_editing_matrix[pair] = co_editing_matrix.get(pair, 0) + 1
+
+        multi_target_summary = {
+            'total_reads': total_reads,
+            'reads_evaluated': len(read_results),
+            'reads_with_0_edits': edit_distribution.get(0, 0),
+            'reads_with_1_edit': edit_distribution.get(1, 0),
+            'reads_with_2_edits': edit_distribution.get(2, 0),
+            'reads_with_3_plus_edits': sum(v for k, v in edit_distribution.items() if k >= 3),
+            'edit_distribution': edit_distribution,
+            'co_editing_matrix': [
+                {'target_a': pair[0], 'target_b': pair[1], 'co_edited_reads': count}
+                for pair, count in sorted(co_editing_matrix.items())
+            ]
+        }
+
+        print(f"\n  [MULTI_TARGET] ===== Cross-Target Summary =====")
+        print(f"  reads_with_0_edits    = {multi_target_summary['reads_with_0_edits']}")
+        print(f"  reads_with_1_edit     = {multi_target_summary['reads_with_1_edit']}")
+        print(f"  reads_with_2_edits    = {multi_target_summary['reads_with_2_edits']}")
+        print(f"  reads_with_3+_edits   = {multi_target_summary['reads_with_3_plus_edits']}")
+        for co in multi_target_summary['co_editing_matrix']:
+            print(f"  co-edited {co['target_a']} + {co['target_b']} = {co['co_edited_reads']} reads")
+        print(f"  [MULTI_TARGET] ===============================\n")
+
+        return {
+            'target_results': target_results_list,
+            'multi_target_summary': multi_target_summary,
+            'read_level_results': list(read_results.values())
+        }
+
     return target_results_list
 
 def run_demultiplex(fastq_file, references, margin_threshold=0.05):
@@ -365,16 +477,20 @@ def run_multi_reference_analysis(fastq_file, genes_payload, assignment_margin_th
         
         print(f"  [MULTI_REF_ANALYSIS] Gene '{gene_name}' -> assigned: {assigned_count}, analyzing targets: [ {', '.join([t.get('target_id','') for t in targets])} ]")
         
-        analysis_result_targets = run_analysis_on_reads(gene_reads_data, targets, phred_threshold, indel_threshold)
+        raw_analysis = run_analysis_on_reads(gene_reads_data, targets, phred_threshold, indel_threshold)
+        analysis_result_targets, mt_extras = _unpack_analysis_result(raw_analysis)
         
-        output["genes"].append({
+        gene_entry = {
             "gene": gene_name,
             "assigned_read_count": assigned_count,
             "ambiguous_excluded": True,
             "analysis_result": {
                 "targets": analysis_result_targets
             }
-        })
+        }
+        if mt_extras:
+            gene_entry["analysis_result"]["multi_target_summary"] = mt_extras.get("multi_target_summary")
+        output["genes"].append(gene_entry)
         
         output["debug"]["genes"].append({
             "gene": gene_name,
@@ -394,9 +510,10 @@ def run_multi_reference_analysis(fastq_file, genes_payload, assignment_margin_th
             
             # Re-use existing analysis pipeline on the ambiguous pool
             # Results are isolated from regular classification
-            amb_analysis_targets = run_analysis_on_reads(ambiguous_reads_data, targets, phred_threshold, indel_threshold)
+            raw_amb = run_analysis_on_reads(ambiguous_reads_data, targets, phred_threshold, indel_threshold)
+            amb_analysis_targets, amb_mt_extras = _unpack_analysis_result(raw_amb)
             
-            output["genes"].append({
+            amb_entry = {
                 "gene": f"{gene_name}-ambiguous",
                 "assigned_read_count": len(ambiguous_reads_data),
                 "ambiguous_excluded": False, # This tab IS the ambiguous pool
@@ -404,7 +521,10 @@ def run_multi_reference_analysis(fastq_file, genes_payload, assignment_margin_th
                 "analysis_result": {
                     "targets": amb_analysis_targets
                 }
-            })
+            }
+            if amb_mt_extras:
+                amb_entry["analysis_result"]["multi_target_summary"] = amb_mt_extras.get("multi_target_summary")
+            output["genes"].append(amb_entry)
             
     print(f"  [MULTI_REF_ANALYSIS] Returning multi-reference results grouped by gene.")
     return output
@@ -447,6 +567,9 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
     Emits file / demux / gene / target level progress events.
     """
     print(f"[PROCESS_FILES_MULTI] Starting multi-reference analysis of {len(file_paths)} files.")
+
+    import core.classifier as classifier
+    classifier.clear_classifier_cache()
 
     total_files = len(file_paths)
     total_genes = len(genes_payload)
@@ -536,14 +659,18 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                 if not t.get("reference_seq"):
                     t["reference_seq"] = gene_payload["sequence"]
 
-            target_results = run_analysis_on_reads(gene_reads, targets_for_gene, phred_threshold, indel_threshold)
+            raw_target_results = run_analysis_on_reads(gene_reads, targets_for_gene, phred_threshold, indel_threshold)
+            target_results, mt_extras = _unpack_analysis_result(raw_target_results)
 
-            gene_output["genes"].append({
+            gene_entry = {
                 "gene": gene_name,
                 "assigned_read_count": len(gene_reads),
                 "ambiguous_excluded": True,
                 "analysis_result": {"targets": target_results}
-            })
+            }
+            if mt_extras:
+                gene_entry["analysis_result"]["multi_target_summary"] = mt_extras.get("multi_target_summary")
+            gene_output["genes"].append(gene_entry)
             gene_output["debug"]["genes"].append({
                 "gene": gene_name,
                 "reference_length": len(gene_payload["sequence"]),
@@ -623,15 +750,19 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                             if not t.get("reference_seq"):
                                 t["reference_seq"] = gene_payload["sequence"]
                                 
-                        rescued_results = run_analysis_on_reads(rescued_reads, g_targets, phred_threshold, indel_threshold)
+                        raw_rescued = run_analysis_on_reads(rescued_reads, g_targets, phred_threshold, indel_threshold)
+                        rescued_results, rescued_mt = _unpack_analysis_result(raw_rescued)
                         
-                        gene_output["genes"].append({
+                        rescued_entry = {
                             "gene": f"{g_name}-rescued",
                             "assigned_read_count": len(rescued_reads),
                             "ambiguous_excluded": False,
                             "is_rescued_derived": True,
                             "analysis_result": {"targets": rescued_results}
-                        })
+                        }
+                        if rescued_mt:
+                            rescued_entry["analysis_result"]["multi_target_summary"] = rescued_mt.get("multi_target_summary")
+                        gene_output["genes"].append(rescued_entry)
                 
                 amb_reads_to_analyze = unresolved_reads
             else:
@@ -645,15 +776,19 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                         if not t.get("reference_seq"):
                             t["reference_seq"] = gene_payload["sequence"]
 
-                    amb_results = run_analysis_on_reads(amb_reads_to_analyze, g_targets, phred_threshold, indel_threshold)
+                    raw_amb = run_analysis_on_reads(amb_reads_to_analyze, g_targets, phred_threshold, indel_threshold)
+                    amb_results, amb_mt = _unpack_analysis_result(raw_amb)
                     
-                    gene_output["genes"].append({
+                    amb_entry = {
                         "gene": f"{g_name}-ambiguous",
                         "assigned_read_count": len(amb_reads_to_analyze),
                         "ambiguous_excluded": False,
                         "is_ambiguous_derived": True,
                         "analysis_result": {"targets": amb_results}
-                    })
+                    }
+                    if amb_mt:
+                        amb_entry["analysis_result"]["multi_target_summary"] = amb_mt.get("multi_target_summary")
+                    gene_output["genes"].append(amb_entry)
 
         final_payload["results"].append({
             "fastq_file": os.path.basename(filepath),

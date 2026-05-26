@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-contact-page',
@@ -130,5 +131,5 @@ import { RouterLink } from '@angular/router';
   `]
 })
 export class ContactPageComponent {
-  version = '3.2.0';
+  version = environment.version;
 }

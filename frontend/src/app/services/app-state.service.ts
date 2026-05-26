@@ -284,6 +284,7 @@ export class AppStateService {
     this.activateSlot('analysis');
     this.isLoading = true;
     this.setProgress(0, 'Preparing upload…');
+    this.destroy$ = new Subject<void>();
     
     this.analysisService.runAnalysisWithProgress(formData).subscribe({
       next: (event: any) => {
@@ -510,6 +511,7 @@ export class AppStateService {
 
   runBenchmark(fd: FormData, subset: 'train' | 'test') {
     this.benchIsLoading = true; this.clearBenchProgress(); this.benchDestroy$.next();
+    this.benchDestroy$ = new Subject<void>();
     this.setBenchProgress(0, `Preparing ${subset} upload…`);
     
     this.analysisService.runBenchmarkWithProgress(fd).subscribe({

@@ -1,4 +1,4 @@
-# My Lab Mate v3.2.0
+# My Lab Mate v3.3.0
 
 **My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
@@ -11,6 +11,10 @@ A high-precision pipeline for analyzing genome editing outcomes.
 - **Analysis Mode**: Process FASTQ sequencing data to quantify Indels and editing efficiency.
 - **Benchmark Mode**: Validate editing results against control samples with cluster-based rescue logic.
 - **Multi-Reference Support**: Assign reads to multiple genomic targets within a single sequencing run.
+- **Gene-Level Collapsing Demultiplexing (New in v3.3)**: Advanced read-to-reference assignment supporting multi-gRNA/multi-target CRISPR screens.
+  - *Evidence Collapsing*: Individual target windows within the same gene are grouped together as evidence rather than competing classes, avoiding false-positive ambiguous reads.
+  - *Algorithm*: Scores each read against all target windows, collapses scores by taking the maximum for each gene/reference (`gene_score = max(target_window_scores)`), and applies a user-specified margin check between the top-1 and top-2 gene-level scores to ensure high-confidence assignment.
+  - *Downstream Robustness*: Once assigned to a parent gene/reference, downstream editing and Indel analysis are performed independently for all target windows within that gene.
 
 ### 2. PCR Setup Calculator
 Precision protocol planning with personalized preset management.
@@ -145,7 +149,7 @@ To deploy a new version:
 2.  Commit and push:
      ```bash
      git add VERSION
-     git commit -m "Bump version to 3.2.0"
+     git commit -m "Bump version to 3.3.0"
      git push origin main
      ```
 The server will detect the change within 5 minutes, pull the code, and rebuild the containers automatically.
@@ -180,6 +184,11 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 ---
 
 ## 📋 Changelog
+
+### v3.3.0
+- **CRISPR Gene-Level Collapsed Assignment**: Redesigned read demultiplexing to compute maximum evidence scores across all target windows belonging to a gene (`gene_score = max(target_window_scores)`), preventing target-vs-target competition from producing false-positive ambiguous reads in multi-gRNA and multi-target CRISPR screens.
+- **Gene-Level Margin Check**: Restructured margin calculation to run purely on collapsed gene scores, validating `top1_gene_score - top2_gene_score >= margin_threshold` prior to final reference assignment.
+- **Dynamic Frontend Version Syncing**: Refactored the `ContactPageComponent` system version display to bind directly to the dynamically patched Angular `environment.version` instead of a hardcoded version string, ensuring absolute alignment with the root `VERSION` file.
 
 ### v3.2.0
 - **Collaborative Sharing**: Lab-level and individual researcher sharing for active experiments and archives with revocable access control.

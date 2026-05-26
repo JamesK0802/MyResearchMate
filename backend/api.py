@@ -126,8 +126,18 @@ def background_analysis(
             filepath = os.path.join(job_dir, filename)
             if not os.path.exists(filepath): continue
             
-            update_task(tasks_proxy, task_id, stage=f"Analyzing file {i+1}/{total_files}: {filename}", progress=int((i/total_files)*100))
-            
+            # Create a scaled progress callback to prevent the UI progress bar from freezing or jumping back and forth
+            def make_progress_callback(file_idx, total):
+                start_pct = (file_idx / total) * 100.0
+                pct_range = 100.0 / total
+                def cb(p, s):
+                    scaled_p = int(start_pct + (p / 100.0) * pct_range)
+                    # Cap at 99 so we only hit 100 when the whole background task is completed
+                    scaled_p = min(99, max(0, scaled_p))
+                    stage_msg = f"[{file_idx + 1}/{total}] {s}"
+                    update_task(tasks_proxy, task_id, progress=scaled_p, stage=stage_msg)
+                return cb
+
             # process_files_multi expects a list of paths, but we give it one to keep it sequential
             file_result = process_files_multi(
                 file_paths=[filepath],
@@ -137,7 +147,8 @@ def background_analysis(
                 margin_threshold=assignment_margin,
                 analyze_ambiguous=analyze_ambiguous,
                 rescue_ambiguous=rescue_ambiguous,
-                rescue_threshold=rescue_threshold
+                rescue_threshold=rescue_threshold,
+                progress_callback=make_progress_callback(i, total_files)
             )
             
             if file_result and "results" in file_result:
@@ -433,4 +444,4 @@ async def legacy_status(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
