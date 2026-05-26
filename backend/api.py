@@ -4,7 +4,7 @@ load_dotenv()  # Load .env before any other imports that need env vars
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, APIRouter
 import core.classifier as classifier
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import os
 import json
 import shutil
@@ -100,6 +100,42 @@ def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = N
 # CRISPR Analysis Background Worker (Sandboxed Parallel Process)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def process_single_file_worker(
+    filepath: str,
+    genes_payload: List[Dict],
+    phred_threshold: int,
+    indel_threshold: float,
+    assignment_margin: float,
+    analyze_ambiguous: bool,
+    rescue_ambiguous: bool,
+    rescue_threshold: int
+) -> Dict:
+    import gc
+    import os
+    from run_local import process_files_multi
+    
+    file_result = process_files_multi(
+        file_paths=[filepath],
+        genes_payload=genes_payload,
+        phred_threshold=phred_threshold,
+        indel_threshold=indel_threshold,
+        margin_threshold=assignment_margin,
+        analyze_ambiguous=analyze_ambiguous,
+        rescue_ambiguous=rescue_ambiguous,
+        rescue_threshold=rescue_threshold,
+        progress_callback=None
+    )
+    
+    # Clean up file immediately to save disk space
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except:
+        pass
+    
+    gc.collect()
+    return file_result
+
 def background_analysis(
     task_id: str,
     tasks_proxy,
@@ -114,53 +150,57 @@ def background_analysis(
     rescue_threshold: int
 ):
     import gc
+    import concurrent.futures
     try:
-        update_task(tasks_proxy, task_id, status="running", stage="Initializing analysis...")
+        update_task(tasks_proxy, task_id, status="running", stage="Initializing parallel analysis...")
         genes_payload = json.loads(targets_json)
         
         all_results = []
         total_files = len(temp_filenames)
         
-        # Sequential Processing: File by File
-        for i, filename in enumerate(temp_filenames):
-            filepath = os.path.join(job_dir, filename)
-            if not os.path.exists(filepath): continue
+        # Parallel processing of files using a ProcessPoolExecutor
+        max_workers = min(os.cpu_count() or 4, 16)
+        print(f"[BACKGROUND] Initializing parallel analysis with {max_workers} worker processes for {total_files} files.")
+        
+        futures_to_file = {}
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for i, filename in enumerate(temp_filenames):
+                filepath = os.path.join(job_dir, filename)
+                if not os.path.exists(filepath): continue
+                
+                future = executor.submit(
+                    process_single_file_worker,
+                    filepath,
+                    genes_payload,
+                    phred_threshold,
+                    indel_threshold,
+                    assignment_margin,
+                    analyze_ambiguous,
+                    rescue_ambiguous,
+                    rescue_threshold
+                )
+                futures_to_file[future] = filename
             
-            # Create a scaled progress callback to prevent the UI progress bar from freezing or jumping back and forth
-            def make_progress_callback(file_idx, total):
-                start_pct = (file_idx / total) * 100.0
-                pct_range = 100.0 / total
-                def cb(p, s):
-                    scaled_p = int(start_pct + (p / 100.0) * pct_range)
-                    # Cap at 99 so we only hit 100 when the whole background task is completed
-                    scaled_p = min(99, max(0, scaled_p))
-                    stage_msg = f"[{file_idx + 1}/{total}] {s}"
-                    update_task(tasks_proxy, task_id, progress=scaled_p, stage=stage_msg)
-                return cb
-
-            # process_files_multi expects a list of paths, but we give it one to keep it sequential
-            file_result = process_files_multi(
-                file_paths=[filepath],
-                genes_payload=genes_payload,
-                phred_threshold=phred_threshold,
-                indel_threshold=indel_threshold,
-                margin_threshold=assignment_margin,
-                analyze_ambiguous=analyze_ambiguous,
-                rescue_ambiguous=rescue_ambiguous,
-                rescue_threshold=rescue_threshold,
-                progress_callback=make_progress_callback(i, total_files)
-            )
-            
-            if file_result and "results" in file_result:
-                all_results.extend(file_result["results"])
-            
-            # Immediate Cleanup of the file to save disk space
-            try: os.remove(filepath)
-            except: pass
-            
-            # Explicit Garbage Collection to help memory-constrained instances
-            gc.collect()
-
+            completed_files = 0
+            for future in concurrent.futures.as_completed(futures_to_file):
+                filename = futures_to_file[future]
+                completed_files += 1
+                
+                # Scale progress between 10% and 95%
+                progress_pct = int(10 + (completed_files / total_files) * 85)
+                progress_pct = min(99, max(10, progress_pct))
+                
+                stage_msg = f"[{completed_files}/{total_files}] Completed {filename}"
+                update_task(tasks_proxy, task_id, progress=progress_pct, stage=stage_msg)
+                
+                try:
+                    file_result = future.result()
+                    if file_result and "results" in file_result:
+                        all_results.extend(file_result["results"])
+                except Exception as file_err:
+                    print(f"[ERROR] Failed to process file {filename}: {str(file_err)}")
+                    # Continue to process other files
+                    
         # Merge results into the final payload
         final_payload = {
             "metadata": {

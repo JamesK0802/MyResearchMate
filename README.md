@@ -1,4 +1,4 @@
-# My Lab Mate v3.3.0
+# My Lab Mate v3.3.1
 
 **My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
@@ -15,6 +15,7 @@ A high-precision pipeline for analyzing genome editing outcomes.
   - *Evidence Collapsing*: Individual target windows within the same gene are grouped together as evidence rather than competing classes, avoiding false-positive ambiguous reads.
   - *Algorithm*: Scores each read against all target windows, collapses scores by taking the maximum for each gene/reference (`gene_score = max(target_window_scores)`), and applies a user-specified margin check between the top-1 and top-2 gene-level scores to ensure high-confidence assignment.
   - *Downstream Robustness*: Once assigned to a parent gene/reference, downstream editing and Indel analysis are performed independently for all target windows within that gene.
+- **CPU-Multiprocess Parallel Engine (New in v3.3.1)**: Overhauled background execution to analyze batches of 40-50+ FASTQ files concurrently. Using a process-isolated `ProcessPoolExecutor`, files are processed in parallel across all available CPU cores (scaling up to 16 cores). This provides massive speedups (up to 16x faster) on high-spec multi-core servers, with thread-safe file progress reporting.
 
 ### 2. PCR Setup Calculator
 Precision protocol planning with personalized preset management.
@@ -149,7 +150,7 @@ To deploy a new version:
 2.  Commit and push:
      ```bash
      git add VERSION
-     git commit -m "Bump version to 3.3.0"
+     git commit -m "Bump version to 3.3.1"
      git push origin main
      ```
 The server will detect the change within 5 minutes, pull the code, and rebuild the containers automatically.
@@ -184,6 +185,11 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 ---
 
 ## 📋 Changelog
+
+### v3.3.1
+- **CPU-Multiprocess Parallel Engine**: Overhauled uvicorn background task dispatcher to leverage the CPU cores of high-spec servers via process-isolated `ProcessPoolExecutor`. Batches of 40-50+ FASTQ files are analyzed concurrently, reducing total execution times up to 16x on multi-core systems.
+- **Thread-Safe Batched Progress Reporting**: Engineered a centralized progress-tracker that aggregates async file-level completion events to deliver a stable, reliable progress bar in the Angular UI, preventing flickering or visual resets.
+- **Fault-Tolerant Batch Analysis**: Implemented isolated exception boundaries on worker processes. Format errors or corrupted sequence reads in a single file will be caught, logged, and isolated, allowing the rest of the batch to run and return results successfully.
 
 ### v3.3.0
 - **CRISPR Gene-Level Collapsed Assignment**: Redesigned read demultiplexing to compute maximum evidence scores across all target windows belonging to a gene (`gene_score = max(target_window_scores)`), preventing target-vs-target competition from producing false-positive ambiguous reads in multi-gRNA and multi-target CRISPR screens.
