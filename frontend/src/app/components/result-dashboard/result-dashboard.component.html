@@ -220,6 +220,9 @@
               <ng-container *ngIf="t.type === 'delete'">
                 <span class="base-box del-bg" *ngFor="let char of t.val.split('')">-</span>
               </ng-container>
+              <ng-container *ngIf="t.type === 'unobserved'">
+                <span class="base-box unobserved-bg" *ngFor="let char of t.val.split('')">{{ char }}</span>
+              </ng-container>
               <span *ngIf="t.type === 'insert'" class="ins-wrapper" [attr.data-ins]="t.val"></span>
             </ng-container>
           </div>

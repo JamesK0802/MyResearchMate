@@ -1,25 +1,30 @@
 """
-classifier.py — Shared Classification Core for CRISPR Analysis and Benchmarking.
+classifier.py — X-Padding Classification Core for CRISPR Analysis.
 
-Provides unified logic for:
-1. Cut-site and reference window extraction.
-2. Read usability filtering (Phred, anchors, similarity).
-3. Read-to-class scoring (k-mer based).
-4. Class assignment (margin logic and single-class handling).
+Pipeline:
+1. gRNA-based coordinate alignment between read and reference window.
+2. Cut-site ±15bp coverage gate (minimum requirement).
+3. Anchor search for precise inner-region extraction (indel detection).
+4. X-padding for unobserved terminal positions.
+5. X-aware anchor comparison (skip X, exact on observed).
+6. X-aware k-mer scoring for gene classification.
+
+Core principle:
+  Observed bases are evidence.
+  Terminal X bases are unknown and ignored.
+  Cut-site ±15bp must be present for analysis.
 """
 
 import difflib
-import statistics
-import random
 import functools
 from typing import List, Dict, Tuple, Optional, Any
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Constants (Synced with single-reference pipeline standards)
+# Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-ANCHOR_LEN = 12
-INNER_SIMILARITY_MIN = 0.85
+CUT_SITE_MIN_FLANK = 15   # Read must cover cut_site ± this many bp
+ANCHOR_LEN = 12            # Anchor length for boundary detection and comparison
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Type Helpers & Basic Utilities
@@ -105,121 +110,268 @@ def extract_window(reference: str, cut_site: int, window_size: int) -> str:
     return reference[start:end]
 
 # ─────────────────────────────────────────────────────────────────────────────
+# X-Padding Pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _find_offset(seq_up: str, ref_up: str, sgrna_seq: str) -> Optional[int]:
+    """
+    Find coordinate offset between read and ref_window.
+    offset = read_position - ref_window_position for corresponding bases.
+    i.e., ref_window[0] corresponds to seq[offset].
+    
+    Tries gRNA alignment (fwd + RC), then anchor fallback.
+    """
+    # Method 1: gRNA alignment
+    if sgrna_seq:
+        sgrna_up = sgrna_seq.upper()
+        sgrna_rc = reverse_complement(sgrna_up)
+        for search in (sgrna_up, sgrna_rc):
+            ri = seq_up.find(search)
+            if ri == -1:
+                continue
+            rr = ref_up.find(search)
+            if rr == -1:
+                continue
+            return ri - rr
+
+    # Method 2: Left anchor fallback
+    left_anchor = ref_up[:ANCHOR_LEN]
+    li = seq_up.find(left_anchor)
+    if li != -1:
+        return li  # left anchor is at ref_window position 0
+
+    # Method 3: Right anchor fallback
+    right_anchor = ref_up[-ANCHOR_LEN:]
+    ri = seq_up.find(right_anchor)
+    if ri != -1:
+        return ri - (len(ref_up) - ANCHOR_LEN)
+
+    return None
+
+
+def _align_read_to_window(seq: str, qual, ref_window: str, cut_index_in_window: int, sgrna_seq: str) -> Dict:
+    """
+    Aligns read to ref_window. Returns extraction info for classification.
+    
+    Two outputs:
+    - observed_read: variable-length (anchor-based if possible), for alignment/classification
+    - read_window: fixed-length (= ref_window), X-padded, for anchor check/display
+    
+    Returns dict with fail reason or extraction results.
+    """
+    seq_up = seq.upper()
+    ref_up = ref_window.upper()
+    win_len = len(ref_window)
+
+    # ── Step 1: Find coordinate offset ────────────────────────────────────────
+    offset = _find_offset(seq_up, ref_up, sgrna_seq)
+    if offset is None:
+        return {'fail': 'no_alignment'}
+
+    # ── Step 2: Cut-site ±15bp coverage gate ──────────────────────────────────
+    cut_in_read = offset + cut_index_in_window
+    if cut_in_read - CUT_SITE_MIN_FLANK < 0 or cut_in_read + CUT_SITE_MIN_FLANK > len(seq):
+        return {'fail': 'no_coverage'}
+
+    # ── Step 3: Find anchors for precise boundary detection ───────────────────
+    # Anchors enable variable-length inner extraction → indel detection
+    left_anchor = ref_up[:ANCHOR_LEN]
+    right_anchor = ref_up[-ANCHOR_LEN:]
+    ref_inner_len = win_len - 2 * ANCHOR_LEN
+
+    # Find all anchor positions
+    left_positions = []
+    idx = seq_up.find(left_anchor)
+    while idx != -1:
+        left_positions.append(idx)
+        idx = seq_up.find(left_anchor, idx + 1)
+
+    right_positions = []
+    idx = seq_up.find(right_anchor)
+    while idx != -1:
+        right_positions.append(idx)
+        idx = seq_up.find(right_anchor, idx + 1)
+
+    # Find best anchor pair (inner length closest to expected)
+    best_li, best_ri = -1, -1
+    best_diff = float('inf')
+    for l in left_positions:
+        for r in right_positions:
+            if r >= l + ANCHOR_LEN:
+                inner_len = r - l - ANCHOR_LEN
+                diff = abs(inner_len - ref_inner_len)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_li, best_ri = l, r
+
+    # ── Step 4: Build observed_read + read_window ─────────────────────────────
+    # read_window: fixed length = win_len, X-padded, for anchor check
+    # observed_read: variable length, for alignment (captures indels)
+
+    if best_li != -1 and best_ri != -1:
+        # CASE A: Both anchors found — precise variable-length extraction
+        observed_read = seq[best_li: best_ri + ANCHOR_LEN].upper()
+        left_x = 0
+        right_x = 0
+        read_window = observed_read
+
+    elif left_positions:
+        # CASE B: Left anchor found, right truncated
+        best_left = min(left_positions, key=lambda x: abs(x - offset))
+        observed_read = seq[best_left:].upper()
+        left_x = 0
+        right_x = max(0, best_left + win_len - len(seq))
+        read_window = observed_read + 'X' * right_x
+
+    elif right_positions:
+        # CASE C: Right anchor found, left truncated
+        best_right = min(right_positions, key=lambda x: abs(x - (offset + win_len - ANCHOR_LEN)))
+        end_pos = best_right + ANCHOR_LEN
+        win_start = best_right - (win_len - ANCHOR_LEN)
+        actual_start = max(0, win_start)
+        observed_read = seq[actual_start:end_pos].upper()
+        left_x = max(0, -win_start)
+        right_x = 0
+        read_window = 'X' * left_x + observed_read
+
+    else:
+        # CASE D: No anchors found — offset-based extraction
+        rw_start = offset
+        rw_end = offset + win_len
+        left_x = max(0, -rw_start)
+        right_x = max(0, rw_end - len(seq))
+        actual_start = max(0, rw_start)
+        actual_end = min(len(seq), rw_end)
+        observed_read = seq[actual_start:actual_end].upper()
+        read_window = 'X' * left_x + observed_read + 'X' * right_x
+
+    # ── Step 5: Quality window for observed bases ─────────────────────────────
+    # Build qual for observed_read (for phred check)
+    if qual is not None:
+        if best_li != -1 and best_ri != -1:
+            qual_observed = tuple(qual[best_li: best_ri + ANCHOR_LEN])
+        elif left_positions:
+            qual_observed = tuple(qual[best_left:])
+        elif right_positions:
+            qual_observed = tuple(qual[actual_start:end_pos])
+        else:
+            actual_s = max(0, offset)
+            actual_e = min(len(seq), offset + win_len)
+            qual_observed = tuple(qual[actual_s:actual_e])
+    else:
+        qual_observed = None
+
+    return {
+        'fail': None,
+        'observed_read': observed_read,
+        'read_window': read_window,
+        'qual_observed': qual_observed,
+        'left_x': left_x,
+        'right_x': right_x,
+    }
+
+
+def _xaware_anchor_check(read_window: str, ref_window: str) -> bool:
+    """
+    X-aware anchor comparison on fixed-length read_window.
+    Compare only non-X observed bases. X positions are ignored.
+    If any observed base mismatches anchor → False.
+    """
+    rw = read_window.upper()
+    rf = ref_window.upper()
+    wl = min(len(rw), len(rf))
+
+    # Left anchor: first ANCHOR_LEN positions
+    for i in range(min(ANCHOR_LEN, wl)):
+        if rw[i] == 'X':
+            continue
+        if rw[i] != rf[i]:
+            return False
+
+    # Right anchor: last ANCHOR_LEN positions
+    for i in range(1, min(ANCHOR_LEN + 1, wl + 1)):
+        if rw[-i] == 'X':
+            continue
+        if rw[-i] != rf[-i]:
+            return False
+
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Usability Filter
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _eval_anchors(seq: str, qual, ref_window: str, phred_threshold: float) -> Dict:
-    """Attempts to extract inner region from one strand orientation."""
-    if len(ref_window) < ANCHOR_LEN * 2 + 2:
-        return {'fail': 'no_anchor'}
-
-    left_anchor = ref_window[:ANCHOR_LEN].lower()
-    right_anchor = ref_window[-ANCHOR_LEN:].lower()
-    ref_inner = ref_window[ANCHOR_LEN:-ANCHOR_LEN]
-
-    seq_l = seq.lower()
-    target_inner_len = len(ref_inner)
-    
-    left_indices = []
-    idx = seq_l.find(left_anchor)
-    while idx != -1:
-        left_indices.append(idx)
-        idx = seq_l.find(left_anchor, idx + 1)
-        
-    right_indices = []
-    idx = seq_l.find(right_anchor)
-    while idx != -1:
-        right_indices.append(idx)
-        idx = seq_l.find(right_anchor, idx + 1)
-
-    if not left_indices or not right_indices:
-        return {'fail': 'no_anchor'}
-
-    best_li, best_ri = -1, -1
-    best_diff = float('inf')
-    for l_idx in left_indices:
-        for r_idx in right_indices:
-            if r_idx >= l_idx + ANCHOR_LEN:
-                inner_len = r_idx - (l_idx + ANCHOR_LEN)
-                diff = abs(inner_len - target_inner_len)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_li = l_idx
-                    best_ri = r_idx
-
-    if best_li == -1 or best_ri == -1:
-        return {'fail': 'no_anchor'}
-
-    li = best_li
-    ri = best_ri
-
-    read_inner = seq[li + ANCHOR_LEN: ri]
-    
-    # Phred check
-    if qual is not None:
-        inner_qual = qual[li + ANCHOR_LEN: ri]
-        if inner_qual:
-            avg_q = statistics.mean(inner_qual) if isinstance(inner_qual[0], int) else \
-                    sum(ord(c) - 33 for c in inner_qual) / len(inner_qual)
-            if avg_q < phred_threshold:
-                return {'fail': 'quality'}
-
-    # Similarity check
-    len_ref = len(ref_inner)
-    len_read = len(read_inner)
-    
-    # Mathematical optimization: If length ratio is too divergent, similarity cannot possibly be >= INNER_SIMILARITY_MIN (0.85).
-    # Since ratio = 2 * matching_chars / (len_ref + len_read) <= 2 * min(len_ref, len_read) / (len_ref + len_read).
-    # For ratio >= 0.85, min_len / max_len must be >= 0.85 / 1.15 (~0.739).
-    # This simple check avoids calling extremely slow difflib.SequenceMatcher on bad alignments.
-    if min(len_ref, len_read) < 0.74 * max(len_ref, len_read):
-        return {'fail': 'similarity', 'sim': 0.0}
-
-    shorter = ref_inner if len_ref <= len_read else read_inner
-    longer  = read_inner if len_ref <= len_read else ref_inner
-    sim = difflib.SequenceMatcher(None, shorter, longer).ratio()
-
-    return {'fail': None, 'ref_inner': ref_inner, 'read_inner': read_inner, 'sim': sim}
-
 @functools.lru_cache(maxsize=131072)
-def _is_read_usable_cached(seq: str, qual_tuple: Optional[Tuple[int, ...]], ref_window: str, phred_threshold: float) -> Tuple[bool, str, Optional[Dict]]:
-    fw_res = _eval_anchors(seq, qual_tuple, ref_window, phred_threshold)
+def _is_read_usable_cached(seq: str, qual_tuple: Optional[Tuple[int, ...]], ref_window: str,
+                            phred_threshold: float, sgrna_seq: str = "",
+                            cut_index_in_window: int = -1) -> Tuple[bool, str, Optional[Dict]]:
+    win_len = len(ref_window)
+    if cut_index_in_window < 0:
+        cut_index_in_window = win_len // 2
+
+    # Try forward
+    fw_res = _align_read_to_window(seq, qual_tuple, ref_window, cut_index_in_window, sgrna_seq)
+    # Try RC
     rc_seq = reverse_complement(seq)
     rc_qual = tuple(reversed(qual_tuple)) if qual_tuple is not None else None
-    rc_res = _eval_anchors(rc_seq, rc_qual, ref_window, phred_threshold)
+    rc_res = _align_read_to_window(rc_seq, rc_qual, ref_window, cut_index_in_window, sgrna_seq)
 
-    best_res = None
-    is_rc = False
-    if fw_res['fail'] is None and rc_res['fail'] is None:
-        if rc_res['sim'] > fw_res['sim']:
-            best_res = rc_res
-            is_rc = True
+    candidates = []
+    fail_reasons = set()
+
+    for res, is_rc in [(fw_res, False), (rc_res, True)]:
+        if res['fail'] is not None:
+            fail_reasons.add(res['fail'])
+            continue
+
+        # X-aware anchor check
+        if not _xaware_anchor_check(res['read_window'], ref_window):
+            fail_reasons.add('no_anchor')
+            continue
+
+        # Phred check on observed bases
+        if res['qual_observed'] is not None:
+            observed_quals = res['qual_observed']
+            if observed_quals:
+                avg_q = sum(observed_quals) / len(observed_quals)
+                if avg_q < phred_threshold:
+                    fail_reasons.add('quality')
+                    continue
+
+        candidates.append((res, is_rc))
+
+    if not candidates:
+        # Pick most informative failure reason
+        if 'quality' in fail_reasons:
+            reason = 'quality'
+        elif 'no_anchor' in fail_reasons:
+            reason = 'no_anchor'
+        elif 'no_coverage' in fail_reasons:
+            reason = 'no_coverage'
         else:
-            best_res = fw_res
-    elif fw_res['fail'] is None:
-        best_res = fw_res
-    elif rc_res['fail'] is None:
-        best_res = rc_res
-        is_rc = True
-
-    if best_res is None:
-        reason = 'quality' if (fw_res.get('fail') == 'quality' or rc_res.get('fail') == 'quality') else 'no_anchor'
+            reason = 'no_alignment'
         return False, reason, None
 
-    if best_res['sim'] < INNER_SIMILARITY_MIN:
-        return False, 'similarity', None
+    # Pick best candidate: fewer X (more observed data)
+    best_res, is_rc = min(candidates, key=lambda c: c[0]['left_x'] + c[0]['right_x'])
 
-    # Copy the dictionary to prevent external mutation of the cached value
-    best_res_copy = dict(best_res)
-    best_res_copy['is_rc'] = is_rc
-    return True, 'ok', best_res_copy
+    result = dict(best_res)
+    result['is_rc'] = is_rc
+    return True, 'ok', result
 
-def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float) -> Tuple[bool, str, Optional[Dict]]:
-    """Tries fwd and RC. Returns (usable, reason, best_res_dict). Cached via _is_read_usable_cached."""
+
+def is_read_usable(seq: str, qual, ref_window: str, phred_threshold: float,
+                   sgrna_seq: str = "", cut_index_in_window: int = -1) -> Tuple[bool, str, Optional[Dict]]:
+    """
+    Public API. Tries fwd and RC orientations.
+    Returns (usable, reason, best_res_dict).
+    """
     qual_tuple = tuple(qual) if qual is not None else None
-    usable, reason, best_res = _is_read_usable_cached(seq, qual_tuple, ref_window, phred_threshold)
+    usable, reason, best_res = _is_read_usable_cached(
+        seq, qual_tuple, ref_window, phred_threshold, sgrna_seq, cut_index_in_window
+    )
     if best_res is not None:
-        # Return a copy of the dictionary to ensure cache safety
         return usable, reason, dict(best_res)
     return usable, reason, None
 
@@ -228,24 +380,29 @@ def clear_classifier_cache():
     _is_read_usable_cached.cache_clear()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Scoring & Classification
+# Scoring (X-aware)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def score_read_against_window(read: str, ref_window: str, k: int = 10) -> float:
-    """k-mer based window overlap score."""
+    """X-aware k-mer scoring. Skips k-mers containing X."""
     read_up = _to_str(read).upper()
     ref_up = _to_str(ref_window).upper()
     if not read_up or not ref_up: return 0.0
     if len(read_up) < k or len(ref_up) < k:
-        return difflib.SequenceMatcher(None, read_up, ref_up).ratio()
+        clean_read = read_up.replace('X', '')
+        clean_ref = ref_up.replace('X', '')
+        if not clean_read or not clean_ref: return 0.0
+        return difflib.SequenceMatcher(None, clean_read, clean_ref).ratio()
 
-    ref_kmers = set(ref_up[i:i+k] for i in range(len(ref_up)-k+1) if 'N' not in ref_up[i:i+k])
-    
+    ref_kmers = set(ref_up[i:i+k] for i in range(len(ref_up)-k+1)
+                    if 'N' not in ref_up[i:i+k] and 'X' not in ref_up[i:i+k])
+    if not ref_kmers: return 0.0
+
     def get_strand_hits(strand):
         hits = 0
         for i in range(len(strand)-k+1):
             kmer = strand[i:i+k]
-            if 'N' not in kmer and kmer in ref_kmers:
+            if 'N' not in kmer and 'X' not in kmer and kmer in ref_kmers:
                 hits += 1
         return hits
         
@@ -253,9 +410,11 @@ def score_read_against_window(read: str, ref_window: str, k: int = 10) -> float:
     rc_hits = get_strand_hits(reverse_complement(read_up))
     best_hits = max(fw_hits, rc_hits)
     
-    # Normalize by the number of k-mers in the reference window to avoid biasing towards larger windows
-    # Cap at 1.0 to prevent scores from exceeding 100% when the read contains repeated k-mers.
     return min(1.0, best_hits / max(len(ref_kmers), 1))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Classification
+# ─────────────────────────────────────────────────────────────────────────────
 
 def apply_classification(
     read_seq: str, 
@@ -266,33 +425,29 @@ def apply_classification(
 ) -> Dict:
     """
     Unified entry point for classification.
-    classes: List of { gene, target, ref_window }
+    classes: List of { gene, target, ref_window, sgrna_seq, cut_index_in_window }
     """
-    # 1. Usability Filtering
-    # We check usability against ALL classes. 
-    # A read must be usable for AT LEAST one candidate class to be considered.
     eligible_classes = []
     for c in classes:
-        usable, _, _ = is_read_usable(read_seq, read_qual, c['ref_window'], phred_threshold)
+        usable, _, _ = is_read_usable(
+            read_seq, read_qual, c['ref_window'], phred_threshold,
+            c.get('sgrna_seq', ''), c.get('cut_index_in_window', -1)
+        )
         if usable:
             eligible_classes.append(c)
     
     if not eligible_classes:
         return {'assigned': False, 'reason': 'filtered'}
 
-    # 2. Scoring
     scores = sorted(
         [(score_read_against_window(read_seq, c['ref_window']), c['gene'], c['target'])
          for c in eligible_classes],
         reverse=True
     )
     
-    # 3. Assignment
     top1_score, top1_gene, top1_target = scores[0]
 
-    # Handle Single-Class Special Case
     if len(classes) == 1:
-        # If it passed usability for this one class, we assign it regardless of margin
         return {
             'assigned': True, 
             'predicted_gene': top1_gene, 
@@ -300,7 +455,6 @@ def apply_classification(
             'top1_score': round(top1_score, 4)
         }
 
-    # Normal Multi-Class Margin Logic
     top2_score = scores[1][0] if len(scores) > 1 else 0.0
     gap = top1_score - top2_score
     
@@ -317,7 +471,7 @@ def apply_classification(
     return {'assigned': False, 'reason': 'ambiguous', 'top1_score': round(top1_score, 4)}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Gene-Level Classification (One-Read-Many-Targets Support)
+# Gene-Level Classification
 # ─────────────────────────────────────────────────────────────────────────────
 
 def apply_gene_classification(
@@ -328,16 +482,8 @@ def apply_gene_classification(
     margin: float
 ) -> Dict:
     """
-    Gene/reference-level classification. Assigns a read to a GENE, not a target.
-
-    Algorithm:
-      1. For each gene, score the read against every target window in that gene.
-      2. Collapse to gene-level: gene_score = max(target window scores).
-         Target windows within the same gene are evidence, not competitors.
-      3. Margin check between top-1 and top-2 gene-level scores.
-      4. After assignment, downstream analysis evaluates all targets independently.
-
-    Returns dict with 'assigned', 'predicted_gene', 'top1_score', and 'debug'.
+    Gene/reference-level classification. Assigns a read to a GENE.
+    gene_classes: { gene_name -> [{ target, ref_window, sgrna_seq, cut_index_in_window }] }
     """
     gene_names = list(gene_classes.keys())
 
@@ -345,7 +491,10 @@ def apply_gene_classification(
     if len(gene_names) == 1:
         gene_name = gene_names[0]
         for t in gene_classes[gene_name]:
-            usable, _, _ = is_read_usable(read_seq, read_qual, t['ref_window'], phred_threshold)
+            usable, _, _ = is_read_usable(
+                read_seq, read_qual, t['ref_window'], phred_threshold,
+                t.get('sgrna_seq', ''), t.get('cut_index_in_window', -1)
+            )
             if usable:
                 return {
                     'assigned': True,
@@ -378,7 +527,10 @@ def apply_gene_classification(
         usable_count = 0
 
         for t in targets:
-            usable, _, _ = is_read_usable(read_seq, read_qual, t['ref_window'], phred_threshold)
+            usable, _, _ = is_read_usable(
+                read_seq, read_qual, t['ref_window'], phred_threshold,
+                t.get('sgrna_seq', ''), t.get('cut_index_in_window', -1)
+            )
             if usable:
                 gene_usable = True
                 any_usable = True
@@ -408,7 +560,6 @@ def apply_gene_classification(
             }
         }
 
-    # Sort by score descending
     gene_scores.sort(reverse=True)
     top1_score, top1_gene = gene_scores[0]
 
@@ -424,7 +575,6 @@ def apply_gene_classification(
             }
         }
 
-    # Margin check between top-1 and top-2 genes
     top2_score, top2_gene = gene_scores[1]
     gap = top1_score - top2_score
 
@@ -453,4 +603,3 @@ def apply_gene_classification(
         'gap': round(gap, 4),
         'debug': debug_block
     }
-

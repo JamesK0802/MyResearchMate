@@ -111,15 +111,15 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
         # Do NOT reverse_complement the ref_window here.
         # (Removed: if is_rc_in_ref: ref_window = reverse_complement(ref_window))
 
-        # Compute consistent ref_inner string for the groups
-        ref_inner_fixed = ref_window[12:-12].upper()
+        # Compute consistent ref_inner string for the groups (Now including anchors!)
+        ref_inner_fixed = ref_window.upper()
         cut_site_index_fixed = len(ref_inner_fixed) // 2
 
         # Calculate exact gRNA start in the inner window for frontend display
         # If the gRNA binds the RC, we search for its RC in the forward reference.
         search_sgrna = reverse_complement(sgrna_seq).upper() if is_rc_in_ref else sgrna_seq.upper()
         grna_match_idx = ref_window.upper().find(search_sgrna)
-        grna_start_in_inner = grna_match_idx - 12 if grna_match_idx != -1 else -1
+        grna_start_in_inner = grna_match_idx if grna_match_idx != -1 else -1
 
         print(f"  [DEBUG] ref_window length: {len(ref_window)} bp, gRNA inner start: {grna_start_in_inner} (Searched RC: {is_rc_in_ref})")
 
@@ -135,17 +135,16 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
             "substitution":     0,   # subset of no_indel
             "fail_no_anchor":   0,   # anchors not found
             "fail_quality":     0,   # quality < phred_threshold
-            "fail_similarity":  0,   # inner region too divergent
+            "fail_no_coverage": 0,   # cut site missing
+            "fail_no_alignment": 0,  # gRNA not found
         }
 
-        # counts["fail_similarity"] - subset of reads dropped
         groups_dict = {}
 
         # ── Step 4: Process each read ─────────────────────────────────────────
-        # USE UNIFIED CLASSIFIER CORE
         import core.classifier as classifier
         for i, (seq, qual) in enumerate(data):
-            usable, reason, best_res = classifier.is_read_usable(seq, qual, ref_window, phred_threshold)
+            usable, reason, best_res = classifier.is_read_usable(seq, qual, ref_window, phred_threshold, sgrna_seq, cut_site_index_fixed)
 
             if not usable:
                 if reason == "quality": 
@@ -175,18 +174,21 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
             else:
                 counts["forward_aligned"] += 1
 
-            ref_inner = best_res["ref_inner"]
-            read_inner = best_res["read_inner"]
-            sim = best_res["sim"]
+            read_window = best_res["read_window"]
+            observed_read = best_res["observed_read"]
+            left_x = best_res["left_x"]
+            right_x = best_res["right_x"]
 
             # Classify using exact token-based indel length calculator
-            category, has_sub, net_indel, read_tokens = classify_mutation_with_alignment(ref_inner.upper(), read_inner.upper())
+            category, has_sub, net_indel, read_tokens = classify_mutation_with_alignment(
+                ref_window.upper(), observed_read.upper(), left_x, right_x
+            )
             counts[category] += 1
             if has_sub:   
                 counts["substitution"] += 1
 
             # Grouping for Annotation View
-            key = read_inner.upper()
+            key = read_window.upper()
             if key not in groups_dict:
                 groups_dict[key] = {
                     "read_inner": key,
@@ -210,7 +212,6 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
                     'classification': category,
                     'has_substitution': has_sub,
                     'net_indel': net_indel,
-                    'similarity': round(sim, 4),
                     'edited': is_edited
                 })
 
@@ -249,7 +250,8 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
         print(f"  --- Filter breakdown ---")
         print(f"  fail_no_anchor      = {counts['fail_no_anchor']}")
         print(f"  fail_quality        = {counts['fail_quality']}   (phred < {phred_threshold})")
-        print(f"  fail_similarity     = {counts['fail_similarity']}  (inner sim < {INNER_SIMILARITY_MIN})")
+        print(f"  fail_no_coverage    = {counts['fail_no_coverage']}  (cut site ±15bp missing)")
+        print(f"  fail_no_alignment   = {counts['fail_no_alignment']}  (gRNA not found)")
         print(f"  fail_threshold ({indel_threshold}%)  = {counts['read_ambiguous']}")
         print(f"  final_aligned_reads = {new_aligned}   ← true denominator for all %")
         print(f"  --- Re-calculated Classification ---")
@@ -320,7 +322,7 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
                 "in_frame":     new_in_frame_reads,
                 "no_indel":     new_no_indel - new_substitution, # Pure no-indel (unmodified)
                 "substitution": new_substitution,
-                "ambiguous":    counts["fail_quality"] + counts["fail_similarity"],
+                "ambiguous":    counts["fail_quality"] + counts["fail_no_coverage"] + counts["fail_no_alignment"],
             },
             "target_id":        target_id,
             "sgrna_seq":        sgrna_seq,
@@ -695,10 +697,13 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                         cut_info = classifier.find_grna_cut_site(g["sequence"], t["sgrna_seq"])
                         win_size = int(t.get("window_size", 90))
                         ref_win = classifier.extract_window(g["sequence"], cut_info["cut_site"], win_size)
+                        cut_index_in_window = cut_info["cut_site"] - max(0, cut_info["cut_site"] - (win_size // 2))
                         classifier_classes.append({
                             "gene": g["gene"],
                             "target": t.get("target_id", ""),
-                            "ref_window": ref_win
+                            "ref_window": ref_win,
+                            "sgrna_seq": t.get("sgrna_seq", ""),
+                            "cut_index_in_window": cut_index_in_window
                         })
                 
                 # 1. Loosely assign each read to a target and extract read_inner using anchors
@@ -711,10 +716,10 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                     scores = []
                     for c in classifier_classes:
                         # We know these reads have anchors, so use them to extract the exact inner region!
-                        usable, reason, best_res = classifier.is_read_usable(seq, qual, c["ref_window"], phred_threshold)
+                        usable, reason, best_res = classifier.is_read_usable(seq, qual, c["ref_window"], phred_threshold, c.get("sgrna_seq", ""), c.get("cut_index_in_window", -1))
                         if usable:
                             score = classifier.score_read_against_window(seq, c["ref_window"])
-                            scores.append((score, c["gene"], best_res["read_inner"]))
+                            scores.append((score, c["gene"], best_res["read_window"]))
                     
                     scores.sort(reverse=True, key=lambda x: x[0])
                     if not scores:
@@ -838,7 +843,8 @@ def process_single_file_worker(
     assignment_margin: float,
     analyze_ambiguous: bool,
     rescue_ambiguous: bool,
-    rescue_threshold: int
+    rescue_threshold: int,
+    progress_queue=None
 ) -> dict:
     import os
     import gc
@@ -846,6 +852,13 @@ def process_single_file_worker(
     # Delay import of process_files_multi to avoid circular dependency issues
     from run_local import process_files_multi
     
+    def worker_progress_callback(percent, msg):
+        if progress_queue is not None:
+            try:
+                progress_queue.put((os.path.basename(filepath), percent, msg))
+            except Exception:
+                pass
+
     file_result = process_files_multi(
         file_paths=[filepath],
         genes_payload=genes_payload,
@@ -855,7 +868,7 @@ def process_single_file_worker(
         analyze_ambiguous=analyze_ambiguous,
         rescue_ambiguous=rescue_ambiguous,
         rescue_threshold=rescue_threshold,
-        progress_callback=None
+        progress_callback=worker_progress_callback
     )
     
     # Clean up file immediately to save disk space

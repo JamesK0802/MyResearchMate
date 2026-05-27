@@ -21,18 +21,21 @@ from run_local import process_files, process_files_multi, process_single_file_wo
 # Database Initialization
 from database.db import engine, Base
 import database.models # Ensure all models are loaded
-Base.metadata.create_all(bind=engine)
-
-# Self-healing DB check for WorkflowShare updates (supporting individual researcher shares)
+import multiprocessing
 from sqlalchemy import text
-try:
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE workflow_shares ADD COLUMN IF NOT EXISTS shared_with_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE"))
-        conn.execute(text("ALTER TABLE workflow_shares ALTER COLUMN lab_id DROP NOT NULL"))
-        conn.commit()
-    print("[DB] Self-healing workflow_shares migration executed successfully.")
-except Exception as e:
-    print(f"[DB] Self-healing workflow_shares migration: {e}")
+
+if multiprocessing.current_process().name == 'MainProcess':
+    Base.metadata.create_all(bind=engine)
+    
+    # Self-healing DB check for WorkflowShare updates (supporting individual researcher shares)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE workflow_shares ADD COLUMN IF NOT EXISTS shared_with_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE"))
+            conn.execute(text("ALTER TABLE workflow_shares ALTER COLUMN lab_id DROP NOT NULL"))
+            conn.commit()
+        print("[DB] Self-healing workflow_shares migration executed successfully.")
+    except Exception as e:
+        print(f"[DB] Self-healing workflow_shares migration: {e}")
 
 app = FastAPI(title="My Lab Mate API")
 
@@ -125,6 +128,38 @@ def background_analysis(
         max_workers = min(os.cpu_count() or 4, 16)
         print(f"[BACKGROUND] Initializing parallel analysis with {max_workers} worker processes for {total_files} files.")
         
+        # Setup cross-process progress queue
+        global _manager
+        if '_manager' in globals():
+            progress_queue = _manager.Queue()
+        else:
+            import multiprocessing
+            progress_queue = multiprocessing.Manager().Queue()
+            
+        def monitor_progress():
+            file_progress = {} # dict of filename -> (pct, msg)
+            while True:
+                item = progress_queue.get()
+                if item == "DONE":
+                    break
+                fname, p, msg = item
+                file_progress[fname] = (p, msg)
+                
+                # Calculate overall progress across all files
+                if total_files > 0:
+                    total_p = sum(file_progress.get(f, (0, ""))[0] for f in temp_filenames)
+                    overall = int(10 + (total_p / (total_files * 100)) * 85)
+                else:
+                    overall = 10
+                overall = min(99, max(10, overall))
+                
+                update_task(tasks_proxy, task_id, progress=overall, stage=msg)
+
+        import threading
+        monitor_thread = threading.Thread(target=monitor_progress)
+        monitor_thread.daemon = True
+        monitor_thread.start()
+        
         futures_to_file = {}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             for i, filename in enumerate(temp_filenames):
@@ -140,7 +175,8 @@ def background_analysis(
                     assignment_margin,
                     analyze_ambiguous,
                     rescue_ambiguous,
-                    rescue_threshold
+                    rescue_threshold,
+                    progress_queue
                 )
                 futures_to_file[future] = filename
             
@@ -149,12 +185,8 @@ def background_analysis(
                 filename = futures_to_file[future]
                 completed_files += 1
                 
-                # Scale progress between 10% and 95%
-                progress_pct = int(10 + (completed_files / total_files) * 85)
-                progress_pct = min(99, max(10, progress_pct))
-                
-                stage_msg = f"[{completed_files}/{total_files}] Completed {filename}"
-                update_task(tasks_proxy, task_id, progress=progress_pct, stage=stage_msg)
+                # Ensure the file shows as 100% locally if the worker missed the final callback
+                progress_queue.put((filename, 100, f"[{completed_files}/{total_files}] Completed {filename}"))
                 
                 try:
                     file_result = future.result()
@@ -163,6 +195,10 @@ def background_analysis(
                 except Exception as file_err:
                     print(f"[ERROR] Failed to process file {filename}: {str(file_err)}")
                     # Continue to process other files
+                    
+        # Stop the monitor thread
+        progress_queue.put("DONE")
+        monitor_thread.join(timeout=2.0)
                     
         # Merge results into the final payload
         final_payload = {
@@ -247,12 +283,20 @@ async def run_analysis_endpoint(
                 # Check Size during stream
                 # Note: Starlette/FastAPI already saved this to a temp file if it's large.
                 # We move it to our specific job directory.
-                filename = os.path.basename(value.filename).split("_")[-1]
+                filename = os.path.basename(value.filename)
+                
+                # Prevent filename collisions from different directories
+                base_name, ext = os.path.splitext(filename)
+                counter = 1
+                while filename in temp_filenames:
+                    filename = f"{base_name}_{counter}{ext}"
+                    counter += 1
+                    
                 save_path = os.path.join(job_dir, filename)
                 # Stream write from spooled file to our job dir using highly-optimized low-level C shutil
                 await value.seek(0)
                 with open(save_path, "wb") as buffer:
-                    shutil.copyfileobj(value.file, buffer)
+                    shutil.copyfileobj(value.file, buffer, length=1024*1024*10)
                 
                 # Check Size after copy
                 file_size = os.path.getsize(save_path)

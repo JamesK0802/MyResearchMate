@@ -35,11 +35,14 @@ def assign_reads_to_references(reads_data, gene_payloads, phred_threshold=10, ma
         gene_classes[gene_name] = []
         for t in g.get("targets", []):
             cut_info = classifier.find_grna_cut_site(gene_ref, t["sgrna_seq"])
-            win_size = t.get("window_size", 90)
+            win_size = int(t.get("window_size", 90))
             ref_win = classifier.extract_window(gene_ref, cut_info["cut_site"], win_size)
+            cut_index_in_window = cut_info["cut_site"] - max(0, cut_info["cut_site"] - (win_size // 2))
             gene_classes[gene_name].append({
                 "target": t["target_id"],
-                "ref_window": ref_win
+                "ref_window": ref_win,
+                "sgrna_seq": t["sgrna_seq"],
+                "cut_index_in_window": cut_index_in_window
             })
 
     # Print gene_classes summary

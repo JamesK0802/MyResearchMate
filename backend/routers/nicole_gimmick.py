@@ -6,12 +6,15 @@ from sqlalchemy.orm import Session
 from database.db import Base, engine, get_db
 from auth.dependencies import get_current_user
 
+import multiprocessing
+
 # ── Dynamic Reset for Gimmick schema updates ──
-try:
-    with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS nicole_gimmick_bookings CASCADE"))
-except Exception as e:
-    print(f"[NICOLE] Old table drop failed or not needed: {e}")
+if multiprocessing.current_process().name == 'MainProcess':
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS nicole_gimmick_bookings CASCADE"))
+    except Exception as e:
+        print(f"[NICOLE] Old table drop failed or not needed: {e}")
 
 # ── Isolated Gimmick DB Tables ──
 class NicoleAccess(Base):
@@ -31,8 +34,9 @@ class NicoleGimmickBooking(Base):
     comment = Column(String, nullable=True)
     reaction = Column(String, nullable=True)
 
-# Re-create table structures
-Base.metadata.create_all(bind=engine)
+if multiprocessing.current_process().name == 'MainProcess':
+    # Re-create table structures
+    Base.metadata.create_all(bind=engine)
 
 router = APIRouter(prefix="/nicole-gimmick", tags=["nicole-gimmick"])
 

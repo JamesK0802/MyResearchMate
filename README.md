@@ -1,4 +1,4 @@
-# My Lab Mate v3.3.1
+# My Lab Mate v3.4.0
 
 **My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
@@ -185,6 +185,11 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 ---
 
 ## 📋 Changelog
+
+### v3.4.0
+- **X-Padding Architecture**: Redesigned the CRISPR read classification and analysis pipeline. Terminal unobserved sequences (due to short reads) are now explicitly padded with `X` and treated as unobserved rather than being erroneously classified as biological deletions or triggering false-positive reference restorations.
+- **X-Aware Alignment**: Integrated terminal-aware `SequenceMatcher` logic to properly classify truncated read boundaries as `unobserved` tokens, ensuring perfectly accurate Indel size counting.
+- **Variable-Length Read Extraction**: `classifier.py` now extracts sequences at precise coordinate offsets mapped by either gRNA alignment or anchor fallbacks, preserving any inserted bases within the target window.
 
 ### v3.3.1
 - **CPU-Multiprocess Parallel Engine**: Overhauled uvicorn background task dispatcher to leverage the CPU cores of high-spec servers via process-isolated `ProcessPoolExecutor`. Batches of 40-50+ FASTQ files are analyzed concurrently, reducing total execution times up to 16x on multi-core systems.
