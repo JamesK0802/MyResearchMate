@@ -12,6 +12,7 @@ export interface ExportParams {
 
 export interface ReadFlowData {
   rawReads: number; phredPassed: number; anchorMatched: number;
+  usableForAssignment?: number;
   assignedReads: number; ambiguousReads: number;
 }
 
@@ -67,7 +68,12 @@ export class ExcelExportService {
     leftRow++;
 
     leftRow = this.writeSection(ws, leftRow, '2. Read Flow Summary', 1, 5);
-    const flows: [string, number][] = [['Raw Reads', scope.readFlow.rawReads], ['Phred Passed', scope.readFlow.phredPassed], ['Anchor Matched', scope.readFlow.anchorMatched], ['Assigned Reads', scope.readFlow.assignedReads]];
+    const flows: [string, number][] = [
+      ['Raw Reads', scope.readFlow.rawReads],
+      ['Phred Passed', scope.readFlow.phredPassed],
+      ['Usable for Assignment', scope.readFlow.usableForAssignment ?? scope.readFlow.anchorMatched],
+      ['Assigned Reads', scope.readFlow.assignedReads]
+    ];
     for (const [k, v] of flows) {
       const r = ws.getRow(leftRow); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(1).fill = this.PARAM_LABEL_FILL; r.getCell(1).border = this.BORDER_THIN; r.getCell(1).alignment = { horizontal: 'right' };
       r.getCell(2).value = v; r.getCell(2).numFmt = '#,##0'; r.getCell(2).border = this.BORDER_THIN; r.getCell(2).alignment = { horizontal: 'right' };
@@ -174,7 +180,7 @@ export class ExcelExportService {
           ws.getRow(rightRow).getCell(dStart).font = { italic: true, size: 9, color: { argb: 'FF7F8C8D' } };
           rightRow++;
 
-          const mPairs: [string, any][] = [['Total Reads', t.summary?.total_reads ?? 0], ['Aligned Reads', t.summary?.aligned_reads ?? 0], ['Out-of-frame %', (t.summary?.out_of_frame_pct ?? 0) / 100], ['In-frame %', (t.summary?.in_frame_pct ?? 0) / 100], ['No Indel %', (t.summary?.no_indel_pct ?? 0) / 100], ['Substitution %', (t.summary?.substitution_pct ?? 0) / 100]];
+          const mPairs: [string, any][] = [['Total Reads', t.summary?.total_reads ?? 0], ['Aligned Reads', t.summary?.aligned_reads ?? 0], ['Indel Editing %', (t.summary?.indel_editing_efficiency ?? t.summary?.editing_efficiency ?? 0) / 100], ['Out-of-frame %', (t.summary?.out_of_frame_pct ?? 0) / 100], ['In-frame %', (t.summary?.in_frame_pct ?? 0) / 100], ['No Indel %', (t.summary?.no_indel_pct ?? 0) / 100], ['Substitution %', (t.summary?.substitution_pct ?? 0) / 100]];
           const mBaseRow = rightRow;
           for (const [k, v] of mPairs) {
             const mr = ws.getRow(rightRow); mr.getCell(dStart).value = k; mr.getCell(dStart).font = { bold: true }; mr.getCell(dStart).fill = this.PARAM_LABEL_FILL; mr.getCell(dStart).border = this.BORDER_THIN; mr.getCell(dStart).alignment = { horizontal: 'right' };

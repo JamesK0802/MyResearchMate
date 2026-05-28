@@ -393,7 +393,7 @@ export class AppStateService {
       totalAmb += mrd.ambiguous_read_count ?? 0;
       totalRaw += mrd.debug?.total_reads_parsed ?? 0;
       totalPhred += mrd.debug?.phred_passed_count ?? 0;
-      totalAnchor += mrd.debug?.anchor_matched_count ?? 0;
+      totalAnchor += mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0;
       for (const geneRes of (mrd.genes ?? [])) {
         if (geneMap.has(geneRes.gene)) {
           const ex = geneMap.get(geneRes.gene)!;
@@ -402,19 +402,24 @@ export class AppStateService {
             ex.analysis_result.targets.forEach((extT: any, tidx: number) => {
               const newT = geneRes.analysis_result.targets[tidx]; if (!newT) return;
               const s1 = extT.summary, s2 = newT.summary;
-              const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0 };
-              const b2 = newT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0 };
+              const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
+              const b2 = newT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
               b1.out_of_frame += b2.out_of_frame || 0; b1.in_frame += b2.in_frame || 0;
               b1.no_indel += b2.no_indel || 0; b1.substitution += b2.substitution || 0;
+              b1.failed = (b1.failed || 0) + (b2.failed || b2.ambiguous || 0);
+              b1.ambiguous = b1.failed;
               extT.breakdown = b1;
               s1.total_reads += s2.total_reads; s1.matched_reads += s2.matched_reads; s1.aligned_reads += s2.aligned_reads;
               const ta = s1.aligned_reads || 1;
               const pct = (v: number) => Math.round((v / ta) * 10000) / 100;
-              const tni = b1.no_indel + b1.substitution;
               s1.out_of_frame_pct = pct(b1.out_of_frame); s1.in_frame_pct = pct(b1.in_frame);
-              s1.no_indel_pct = pct(tni); s1.substitution_pct = pct(b1.substitution);
-              s1.modified = b1.out_of_frame + b1.in_frame; s1.unmodified = tni;
-              s1.editing_efficiency = Math.round(((s1.modified) / (s1.total_reads || 1)) * 10000) / 100;
+              s1.no_indel_pct = pct(b1.no_indel); s1.substitution_pct = pct(b1.substitution);
+              s1.modified = b1.out_of_frame + b1.in_frame; s1.unmodified = b1.no_indel;
+              s1.substitution_reads = b1.substitution;
+              s1.editing_efficiency = pct(s1.modified);
+              s1.indel_editing_efficiency = pct(s1.modified);
+              s1.substitution_policy = 'separate_category_indel_editing_excludes_substitutions';
+              s1.failed_reads = b1.failed;
               if (newT.top_groups && extT.top_groups) {
                 const gm = new Map<string, any>();
                 [...extT.top_groups, ...newT.top_groups].forEach(g => { if (gm.has(g.read_inner)) { gm.get(g.read_inner).read_count += g.read_count; } else { gm.set(g.read_inner, { ...g }); } });
@@ -482,7 +487,8 @@ export class AppStateService {
             debug: {
               total_reads_parsed: scope.readFlow.rawReads,
               phred_passed_count: scope.readFlow.phredPassed,
-              anchor_matched_count: scope.readFlow.anchorMatched
+              anchor_matched_count: scope.readFlow.anchorMatched,
+              usable_for_assignment_count: scope.readFlow.usableForAssignment ?? scope.readFlow.anchorMatched
             },
             ambiguous_read_count: scope.readFlow.ambiguousReads,
             genes: scope.genes
@@ -630,6 +636,7 @@ export class AppStateService {
         rawReads: this.totalMergedRawReads,
         phredPassed: this.totalMergedPhredPassed,
         anchorMatched: this.totalMergedAnchorMatched,
+        usableForAssignment: this.totalMergedAnchorMatched,
         assignedReads: totalAssigned,
         ambiguousReads: this.totalMergedAmbiguous
       },
@@ -653,6 +660,7 @@ export class AppStateService {
           rawReads: mrd.debug?.total_reads_parsed ?? 0,
           phredPassed: mrd.debug?.phred_passed_count ?? 0,
           anchorMatched: mrd.debug?.anchor_matched_count ?? 0,
+          usableForAssignment: mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0,
           assignedReads: fa,
           ambiguousReads: mrd.ambiguous_read_count ?? 0
         },
@@ -710,7 +718,7 @@ export class AppStateService {
             data: {
               labels: ['Unmodified', 'Substitution', 'In-frame', 'Out-of-frame'],
               datasets: [{
-                data: [s.no_indel_pct - s.substitution_pct, s.substitution_pct, s.in_frame_pct, s.out_of_frame_pct],
+                data: [s.no_indel_pct, s.substitution_pct, s.in_frame_pct, s.out_of_frame_pct],
                 backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
               }]
             },
@@ -721,19 +729,20 @@ export class AppStateService {
           allImages[scope.sheetName][chartKey]['pie'] = canvas.toDataURL('image/png');
           pieChart.destroy();
 
-          // Donut Chart (Editing Efficiency)
-          const edited = (s.out_of_frame_pct ?? 0) + (s.in_frame_pct ?? 0) + (s.substitution_pct ?? 0);
-          const unedited = 100 - edited;
+          // Donut Chart: substitutions are a separate category, not silently merged.
+          const edited = (s.out_of_frame_pct ?? 0) + (s.in_frame_pct ?? 0);
+          const unedited = s.no_indel_pct ?? Math.max(0, 100 - edited - (s.substitution_pct ?? 0));
+          const substitution = s.substitution_pct ?? 0;
           const donutChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
-              labels: ['Edited', 'Unedited'],
+              labels: ['Indel edited', 'No indel', 'Substitution'],
               datasets: [{
-                data: [edited, unedited],
-                backgroundColor: ['#f85a7e', '#d1d1d1']
+                data: [edited, unedited, substitution],
+                backgroundColor: ['#f85a7e', '#d1d1d1', '#3498db']
               }]
             },
-            options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Efficiency (${gene.gene} - ${target.target_id})` } } }
+            options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Indel Editing (${gene.gene} - ${target.target_id})` } } }
           });
           allImages[scope.sheetName][chartKey]['donut'] = canvas.toDataURL('image/png');
           donutChart.destroy();

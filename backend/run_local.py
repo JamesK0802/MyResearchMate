@@ -4,6 +4,7 @@ import json
 import os
 import statistics
 import difflib
+import subprocess
 from core.parser import parse_fastq
 from core.aligner import (process_read_with_anchors, extract_window,
                            calculate_cut_site, find_target_in_reference,
@@ -11,6 +12,37 @@ from core.aligner import (process_read_with_anchors, extract_window,
 from core.analyzer import classify_mutation_with_alignment
 from core.multi_reference_assigner import assign_reads_to_references
 import core.classifier as classifier
+
+
+SUBSTITUTION_POLICY = "separate_category_indel_editing_excludes_substitutions"
+
+
+def _get_code_version():
+    """Best-effort git commit for validation metadata."""
+    env_version = os.environ.get("GIT_COMMIT") or os.environ.get("RENDER_GIT_COMMIT")
+    if env_version:
+        return env_version[:12]
+    try:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=1,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _reference_metadata(genes_payload):
+    metadata = []
+    for gene in genes_payload or []:
+        metadata.append({
+            "gene": gene.get("gene"),
+            "target_ids": [t.get("target_id") for t in gene.get("targets", [])],
+        })
+    return metadata
 
 
 def _unpack_analysis_result(result):
@@ -41,7 +73,17 @@ def run_analysis(fastq_file, targets, phred_threshold=10, indel_threshold=1.0):
 
     final_output = {
         "fastq_file": fastq_file,
-        "target_results": target_results
+        "target_results": target_results,
+        "metadata": {
+            "code_version": _get_code_version(),
+            "input_filenames": [os.path.basename(fastq_file)],
+            "target_ids": [t.get("target_id") for t in targets],
+            "thresholds": {
+                "phred_threshold": phred_threshold,
+                "indel_threshold": indel_threshold,
+            },
+            "substitution_policy": SUBSTITUTION_POLICY,
+        }
     }
     # Include multi-target cross-correlation data when available
     if multi_target_extras:
@@ -50,22 +92,19 @@ def run_analysis(fastq_file, targets, phred_threshold=10, indel_threshold=1.0):
 
 def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0):
     """
-    Main analysis pipeline — CRISPRnano-compatible.
+    Main CRISPR target-level analysis pipeline.
 
-    Filtering pipeline (mirrors CRISPRnano):
-        1. Both flanking anchors must be found in the read (exact match)
-        2. Inner-region Phred avg >= phred_threshold  (default Q10; CRISPRnano uses Q30)
-        3. Inner-region sequence similarity to ref_inner >= INNER_SIMILARITY_MIN
-           (rejects off-target reads where anchors matched by chance)
-        4. Classify by net_indel = len(read_inner) - len(ref_inner)
+    Filtering pipeline:
+        1. Candidate read/window alignment must cover the cut-site region.
+        2. Anchor consistency is checked with X-aware terminal handling.
+        3. Observed-base Phred avg must be >= phred_threshold.
+        4. Classify by tokenized insertions/deletions/substitutions.
 
     Guarantees:
         out_of_frame + in_frame + no_indel == aligned_reads
-        substitution ⊂ no_indel  (never mixed with indel classes)
+        substitutions are reported as a separate category and are not counted
+        as indel editing efficiency.
     """
-    # ── Similarity threshold for inner region (0.85 drops noisy non-target sequences) ──
-    INNER_SIMILARITY_MIN = 0.85
-
     total_reads = len(data)
     target_results_list = []
 
@@ -106,6 +145,7 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
         print(f"  [DEBUG] Processing Target '{target_id}' at idx {ref_sgrna_start} (RC={is_rc_in_ref})")
 
         ref_window = classifier.extract_window(reference_seq, ref_cut_site, window_size)
+        cut_site_index_fixed = classifier.cut_index_in_window(reference_seq, ref_cut_site, window_size)
         
         # ROOT CAUSE FIX: The display and alignment must ALWAYS use the canonical forward orientation.
         # Do NOT reverse_complement the ref_window here.
@@ -113,7 +153,6 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
 
         # Compute consistent ref_inner string for the groups (Now including anchors!)
         ref_inner_fixed = ref_window.upper()
-        cut_site_index_fixed = len(ref_inner_fixed) // 2
 
         # Calculate exact gRNA start in the inner window for frontend display
         # If the gRNA binds the RC, we search for its RC in the forward reference.
@@ -239,6 +278,14 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
         new_in_frame_reads = sum(g["read_count"] for g in passed_groups_dict.values() if g["classification"] == "in_frame")
         new_no_indel = sum(g["read_count"] for g in passed_groups_dict.values() if g["classification"] == "no_indel")
         new_substitution = sum(g["read_count"] for g in passed_groups_dict.values() if g["classification"] == "no_indel" and g["has_sub"])
+        new_pure_no_indel = new_no_indel - new_substitution
+        new_modified = new_out_of_frame + new_in_frame_reads
+        failed_reads = (
+            counts["fail_no_anchor"] +
+            counts["fail_quality"] +
+            counts["fail_no_coverage"] +
+            counts["fail_no_alignment"]
+        )
         
         counts["read_ambiguous"] = aligned - new_aligned
         counts["aligned_passed"] = new_aligned
@@ -257,15 +304,15 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
         print(f"  --- Re-calculated Classification ---")
         print(f"  out_of_frame_reads  = {new_out_of_frame}")
         print(f"  in_frame_reads      = {new_in_frame_reads}")
-        print(f"  no_indel_reads      = {new_no_indel}")
-        print(f"  substitution_reads  = {new_substitution}  (subset of no_indel)")
+        print(f"  no_indel_reads      = {new_pure_no_indel}  (pure no-indel)")
+        print(f"  substitution_reads  = {new_substitution}  (separate category)")
 
         def pct(val):
             return round(val / new_aligned * 100, 2) if new_aligned > 0 else 0.0
 
         print(f"\n  Out-of-frame %  = {new_out_of_frame} / {new_aligned} × 100 = {pct(new_out_of_frame)}%")
         print(f"  In-frame %      = {new_in_frame_reads} / {new_aligned} × 100 = {pct(new_in_frame_reads)}%")
-        print(f"  No indel %      = {new_no_indel} / {new_aligned} × 100 = {pct(new_no_indel)}%")
+        print(f"  No indel %      = {new_pure_no_indel} / {new_aligned} × 100 = {pct(new_pure_no_indel)}%")
         print(f"  Substitution %  = {new_substitution} / {new_aligned} × 100 = {pct(new_substitution)}%")
         print(f"[DEBUG] ================================================\n")
 
@@ -311,22 +358,46 @@ def run_analysis_on_reads(data, targets, phred_threshold=10, indel_threshold=1.0
                 "aligned_reads":    new_aligned,
                 "out_of_frame_pct": pct(new_out_of_frame),
                 "in_frame_pct":     pct(new_in_frame_reads),
-                "no_indel_pct":     pct(new_no_indel),
+                "no_indel_pct":     pct(new_pure_no_indel),
                 "substitution_pct": pct(new_substitution),
-                "modified":         new_out_of_frame + new_in_frame_reads,
-                "unmodified":       new_no_indel,
-                "read_ambiguous":   counts["read_ambiguous"]
+                "modified":         new_modified,
+                "unmodified":       new_pure_no_indel,
+                "substitution_reads": new_substitution,
+                "editing_efficiency": pct(new_modified),
+                "indel_editing_efficiency": pct(new_modified),
+                "substitution_policy": SUBSTITUTION_POLICY,
+                "read_ambiguous":   counts["read_ambiguous"],
+                "low_frequency_filtered": counts["read_ambiguous"],
+                "failed_reads": failed_reads,
+                "failure_reasons": {
+                    "fail_no_anchor": counts["fail_no_anchor"],
+                    "fail_quality": counts["fail_quality"],
+                    "fail_no_coverage": counts["fail_no_coverage"],
+                    "fail_no_alignment": counts["fail_no_alignment"],
+                    "low_frequency_filtered": counts["read_ambiguous"],
+                }
             },
             "breakdown": {
                 "out_of_frame": new_out_of_frame,
                 "in_frame":     new_in_frame_reads,
-                "no_indel":     new_no_indel - new_substitution, # Pure no-indel (unmodified)
+                "no_indel":     new_pure_no_indel,
                 "substitution": new_substitution,
-                "ambiguous":    counts["fail_quality"] + counts["fail_no_coverage"] + counts["fail_no_alignment"],
+                # Backward compatibility: legacy field name; now means target-level failed reads.
+                "ambiguous":    failed_reads,
+                "failed":       failed_reads,
+                "failure_reasons": {
+                    "fail_no_anchor": counts["fail_no_anchor"],
+                    "fail_quality": counts["fail_quality"],
+                    "fail_no_coverage": counts["fail_no_coverage"],
+                    "fail_no_alignment": counts["fail_no_alignment"],
+                    "low_frequency_filtered": counts["read_ambiguous"],
+                },
             },
             "target_id":        target_id,
             "sgrna_seq":        sgrna_seq,
-            "display_sgrna_seq": sgrna_seq[::-1] if is_rc_in_ref else sgrna_seq,
+            "display_sgrna_seq": classifier.reverse_complement(sgrna_seq) if is_rc_in_ref else sgrna_seq,
+            "is_rc":            is_rc_in_ref,
+            "strand":           cut_info.get("strand"),
             "grna_start_index": grna_start_in_inner,
             "ref_sequence":     ref_inner_fixed,
             "cut_site_index":   cut_site_index_fixed,
@@ -397,7 +468,7 @@ def run_demultiplex(fastq_file, references, margin_threshold=0.05):
     data = parse_fastq(fastq_file)
     print(f"  [RUN_DEMULTIPLEX] Found {len(data)} sequences.")
 
-    result = assign_reads_to_references(data, references, margin_threshold)
+    result = assign_reads_to_references(data, references, margin_threshold=margin_threshold)
 
     return {
         "fastq_file": fastq_file,
@@ -429,15 +500,13 @@ def run_multi_reference_analysis(fastq_file, genes_payload, assignment_margin_th
     total_reads_initial = len(data)
     print(f"  [MULTI_REF_ANALYSIS] Total reads: {total_reads_initial}")
     
-    demux_references = [
-        {
-            "gene": g["gene"],
-            "sequence": g["sequence"]
-        } for g in genes_payload
-    ]
-    
     print(f"  [MULTI_REF_ANALYSIS] Demultiplexing with margin={assignment_margin_threshold}...")
-    demux_result = assign_reads_to_references(data, demux_references, assignment_margin_threshold)
+    demux_result = assign_reads_to_references(
+        data,
+        genes_payload,
+        phred_threshold=phred_threshold,
+        margin_threshold=assignment_margin_threshold,
+    )
     
     ambiguous_reads_count = len(demux_result["ambiguous_reads"])
     print(f"  [MULTI_REF_ANALYSIS] Ambiguous reads: {ambiguous_reads_count}")
@@ -449,11 +518,13 @@ def run_multi_reference_analysis(fastq_file, genes_payload, assignment_margin_th
             "total_reads_parsed": total_reads_initial,
             "phred_passed_count": demux_result.get("debug_logs", {}).get("phred_passed_count", 0),
             "anchor_matched_count": demux_result.get("debug_logs", {}).get("anchor_matched_count", 0),
+            "usable_for_assignment_count": demux_result.get("debug_logs", {}).get("usable_for_assignment_count", demux_result.get("debug_logs", {}).get("anchor_matched_count", 0)),
+            "assignment_filtered_count": demux_result.get("debug_logs", {}).get("assignment_filtered_count", 0),
             "assignment_margin_threshold_used": assignment_margin_threshold,
             "genes": []
         }
     }
-    print(f"DEBUG: total_initial={total_reads_initial}, usable={output['debug']['usable_count']}")
+    print(f"DEBUG: total_initial={total_reads_initial}, usable={output['debug']['usable_for_assignment_count']}")
     
     # Run analysis for each gene bucket
     for gene_bucket in demux_result["genes"]:
@@ -543,7 +614,15 @@ def process_files(file_paths, targets, data_type="single-end", phred_threshold=3
         "metadata": {
             "data_type": data_type,
             "phred_threshold": phred_threshold,
-            "indel_threshold": indel_threshold
+            "indel_threshold": indel_threshold,
+            "code_version": _get_code_version(),
+            "input_filenames": [os.path.basename(p) for p in file_paths],
+            "target_ids": [t.get("target_id") for t in targets],
+            "thresholds": {
+                "phred_threshold": phred_threshold,
+                "indel_threshold": indel_threshold,
+            },
+            "substitution_policy": SUBSTITUTION_POLICY,
         },
         "results": []
     }
@@ -585,7 +664,19 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
             "phred_threshold": phred_threshold,
             "indel_threshold": indel_threshold,
             "margin_threshold": margin_threshold,
-            "is_multi_reference": True
+            "is_multi_reference": True,
+            "code_version": _get_code_version(),
+            "input_filenames": [os.path.basename(p) for p in file_paths],
+            "references": _reference_metadata(genes_payload),
+            "thresholds": {
+                "phred_threshold": phred_threshold,
+                "indel_threshold": indel_threshold,
+                "assignment_margin_threshold": margin_threshold,
+                "analyze_ambiguous": analyze_ambiguous,
+                "rescue_ambiguous": rescue_ambiguous,
+                "rescue_threshold": rescue_threshold,
+            },
+            "substitution_policy": SUBSTITUTION_POLICY,
         },
         "results": []
     }
@@ -640,6 +731,8 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                 "total_reads_parsed": total_reads,
                 "phred_passed_count": demux_result.get("debug_logs", {}).get("phred_passed_count", 0),
                 "anchor_matched_count": demux_result.get("debug_logs", {}).get("anchor_matched_count", 0),
+                "usable_for_assignment_count": demux_result.get("debug_logs", {}).get("usable_for_assignment_count", demux_result.get("debug_logs", {}).get("anchor_matched_count", 0)),
+                "assignment_filtered_count": demux_result.get("debug_logs", {}).get("assignment_filtered_count", 0),
                 "assignment_margin_threshold_used": margin_threshold,
                 "genes": []
             }
@@ -703,7 +796,7 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
                         cut_info = classifier.find_grna_cut_site(g["sequence"], t["sgrna_seq"])
                         win_size = int(t.get("window_size", 90))
                         ref_win = classifier.extract_window(g["sequence"], cut_info["cut_site"], win_size)
-                        cut_index_in_window = cut_info["cut_site"] - max(0, cut_info["cut_site"] - (win_size // 2))
+                        cut_index_in_window = classifier.cut_index_in_window(g["sequence"], cut_info["cut_site"], win_size)
                         classifier_classes.append({
                             "gene": g["gene"],
                             "target": t.get("target_id", ""),
@@ -888,4 +981,3 @@ def process_single_file_worker(
     
     gc.collect()
     return file_result
-

@@ -3,6 +3,17 @@ export interface AnalysisBreakdown {
   substitution: number;
   in_frame: number;
   out_of_frame: number;
+  ambiguous?: number;
+  failed?: number;
+  failure_reasons?: FailureReasons;
+}
+
+export interface FailureReasons {
+  fail_no_anchor?: number;
+  fail_quality?: number;
+  fail_no_coverage?: number;
+  fail_no_alignment?: number;
+  low_frequency_filtered?: number;
 }
 
 export interface AnalysisSummary {
@@ -18,6 +29,13 @@ export interface AnalysisSummary {
   in_frame_pct: number;
   no_indel_pct: number;
   substitution_pct: number;
+  substitution_reads?: number;
+  indel_editing_efficiency?: number;
+  substitution_policy?: string;
+  read_ambiguous?: number;
+  low_frequency_filtered?: number;
+  failed_reads?: number;
+  failure_reasons?: FailureReasons;
 }
 
 export interface ReadDetail {
@@ -27,7 +45,7 @@ export interface ReadDetail {
 }
 
 export interface AlignmentToken {
-  type: 'equal' | 'substitute' | 'delete' | 'insert';
+  type: 'equal' | 'substitute' | 'delete' | 'insert' | 'unobserved';
   val: string;
 }
 
@@ -48,6 +66,11 @@ export interface TargetResult {
   read_details: ReadDetail[];
   ref_sequence?: string;
   cut_site_index?: number;
+  sgrna_seq?: string;
+  display_sgrna_seq?: string;
+  grna_start_index?: number;
+  is_rc?: boolean;
+  strand?: string;
   top_groups?: MutationGroup[];
 }
 
@@ -87,6 +110,8 @@ export interface MultiReferenceResponse {
   debug?: {
     total_reads_parsed: number;
     phred_passed_count?: number;
+    usable_for_assignment_count?: number;
+    assignment_filtered_count?: number;
     anchor_matched_count?: number;
     assignment_margin_threshold_used: number;
     genes: Array<{
@@ -211,4 +236,3 @@ export interface BenchmarkResult {
   cut_sites: CutSiteInfo[];
   per_class: BenchmarkClassResult[];
 }
-

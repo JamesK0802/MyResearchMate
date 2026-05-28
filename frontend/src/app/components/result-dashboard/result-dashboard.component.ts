@@ -175,7 +175,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
         data: {
           labels: flat.map(item => this.state.isMultiReference ? item.target.target_id : `${item.file.sample_name || item.file.fastq_file.split('/').pop()} (${item.target.target_id})`),
           datasets: [
-            { label: 'No Indel %', data: flat.map(item => (item.target.summary?.no_indel_pct ?? 0) - (item.target.summary?.substitution_pct ?? 0)), backgroundColor: '#2ecc71' },
+            { label: 'No Indel %', data: flat.map(item => item.target.summary?.no_indel_pct ?? 0), backgroundColor: '#2ecc71' },
             { label: 'Substitution %', data: flat.map(item => item.target.summary?.substitution_pct ?? 0), backgroundColor: '#3498db' },
             { label: 'In-frame %', data: flat.map(item => item.target.summary?.in_frame_pct ?? 0), backgroundColor: '#e67e22' },
             { label: 'Out-of-frame %', data: flat.map(item => item.target.summary?.out_of_frame_pct ?? 0), backgroundColor: '#e74c3c' }
@@ -195,7 +195,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       this.state.addChart(new Chart(pieCtx, {
         type: 'pie',
         data: {
-          labels: ['Unmodified (No Indel)', 'Substitution', 'In-frame Indel', 'Out-of-frame Indel'],
+          labels: ['No Indel', 'Substitution', 'In-frame Indel', 'Out-of-frame Indel'],
           datasets: [{
             data: [selectedData.breakdown.no_indel ?? 0, selectedData.breakdown.substitution ?? 0, selectedData.breakdown.in_frame ?? 0, selectedData.breakdown.out_of_frame ?? 0],
             backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
@@ -210,13 +210,13 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       this.state.addChart(new Chart(donutCtx, {
         type: 'doughnut',
         data: {
-          labels: ['Edited', 'Unedited'],
+          labels: ['Indel edited', 'No indel', 'Substitution'],
           datasets: [{
-            data: [selectedData.summary.modified ?? 0, selectedData.summary.unmodified ?? 0],
-            backgroundColor: ['#ff6384', '#cccccc']
+            data: [selectedData.summary.modified ?? 0, selectedData.summary.unmodified ?? 0, selectedData.breakdown?.substitution ?? selectedData.summary.substitution_reads ?? 0],
+            backgroundColor: ['#ff6384', '#cccccc', '#3498db']
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Editing Efficiency (${selectedData.target_id})` } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Indel Editing (${selectedData.target_id})` } } }
       }));
     }
   }

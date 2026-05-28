@@ -37,7 +37,7 @@ def assign_reads_to_references(reads_data, gene_payloads, phred_threshold=10, ma
             cut_info = classifier.find_grna_cut_site(gene_ref, t["sgrna_seq"])
             win_size = int(t.get("window_size", 90))
             ref_win = classifier.extract_window(gene_ref, cut_info["cut_site"], win_size)
-            cut_index_in_window = cut_info["cut_site"] - max(0, cut_info["cut_site"] - (win_size // 2))
+            cut_index_in_window = classifier.cut_index_in_window(gene_ref, cut_info["cut_site"], win_size)
             gene_classes[gene_name].append({
                 "target": t["target_id"],
                 "ref_window": ref_win,
@@ -144,6 +144,7 @@ def assign_reads_to_references(reads_data, gene_payloads, phred_threshold=10, ma
 
     # Summary
     total_assigned = sum(assigned_counts.values())
+    usable_for_assignment_count = total_reads - filtered_count
     print(f"\n[CLASSIFIER_DEMUX] ════════════════════════════════════════════")
     print(f"  total_reads    = {total_reads}")
     print(f"  assigned       = {total_assigned}  ({', '.join(f'{g}={c}' for g,c in assigned_counts.items())})")
@@ -165,7 +166,10 @@ def assign_reads_to_references(reads_data, gene_payloads, phred_threshold=10, ma
             "ambiguous_count": ambiguous_count,
             "filtered_count": filtered_count,
             "phred_passed_count": phred_passed_count,
-            "anchor_matched_count": total_reads - filtered_count,
+            # Backward compatibility: historical name was not a strict anchor count.
+            "anchor_matched_count": usable_for_assignment_count,
+            "usable_for_assignment_count": usable_for_assignment_count,
+            "assignment_filtered_count": filtered_count,
             "per_gene_counts": assigned_counts,
             "outcome_counts": outcome_counts
         }

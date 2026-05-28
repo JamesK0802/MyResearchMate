@@ -82,7 +82,7 @@
       <span class="gene-info-sep">|</span>
       <span class="gene-info-item"><strong>Phred Passed:</strong> {{ state.totalPhredPassed | number }}</span>
       <span class="gene-info-sep">|</span>
-      <span class="gene-info-item"><strong>Anchor Matched:</strong> {{ state.totalAnchorMatched | number }}</span>
+      <span class="gene-info-item"><strong>Usable for Assignment:</strong> {{ state.totalAnchorMatched | number }}</span>
       <span class="gene-info-sep" *ngIf="state.multiFileCount > 1">|</span>
       <span class="gene-info-item" *ngIf="state.multiFileCount > 1">
         <strong>Source:</strong> {{ state.selectedScopeIndex === -1 ? 'All Merged' :
@@ -155,7 +155,7 @@
             <td>{{ row.matched | number }}</td>
             <td><strong>{{ row.outOfFrame | number:'1.1-2' }}%</strong></td>
             <td>{{ row.inFrame | number:'1.1-2' }}%</td>
-            <td>{{ (row.noIndel - row.substitution) | number:'1.1-2' }}%</td>
+            <td>{{ row.noIndel | number:'1.1-2' }}%</td>
             <td>{{ row.substitution | number:'1.1-2' }}%</td>
           </tr>
         </tbody>

@@ -102,11 +102,21 @@ def find_grna_cut_site(reference: str, grna: str) -> Dict[str, Any]:
     
     return {'strand': 'unknown', 'grna_start': -1, 'grna_end': -1, 'cut_site': ref_len // 2, 'pam': 'N/A', 'pam_found': False}
 
-def extract_window(reference: str, cut_site: int, window_size: int) -> str:
-    # USER REQUEST: window_size refers to the TOTAL width (± window_size // 2)
+def get_window_bounds(reference: str, cut_site: int, window_size: int) -> Tuple[int, int]:
+    """Return clipped [start, end) bounds for a cut-site-centered window."""
     half = int(window_size) // 2
     start = max(0, cut_site - half)
     end = min(len(reference), cut_site + half)
+    return start, end
+
+def cut_index_in_window(reference: str, cut_site: int, window_size: int) -> int:
+    """Return the cut-site offset inside the clipped reference window."""
+    start, _ = get_window_bounds(reference, cut_site, window_size)
+    return max(0, cut_site - start)
+
+def extract_window(reference: str, cut_site: int, window_size: int) -> str:
+    # USER REQUEST: window_size refers to the TOTAL width (± window_size // 2)
+    start, end = get_window_bounds(reference, cut_site, window_size)
     return reference[start:end]
 
 # ─────────────────────────────────────────────────────────────────────────────
