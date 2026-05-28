@@ -17,28 +17,8 @@ import { firstValueFrom } from 'rxjs';
 })
 export class App {
   appVersion = environment.version;
-  hasNicoleAccess = false;
 
-  constructor(public auth: AuthService, private http: HttpClient) {
-    this.auth.session$.subscribe(session => {
-      if (session) {
-        this.checkNicoleAccess();
-      } else {
-        this.hasNicoleAccess = false;
-      }
-    });
-  }
-
-  async checkNicoleAccess() {
-    try {
-      const session = await this.auth.getSession();
-      const headers = new HttpHeaders({ 'Authorization': `Bearer ${session?.access_token}` });
-      const res = await firstValueFrom(this.http.get<any>('/api/nicole-gimmick/check-access', { headers }));
-      this.hasNicoleAccess = res.has_access;
-    } catch (e) {
-      this.hasNicoleAccess = false;
-    }
-  }
+  constructor(public auth: AuthService, private http: HttpClient) {}
 
   async logout() {
     await this.auth.signOut();

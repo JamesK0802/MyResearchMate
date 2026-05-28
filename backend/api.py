@@ -55,8 +55,10 @@ import multiprocessing
 if multiprocessing.current_process().name == 'MainProcess':
     _manager = multiprocessing.Manager()
     tasks = _manager.dict()
+    cancel_events = _manager.dict()
 else:
     tasks = {}
+    cancel_events = {}
 
 @api_router.get("/status/{task_id}")
 async def get_task_status(task_id: str):
@@ -64,6 +66,19 @@ async def get_task_status(task_id: str):
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
     return tasks[task_id]
+
+@api_router.post("/cancel/{task_id}")
+async def cancel_task(task_id: str):
+    print(f"[DEBUG] Cancel requested for {task_id}")
+    if task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Set the event to signal workers to abort
+    if task_id in cancel_events:
+        cancel_events[task_id].set()
+    
+    update_task(tasks, task_id, status="canceled", stage="Analysis canceled by user")
+    return {"status": "canceled"}
 
 
 # ── Constants for Limits ──────────────────────────────────────────────────────
@@ -89,7 +104,7 @@ if multiprocessing.current_process().name == 'MainProcess' and os.path.exists(JO
         print(f"[WARNING] Failed to clean up orphaned jobs: {str(e)}")
 
 # ── Status helper (Process-Safe assignment) ──
-def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = None, stage: str = None, result = None, error = None):
+def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = None, stage: str = None, result = None, error = None, file_progress = None):
     if tasks_proxy is not None and task_id in tasks_proxy:
         task_data = dict(tasks_proxy[task_id])
         if status is not None: task_data["status"] = status
@@ -97,6 +112,7 @@ def update_task(tasks_proxy, task_id: str, status: str = None, progress: int = N
         if stage is not None: task_data["stage"] = stage
         if result is not None: task_data["result"] = result
         if error is not None: task_data["error"] = error
+        if file_progress is not None: task_data["file_progress"] = file_progress
         tasks_proxy[task_id] = task_data
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,8 +134,17 @@ def background_analysis(
     import gc
     import concurrent.futures
     try:
-        update_task(tasks_proxy, task_id, status="running", stage="Initializing parallel analysis...")
+        update_task(tasks_proxy, task_id, status="running", stage="Initializing parallel analysis...", file_progress={f: 0 for f in temp_filenames})
         genes_payload = json.loads(targets_json)
+        
+        global _manager
+        if '_manager' in globals():
+            ce = _manager.Event()
+        else:
+            import multiprocessing
+            ce = multiprocessing.Manager().Event()
+            
+        cancel_events[task_id] = ce
         
         all_results = []
         total_files = len(temp_filenames)
@@ -129,7 +154,6 @@ def background_analysis(
         print(f"[BACKGROUND] Initializing parallel analysis with {max_workers} worker processes for {total_files} files.")
         
         # Setup cross-process progress queue
-        global _manager
         if '_manager' in globals():
             progress_queue = _manager.Queue()
         else:
@@ -137,23 +161,29 @@ def background_analysis(
             progress_queue = multiprocessing.Manager().Queue()
             
         def monitor_progress():
-            file_progress = {} # dict of filename -> (pct, msg)
+            file_progress = {f: 0 for f in temp_filenames} # dict of filename -> pct
             while True:
                 item = progress_queue.get()
                 if item == "DONE":
                     break
+                
+                # Check for cancellation before processing updates
+                if task_id in cancel_events and cancel_events[task_id].is_set():
+                    update_task(tasks_proxy, task_id, status="canceled", stage="Canceling...")
+                    break
+                    
                 fname, p, msg = item
-                file_progress[fname] = (p, msg)
+                file_progress[fname] = p
                 
                 # Calculate overall progress across all files
                 if total_files > 0:
-                    total_p = sum(file_progress.get(f, (0, ""))[0] for f in temp_filenames)
+                    total_p = sum(file_progress.get(f, 0) for f in temp_filenames)
                     overall = int(10 + (total_p / (total_files * 100)) * 85)
                 else:
                     overall = 10
                 overall = min(99, max(10, overall))
                 
-                update_task(tasks_proxy, task_id, progress=overall, stage=msg)
+                update_task(tasks_proxy, task_id, progress=overall, stage=msg, file_progress=dict(file_progress))
 
         import threading
         monitor_thread = threading.Thread(target=monitor_progress)
@@ -176,7 +206,8 @@ def background_analysis(
                     analyze_ambiguous,
                     rescue_ambiguous,
                     rescue_threshold,
-                    progress_queue
+                    progress_queue,
+                    cancel_events[task_id]
                 )
                 futures_to_file[future] = filename
             
@@ -200,6 +231,11 @@ def background_analysis(
         progress_queue.put("DONE")
         monitor_thread.join(timeout=2.0)
                     
+        # Check if canceled during execution
+        if task_id in cancel_events and cancel_events[task_id].is_set():
+            update_task(tasks_proxy, task_id, status="canceled", stage="Analysis canceled by user")
+            return
+            
         # Merge results into the final payload
         final_payload = {
             "metadata": {
@@ -219,6 +255,8 @@ def background_analysis(
         print(f"[ERROR] Analysis failed: {error_msg}")
         update_task(tasks_proxy, task_id, status="failed", error=str(e))
     finally:
+        if task_id in cancel_events:
+            del cancel_events[task_id]
         # Final Cleanup of the entire job directory
         if os.path.exists(job_dir):
             try: shutil.rmtree(job_dir)
@@ -254,7 +292,8 @@ async def run_analysis_endpoint(
         "status": "pending",
         "progress": 0,
         "stage": "Streaming upload...",
-        "result": None
+        "result": None,
+        "file_progress": {}
     }
     
     # 2. Create Job Directory
@@ -478,9 +517,7 @@ print("[DEBUG] Including facility_booking_router from routers.facility_booking")
 from routers.facility_booking import router as facility_booking_router
 api_router.include_router(facility_booking_router)
 
-# Include Nicole Gimmick Booking router (fully isolated)
-from routers.nicole_gimmick import router as nicole_gimmick_router
-api_router.include_router(nicole_gimmick_router)
+
 
 # Include main api_router
 app.include_router(api_router)

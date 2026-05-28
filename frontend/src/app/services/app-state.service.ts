@@ -84,6 +84,13 @@ export class AppStateService {
   benchPhred = 10; benchWindow = 90; benchMargin = 3;
   benchRows: BenchmarkRow[] = [{ file: null, geneName: '', targetName: '', referenceSequence: '', grnaSequence: '' }];
   benchIsLoading = false;
+  
+  public currentTaskId: string | null = null;
+  fileProgress: { [filename: string]: number } = {};
+  get fileProgressKeys(): string[] {
+    return Object.keys(this.fileProgress || {});
+  }
+
   benchProgress$ = new BehaviorSubject<number>(0);
   benchProgressDisplay$ = new BehaviorSubject<number>(0);
   benchStage$ = new BehaviorSubject<string>('');
@@ -283,6 +290,7 @@ export class AppStateService {
   runAnalysis(formData: FormData) {
     this.activateSlot('analysis');
     this.isLoading = true;
+    this.fileProgress = {};
     this.setProgress(0, 'Preparing upload…');
     this.destroy$ = new Subject<void>();
     
@@ -302,6 +310,7 @@ export class AppStateService {
             const res = event.body;
             this.addLog(`Upload complete response received: ${JSON.stringify(res)}`);
             if (res && res.task_id) {
+              this.currentTaskId = res.task_id;
               this.setProgress(100, 'Upload complete! Queueing task…');
               this.startPolling(res.task_id);
             } else {
@@ -325,6 +334,7 @@ export class AppStateService {
       next: (status: TaskStatus) => {
         this.ngZone.run(() => {
           this.parseProgressStage(status.stage || '', status.progress || 0);
+          this.fileProgress = status.file_progress || {};
           if (status.status === 'failed') { this.error = status.error || 'Backend analysis failed.'; this.isLoading = false; this.destroy$.next(); }
           else if (status.progress === 100 && status.result) {
             this.handleAnalysisComplete(status.result, () => { this.setProgress(100, 'Analysis Complete ✓'); setTimeout(() => { this.ngZone.run(() => { this.isLoading = false; }); }, 800); });
@@ -341,6 +351,34 @@ export class AppStateService {
     const m = stage.match(/sample\s+(\d+)\s+of\s+(\d+)/i);
     if (m) { info.fileIndex = parseInt(m[1]); info.fileTotal = parseInt(m[2]); }
     this.progressInfo = info; this.setProgress(percent, stage);
+  }
+
+  cancelAnalysis() {
+    if (this.currentTaskId) {
+      this.analysisService.cancelTask(this.currentTaskId).subscribe({
+        next: () => {
+          this.ngZone.run(() => {
+            this.isLoading = false;
+            this.destroy$.next();
+            this.setProgress(0, '');
+            this.currentTaskId = null;
+            this.error = 'Analysis was canceled by the user.';
+          });
+        },
+        error: (err) => {
+          console.error('Failed to cancel task:', err);
+        }
+      });
+    } else {
+      // If still uploading or task hasn't started polling
+      this.ngZone.run(() => {
+        this.isLoading = false;
+        this.destroy$.next();
+        this.setProgress(0, '');
+        this.currentTaskId = null;
+        this.error = 'Analysis upload was canceled.';
+      });
+    }
   }
 
   // ── Handle completed response ──────────────────────────────────────────────
@@ -463,6 +501,16 @@ export class AppStateService {
   destroyCharts() { this.charts.forEach(c => c.destroy()); this.charts = []; }
   addChart(chart: Chart) { this.charts.push(chart); }
   getScopeName(i: number): string { if (i === -1) return 'All'; const p = this.allFileResults[i].fastq_file; return p.split('/').pop() || p; }
+  
+  editScopeName(i: number) {
+    if (i === -1) return;
+    const currentName = this.getScopeName(i);
+    const newName = prompt('Enter a new name for this file:', currentName);
+    if (newName && newName.trim() !== '') {
+      this.allFileResults[i].fastq_file = newName.trim();
+      this.resultsUpdated$.next();
+    }
+  }
 
   clearProgress() {
     this.progress$.next(0);

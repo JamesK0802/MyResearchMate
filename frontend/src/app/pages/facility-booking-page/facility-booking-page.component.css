@@ -11,12 +11,101 @@
 .month-label { font-size: var(--text-xl); font-weight: var(--fw-black); color: var(--color-text-primary); letter-spacing: -0.02em; min-width: 180px; text-align: center; }
 .compact-select { padding: 8px 12px !important; font-size: var(--text-sm) !important; min-width: 110px; border-radius: var(--radius-sm) !important; }
 
-.summary-row { display: flex; gap: var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border-light); }
-.summary-stat { display: flex; align-items: center; gap: var(--space-2); padding: 6px 14px; background: var(--color-surface-alt); border-radius: var(--radius-sm); border: 1px solid var(--color-border-light); }
-.stat-value { font-size: var(--text-lg); font-weight: var(--fw-black); color: var(--color-text-primary); }
-.stat-label { font-size: var(--text-xs); font-weight: var(--fw-bold); color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
-.stat-booked .stat-value { color: #dc2626; }
-.stat-available .stat-value { color: var(--color-primary); }
+.summary-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.summary-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 140px;
+}
+
+.summary-stat:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: var(--fw-black);
+  color: var(--color-text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Colors by purpose */
+.stat-total .stat-icon-wrapper {
+  background: #f1f5f9;
+  color: #475569;
+}
+.stat-total:hover {
+  border-color: #cbd5e1;
+}
+
+.stat-booked .stat-icon-wrapper {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.stat-booked .stat-value {
+  color: #dc2626;
+}
+.stat-booked:hover {
+  border-color: #fca5a5;
+}
+
+.stat-available .stat-icon-wrapper {
+  background: #dcfce7;
+  color: #15803d;
+}
+.stat-available .stat-value {
+  color: #15803d;
+}
+.stat-available:hover {
+  border-color: #bbf7d0;
+}
 
 /* ═══ FLOOR PLAN ═══ */
 .floor-plan {
@@ -283,6 +372,14 @@
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
   margin-bottom: -2px; /* overlap border */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tab-svg-icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
 }
 .app-tab:hover {
   color: var(--color-primary);

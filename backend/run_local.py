@@ -563,7 +563,7 @@ def process_files(file_paths, targets, data_type="single-end", phred_threshold=3
             
     return final_payload
 
-def process_files_multi(file_paths, genes_payload, data_type="single-end", phred_threshold=30, indel_threshold=1.0, margin_threshold=0.05, progress_callback=None, analyze_ambiguous=False, rescue_ambiguous=False, rescue_threshold=20):
+def process_files_multi(file_paths, genes_payload, data_type="single-end", phred_threshold=30, indel_threshold=1.0, margin_threshold=0.05, progress_callback=None, analyze_ambiguous=False, rescue_ambiguous=False, rescue_threshold=20, cancel_event=None):
     """
     Processes file paths for multi-reference analysis with fine-grained progress.
     Emits file / demux / gene / target level progress events.
@@ -594,6 +594,9 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
     file_range = 85.0 / max(total_files, 1)
 
     for fi, filepath in enumerate(file_paths):
+        if cancel_event and cancel_event.is_set():
+            break
+            
         if not os.path.exists(filepath):
             continue
 
@@ -643,6 +646,9 @@ def process_files_multi(file_paths, genes_payload, data_type="single-end", phred
         }
 
         for gi, gene_bucket in enumerate(demux_result["genes"]):
+            if cancel_event and cancel_event.is_set():
+                break
+                
             gene_name  = gene_bucket["gene"]
             gene_reads = [(r["seq"], r["qual"]) for r in gene_bucket["assigned_reads"]]
             gene_payload = next((g for g in genes_payload if g["gene"] == gene_name), None)
@@ -844,7 +850,8 @@ def process_single_file_worker(
     analyze_ambiguous: bool,
     rescue_ambiguous: bool,
     rescue_threshold: int,
-    progress_queue=None
+    progress_queue=None,
+    cancel_event=None
 ) -> dict:
     import os
     import gc
@@ -868,7 +875,8 @@ def process_single_file_worker(
         analyze_ambiguous=analyze_ambiguous,
         rescue_ambiguous=rescue_ambiguous,
         rescue_threshold=rescue_threshold,
-        progress_callback=worker_progress_callback
+        progress_callback=worker_progress_callback,
+        cancel_event=cancel_event
     )
     
     # Clean up file immediately to save disk space

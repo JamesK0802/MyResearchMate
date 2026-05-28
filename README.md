@@ -1,4 +1,4 @@
-# My Lab Mate v3.4.0
+# My Lab Mate v3.5.0
 
 **My Lab Mate** is a unified research platform designed for the **ANU Research School of Biology (RSB)**. It streamlines complex CRISPR editing analysis, automates PCR protocol planning, tracks linear laboratory experiments with an immersive digital ledger, and fosters lab collaboration through a secure, cloud-integrated dashboard.
 
@@ -185,6 +185,13 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 ---
 
 ## 📋 Changelog
+
+### v3.5.0
+- **Nicole Booking Gimmick Removal**: Completely cleaned up the codebase by removing the gimmick "Nicole Booking System" (`/booking/nicole` and `/api/nicole-gimmick`) while keeping the core ANU RSB Facility Booking system fully intact and operational.
+- **Parallel Workers Progress Overlay**: Engineered visual multi-thread progress bars inside the loading overlay on the CRISPR analysis page, displaying real-time processing statistics for each FASTQ worker process.
+- **Premium SVG Icon Overhaul**: Replaced outdated, low-fidelity browser-default emojis with beautifully crafted custom vector SVG icons across tab views (📋, 🗺️, 📆), outcome sharing modals, edit ledgers, and action buttons.
+- **Unified Results Toolbar**: Standardized and aligned margins, padding, heights, and border consistency for all action buttons (New Analysis, Save to My Data, Export Excel) inside the result viewer.
+- **Dashboard Stat Widgets**: Restructured the monthly booking calendar overview with sleek, responsive dashboard stat indicators (Total, Booked, Available) utilizing custom themed palettes and matching SVGs.
 
 ### v3.4.0
 - **X-Padding Architecture**: Redesigned the CRISPR read classification and analysis pipeline. Terminal unobserved sequences (due to short reads) are now explicitly padded with `X` and treated as unobserved rather than being erroneously classified as biological deletions or triggering false-positive reference restorations.

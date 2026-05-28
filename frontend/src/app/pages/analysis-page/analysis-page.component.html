@@ -94,7 +94,7 @@
           <h2>Reference Configuration</h2>
           <div class="header-actions">
             <button type="button" class="btn-autofill" (click)="showAutofill = !showAutofill">
-              ✨ Auto Fill
+              Auto Fill
             </button>
             <button type="button" class="btn-add" (click)="state.addGene()">+ Add Gene</button>
           </div>
@@ -104,10 +104,10 @@
           <p class="autofill-hint">Fill out the template and upload to bulk-configure genes and targets.</p>
           <div class="autofill-buttons">
             <button type="button" class="btn-template-download" (click)="downloadTemplate()">
-              📥 Download Template
+              Download Template
             </button>
             <button type="button" class="btn-template-upload" (click)="templateFileInput.click()">
-              📤 Upload Sequence (Excel)
+              Upload Sequence (Excel)
             </button>
             <input type="file" #templateFileInput (change)="onTemplateUpload($event)" hidden accept=".xlsx,.xls" />
           </div>
@@ -166,14 +166,34 @@
     </div>
   </form>
 
-  <!-- ── Progress Section ── -->
   <div class="progress-section" *ngIf="state.isLoading">
     <div class="progress-header">
       <span class="stage-text">{{ state.progressStage$ | async }}</span>
-      <span class="percent-text">{{ (state.progressDisplay$ | async) | number:'1.0-0' }}%</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="percent-text">{{ (state.progressDisplay$ | async) | number:'1.0-0' }}%</span>
+        <button type="button" class="btn-cancel-icon" (click)="state.cancelAnalysis()" title="Cancel Analysis">
+          &times;
+        </button>
+      </div>
     </div>
     <div class="progress-bar-bg">
       <div class="progress-bar-fill" [style.width.%]="state.progressDisplay$ | async"></div>
+    </div>
+
+    <!-- Parallel Execution Threads -->
+    <div class="parallel-workers-container" *ngIf="state.fileProgressKeys.length > 0">
+      <div class="worker-progress-header">Parallel Analysis Threads</div>
+      <div class="worker-grid">
+        <div *ngFor="let key of state.fileProgressKeys" class="worker-card">
+          <div class="worker-info">
+            <span class="worker-name" [title]="key">{{ key }}</span>
+            <span class="worker-pct">{{ state.fileProgress[key] }}%</span>
+          </div>
+          <div class="worker-bar-bg">
+            <div class="worker-bar-fill" [style.width.%]="state.fileProgress[key]" [class.completed]="state.fileProgress[key] === 100"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

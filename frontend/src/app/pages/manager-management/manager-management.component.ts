@@ -31,7 +31,6 @@ import { firstValueFrom } from 'rxjs';
               <tr>
                 <th>User</th>
                 <th>Current Role</th>
-                <th>Nicole Booking Access</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -47,18 +46,7 @@ import { firstValueFrom } from 'rxjs';
                 <td>
                   <span class="role-pill" [class]="user.role">{{ user.role | uppercase }}</span>
                 </td>
-                <td>
-                  <!-- Gimmick Access Toggle -->
-                  <label class="access-toggle-label">
-                    <input type="checkbox" 
-                           [checked]="user.uid === 'u6646386' || nicoleAccessMap[user.uid]" 
-                           [disabled]="user.uid === 'u6646386'"
-                           (change)="toggleNicoleAccess(user)" />
-                    <span [class.text-allowed]="user.uid === 'u6646386' || nicoleAccessMap[user.uid]">
-                      {{ (user.uid === 'u6646386' || nicoleAccessMap[user.uid]) ? '✓ Allowed' : '✗ Blocked' }}
-                    </span>
-                  </label>
-                </td>
+
                 <td>
                   <div class="actions" *ngIf="user.id !== currentUserId && user.role !== 'owner'">
                     <button *ngIf="user.role === 'user'" (click)="updateRole(user, 'manager')" class="btn-promote">
@@ -102,23 +90,6 @@ import { firstValueFrom } from 'rxjs';
     .role-pill.manager { background: #dcfce7; color: #166534; }
     .role-pill.user { background: #f1f5f9; color: #64748b; }
 
-    .access-toggle-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 700;
-      font-size: 0.85rem;
-      cursor: pointer;
-      color: #64748b;
-      background: #f8fafc;
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      transition: all 0.2s;
-    }
-    .access-toggle-label input { cursor: pointer; }
-    .access-toggle-label:hover { background: #f1f5f9; }
-    .text-allowed { color: #166534; }
 
     .actions { display: flex; gap: 10px; }
     button { padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; border: none; }
@@ -141,7 +112,6 @@ export class ManagerManagementComponent implements OnInit {
   filteredUsers: any[] = [];
   loading = true;
   currentUserId: number | null = null;
-  nicoleAccessMap: { [uid: string]: boolean } = {};
   private apiUrl = '/api'; // Use relative proxy URL matching other calls
 
   constructor(
@@ -162,14 +132,7 @@ export class ManagerManagementComponent implements OnInit {
       const headers = await this.getAuthHeaders();
       this.users = await firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/auth/users`, { headers }));
       this.filteredUsers = [...this.users];
-      
-      // Fetch Gimmick access list
-      try {
-        const accessRes = await firstValueFrom(this.http.get<any>(`${this.apiUrl}/nicole-gimmick/list-access`, { headers }));
-        this.nicoleAccessMap = accessRes || {};
-      } catch (err) {
-        console.error('Failed to load Nicole Access list', err);
-      }
+
 
     } catch (err) {
       console.error('Failed to load users', err);
@@ -204,22 +167,7 @@ export class ManagerManagementComponent implements OnInit {
     }
   }
 
-  async toggleNicoleAccess(user: any) {
-    const hasAccess = !!this.nicoleAccessMap[user.uid];
-    const headers = await this.getAuthHeaders();
-    try {
-      if (hasAccess) {
-        await firstValueFrom(this.http.post(`${this.apiUrl}/nicole-gimmick/revoke/${user.uid}`, {}, { headers }));
-        this.nicoleAccessMap[user.uid] = false;
-      } else {
-        await firstValueFrom(this.http.post(`${this.apiUrl}/nicole-gimmick/grant/${user.uid}`, {}, { headers }));
-        this.nicoleAccessMap[user.uid] = true;
-      }
-      this.cdr.detectChanges();
-    } catch (err) {
-      alert('Failed to update Nicole Booking access.');
-    }
-  }
+
 
   private async getAuthHeaders(): Promise<HttpHeaders> {
     const session = await this.auth.getSession();

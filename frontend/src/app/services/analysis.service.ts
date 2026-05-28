@@ -9,6 +9,7 @@ export interface TaskStatus {
   stage: string;
   result: any | null;
   error?: string;
+  file_progress?: { [filename: string]: number };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -31,6 +32,10 @@ export class AnalysisService {
 
   getTaskStatus(taskId: string): Observable<TaskStatus> {
     return this.http.get<TaskStatus>(`${this.apiUrl}/status/${taskId}`);
+  }
+
+  cancelTask(taskId: string): Observable<{ status: string }> {
+    return this.http.post<{ status: string }>(`${this.apiUrl}/cancel/${taskId}`, {});
   }
 
   // ── Benchmark ───────────────────────────────────────────────────────────────
