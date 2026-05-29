@@ -1749,3 +1749,118 @@
   font-weight: 800;
 }
 
+@media (max-width: 768px) {
+  .experiments-page {
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+  }
+
+  /* ── Stack Card Header elements ── */
+  .exp-header-row-one {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .exp-title-date-group {
+    width: 100%;
+  }
+
+  .exp-title-date-group .inline-exp-title {
+    max-width: 100%;
+    font-size: 1.15rem;
+  }
+
+  .exp-actions-inline-group {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .exp-action-buttons-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start;
+  }
+
+  .exp-action-buttons-row button {
+    flex: 1 1 calc(50% - 6px); /* Grid wrap: two buttons per row */
+    text-align: center;
+    font-size: 0.75rem;
+    padding: 6px 8px;
+  }
+
+  .meta-date-inline {
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+
+  /* ── Horizonal Scroller ── */
+  .workflow-scroll-area {
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch; /* Butter-smooth scrolling on iOS */
+  }
+  
+  .compact-step {
+    min-width: 180px; /* Make steps fit fully in portrait viewports */
+    padding: 12px;
+  }
+
+  /* ── Stunning Fullscreen Modal Overlay ── */
+  .exp-modal-card {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+  }
+
+  .modal-header {
+    padding: 16px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .modal-title-area .modal-exp-title-readonly,
+  .modal-title-area .modal-exp-title {
+    font-size: 1.25rem !important;
+  }
+
+  .modal-header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .close-modal-btn {
+    width: auto;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+  }
+
+  .modal-body-layout {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-sidebar-panel {
+    max-height: none !important;
+    padding: 16px !important;
+    border-bottom: 1.5px solid var(--color-border-light);
+  }
+
+  .modal-timeline-panel {
+    padding: 16px !important;
+    overflow-y: visible !important; /* Allow natural scrolling inside layout */
+  }
+  
+  .step-card-actions {
+    grid-template-columns: 1fr; /* Stack step actions inside details */
+    gap: 8px;
+  }
+  
+  .step-complete-trigger {
+    width: 100%;
+  }
+}
+
+

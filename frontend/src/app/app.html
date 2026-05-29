@@ -2,67 +2,71 @@
   <!-- ── Top Navigation ── -->
   <nav class="top-nav">
     <div class="nav-left">
-      <a routerLink="/" class="nav-brand">
+      <a routerLink="/" class="nav-brand" (click)="isMobileMenuOpen = false">
         <img src="/logo.png" alt="My Lab Mate" class="nav-brand-logo">
       </a>
 
-      <!-- Tools dropdown (always visible) -->
-      <div class="nav-dropdown">
-        <span class="nav-tab" style="cursor: pointer;">Tools ▾</span>
-        <div class="dropdown-content">
-          <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">CRISPR Tool</a>
-          <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
+      <!-- Desktop Links (Hidden on Mobile) -->
+      <div class="desktop-nav-links">
+        <!-- Tools dropdown (always visible) -->
+        <div class="nav-dropdown">
+          <span class="nav-tab" style="cursor: pointer;">Tools ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">CRISPR Tool</a>
+            <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
+          </div>
         </div>
-      </div>
 
-      <!-- Labs dropdown (logged in only) -->
-      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-        <span class="nav-tab" style="cursor: pointer;">Labs ▾</span>
-        <div class="dropdown-content">
-          <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
-          <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
-          <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
+        <!-- Labs dropdown (logged in only) -->
+        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+          <span class="nav-tab" style="cursor: pointer;">Labs ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
+            <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
+            <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
+          </div>
         </div>
-      </div>
 
-      <!-- My Data dropdown (logged in only) -->
-      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-        <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
-        <div class="dropdown-content">
-          <a routerLink="/my-data" routerLinkActive="active" class="dropdown-item">CRISPR Analysis Results</a>
+        <!-- My Data dropdown (logged in only) -->
+        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+          <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/my-data" routerLinkActive="active" class="dropdown-item">CRISPR Analysis Results</a>
+          </div>
         </div>
-      </div>
 
-      <!-- Lab Note Dropdown (logged in only) -->
-      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-        <span class="nav-tab" style="cursor: pointer;">Lab Note ▾</span>
-        <div class="dropdown-content">
-          <a routerLink="/lab/notes" routerLinkActive="active" class="dropdown-item">General Notes</a>
-          <a routerLink="/lab/experiments" routerLinkActive="active" class="dropdown-item">My Experiments</a>
-          <a routerLink="/lab/archive" routerLinkActive="active" class="dropdown-item">Experiment Archive</a>
+        <!-- Lab Note Dropdown (logged in only) -->
+        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+          <span class="nav-tab" style="cursor: pointer;">Lab Note ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/lab/notes" routerLinkActive="active" class="dropdown-item">General Notes</a>
+            <a routerLink="/lab/experiments" routerLinkActive="active" class="dropdown-item">My Experiments</a>
+            <a routerLink="/lab/archive" routerLinkActive="active" class="dropdown-item">Experiment Archive</a>
+          </div>
         </div>
-      </div>
-      
-      <!-- Booking dropdown (logged in only) -->
-      <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-        <span class="nav-tab" style="cursor: pointer;">Booking ▾</span>
-        <div class="dropdown-content">
-          <a routerLink="/booking" routerLinkActive="active" class="dropdown-item">Facility Booking</a>
+        
+        <!-- Booking dropdown (logged in only) -->
+        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+          <span class="nav-tab" style="cursor: pointer;">Booking ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/booking" routerLinkActive="active" class="dropdown-item">Facility Booking</a>
+          </div>
         </div>
+
+        <!-- Contact (always visible) -->
+        <a routerLink="/contact" class="nav-tab">Contact</a>
+
+        <!-- Admin/Manager links -->
+        <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner' || auth.currentProfile?.role === 'manager')"
+          routerLink="/admin/labs" routerLinkActive="active" class="nav-tab admin-link">Admin Panel</a>
+
+        <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner')"
+          routerLink="/admin/managers" routerLinkActive="active" class="nav-tab admin-link">Managers</a>
       </div>
-
-      <!-- Contact (always visible) -->
-      <a routerLink="/contact" class="nav-tab">Contact</a>
-
-      <!-- Admin/Manager links -->
-      <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner' || auth.currentProfile?.role === 'manager')"
-        routerLink="/admin/labs" routerLinkActive="active" class="nav-tab admin-link">Admin Panel</a>
-
-      <a *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner')"
-        routerLink="/admin/managers" routerLinkActive="active" class="nav-tab admin-link">Managers</a>
     </div>
 
-    <div class="nav-right">
+    <!-- Desktop Nav Right (Hidden on Mobile) -->
+    <div class="nav-right desktop-nav-right">
       <span class="version-tag">v{{ appVersion }}</span>
 
       <!-- Logged out: Link to Login Page -->
@@ -94,7 +98,91 @@
         </div>
       </ng-container>
     </div>
+
+    <!-- Mobile Hamburger Toggle (Visible on Mobile only) -->
+    <button class="mobile-hamburger-btn" (click)="toggleMobileMenu()" [class.open]="isMobileMenuOpen" aria-label="Toggle navigation menu">
+      <span class="bar bar-1"></span>
+      <span class="bar bar-2"></span>
+      <span class="bar bar-3"></span>
+    </button>
   </nav>
+
+  <!-- Mobile Glassmorphic Sliding Drawer (Visible on Mobile only) -->
+  <div class="mobile-nav-drawer" [class.open]="isMobileMenuOpen">
+    <div class="drawer-header">
+      <span class="drawer-brand">Menu</span>
+      <span class="version-tag">v{{ appVersion }}</span>
+    </div>
+    
+    <div class="drawer-links">
+      <!-- CRISPR Tool -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Tools</div>
+        <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🧬 CRISPR Tool</a>
+        <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🧮 PCR Calculator</a>
+      </div>
+
+      <!-- Lab Note entries (logged in) -->
+      <div class="drawer-section" *ngIf="auth.isLoggedIn">
+        <div class="drawer-section-title">Lab Diary</div>
+        <a routerLink="/lab/notes" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">📖 General Notes</a>
+        <a routerLink="/lab/experiments" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🧪 My Experiments</a>
+        <a routerLink="/lab/archive" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🗄️ Experiment Archive</a>
+      </div>
+
+      <!-- Facility Booking (logged in) -->
+      <div class="drawer-section" *ngIf="auth.isLoggedIn">
+        <div class="drawer-section-title">Booking</div>
+        <a routerLink="/booking" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">📅 Facility Booking</a>
+      </div>
+
+      <!-- Labs management (logged in) -->
+      <div class="drawer-section" *ngIf="auth.isLoggedIn">
+        <div class="drawer-section-title">Labs</div>
+        <a routerLink="/labs/my" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🏢 My Labs</a>
+        <a routerLink="/labs/find" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🔍 Find Lab</a>
+        <a routerLink="/labs/register" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">➕ Register Lab</a>
+      </div>
+
+      <!-- Admin options (logged in) -->
+      <div class="drawer-section" *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner' || auth.currentProfile?.role === 'manager')">
+        <div class="drawer-section-title">Administration</div>
+        <a routerLink="/admin/labs" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">🛡️ Admin Panel</a>
+        <a *ngIf="auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner'"
+           routerLink="/admin/managers" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">👥 Manage Managers</a>
+      </div>
+
+      <!-- Static info -->
+      <div class="drawer-section">
+        <a routerLink="/contact" class="drawer-link" (click)="isMobileMenuOpen = false">✉️ Contact Us</a>
+      </div>
+    </div>
+
+    <!-- Mobile Drawer Profile Footer -->
+    <div class="drawer-footer">
+      <ng-container *ngIf="!(auth.session$ | async)">
+        <a routerLink="/login" class="btn-login-link" style="display: block; text-align: center; text-decoration: none;" (click)="isMobileMenuOpen = false">Sign In</a>
+      </ng-container>
+
+      <ng-container *ngIf="auth.session$ | async as session">
+        <div class="drawer-profile-info" *ngIf="{ profile: auth.profile$ | async } as state">
+          <div class="dp-left">
+            <span class="profile-avatar" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: var(--color-primary-light); color: var(--color-primary); border-radius: 50%; font-weight: 800; font-size: 0.9rem;">
+              {{ (state.profile?.name || state.profile?.email || session.user.email || '?')[0] | uppercase }}
+            </span>
+            <div class="dp-details" style="display: flex; flex-direction: column; margin-left: 8px;">
+              <span class="dp-name" style="font-size: 0.88rem; font-weight: 800; color: var(--color-text-primary);">{{ state.profile?.name || 'Profile' }}</span>
+              <span class="dp-email" style="font-size: 0.7rem; color: var(--color-text-tertiary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ state.profile?.email || session.user.email }}</span>
+            </div>
+          </div>
+          <button class="app-btn app-btn-danger-outline app-btn-sm" (click)="logout()" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 800; border-radius: 6px;">Sign Out</button>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Mobile Blur Backdrop -->
+  <div class="mobile-drawer-backdrop" *ngIf="isMobileMenuOpen" (click)="isMobileMenuOpen = false"></div>
 
   <!-- ── Main Content ── -->
   <main class="app-content">

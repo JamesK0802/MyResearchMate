@@ -2201,3 +2201,177 @@ select.form-control {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Mobile Hamburger & Drawer Styles ── */
+.desktop-nav-links { display: flex; align-items: center; gap: 24px; }
+.desktop-nav-right { display: flex; }
+.mobile-hamburger-btn { display: none; }
+.mobile-nav-drawer { display: none; }
+.mobile-drawer-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .desktop-nav-links { display: none !important; }
+  .desktop-nav-right { display: none !important; }
+
+  /* 3-Bar Animated Hamburger */
+  .mobile-hamburger-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 24px;
+    height: 18px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    z-index: 1001;
+  }
+  
+  .mobile-hamburger-btn .bar {
+    width: 100%;
+    height: 2.5px;
+    background-color: var(--color-text-primary);
+    border-radius: 2px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Transform 3 Bars into an X close button */
+  .mobile-hamburger-btn.open .bar-1 {
+    transform: translateY(8px) rotate(45deg);
+    background-color: var(--color-error, #ef4444);
+  }
+  .mobile-hamburger-btn.open .bar-2 {
+    opacity: 0;
+    transform: scale(0);
+  }
+  .mobile-hamburger-btn.open .bar-3 {
+    transform: translateY(-8px) rotate(-45deg);
+    background-color: var(--color-error, #ef4444);
+  }
+
+  /* Frosted Glass Sliding Overlay */
+  .mobile-nav-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 80%;
+    max-width: 340px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-left: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  .mobile-nav-drawer.open {
+    transform: translateX(0);
+  }
+
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 999;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  /* Drawer Contents */
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1.5px solid var(--color-border-light);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+  }
+  .drawer-brand { font-size: 1.2rem; font-weight: 900; color: var(--color-primary); }
+  .drawer-links {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-right: 4px;
+  }
+  .drawer-section { display: flex; flex-direction: column; gap: 8px; }
+  .drawer-section-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .drawer-link {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
+  }
+  .drawer-link:hover, .drawer-link.active {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+  }
+  
+  .drawer-footer {
+    border-top: 1.5px solid var(--color-border-light);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .drawer-profile-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .dp-left { display: flex; align-items: center; gap: 10px; }
+  .dp-details { display: flex; flex-direction: column; }
+  .dp-name { font-size: 0.88rem; font-weight: 800; color: var(--color-text-primary); }
+  .dp-email { font-size: 0.72rem; color: var(--color-text-tertiary); overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+}
+
+/* ── Generic Forms Stacking (For CRISPR references and configurations) ── */
+@media (max-width: 768px) {
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4, 16px);
+  }
+  .form-group {
+    width: 100%;
+    min-width: 100% !important;
+  }
+  .gene-target-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border-bottom: 2px solid var(--color-border-light);
+    padding-bottom: 14px;
+  }
+  .gene-target-num {
+    padding-bottom: 0;
+    margin-bottom: -4px;
+  }
+  .gene-target-row .btn-remove {
+    margin-top: 4px !important;
+    align-self: flex-end;
+  }
+}

@@ -1,5 +1,5 @@
 <div class="notes-page app-page">
-  <div class="notes-layout" [class.sidebar-hidden]="sidebarCollapsed">
+  <div class="notes-layout" [class.sidebar-hidden]="sidebarCollapsed" [class.mobile-editor-active]="selectedNote">
     
     <!-- Sidebar -->
     <div class="notes-sidebar">
@@ -19,6 +19,11 @@
 
     <!-- Rich Text Word-style Editor Area -->
     <div class="editor-container section-card">
+      <!-- Mobile back button (Visible only in single column editor mode) -->
+      <button class="mobile-back-to-list-btn" (click)="selectNote(null)">
+        ◀ Back to Notebook Ledger
+      </button>
+
       <!-- Floating sidebar toggle button -->
       <button class="toggle-sidebar-btn" (click)="sidebarCollapsed = !sidebarCollapsed" title="Toggle Note List">
         <span *ngIf="!sidebarCollapsed">◀</span>

@@ -100,9 +100,20 @@ export class LabNotesPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  async selectNote(id: string) {
+  async selectNote(id: string | null) {
     try {
       this.selectedImg = null;
+
+      if (id === null) {
+        this.selectedNote = null;
+        this.noteForm.title = '';
+        this.noteForm.bodyHtml = '';
+        if (this.richEditor) {
+          this.richEditor.nativeElement.innerHTML = '';
+        }
+        this.cdr.detectChanges();
+        return;
+      }
 
       const res = await this.labService.getNote(id);
       this.selectedNote = res.meta;

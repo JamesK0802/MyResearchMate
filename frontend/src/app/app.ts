@@ -17,10 +17,16 @@ import { firstValueFrom } from 'rxjs';
 })
 export class App {
   appVersion = environment.version;
+  isMobileMenuOpen = false;
 
   constructor(public auth: AuthService, private http: HttpClient) {}
 
+  toggleMobileMenu() {
+    this.isMobileMenuOpen = !this.isMobileMenuOpen;
+  }
+
   async logout() {
+    this.isMobileMenuOpen = false;
     await this.auth.signOut();
   }
 }

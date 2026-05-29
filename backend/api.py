@@ -16,7 +16,7 @@ import pcr_presets
 # PCR Presets are now managed via Supabase (pcr_presets.py)
 
 # Import our analysis pipelines
-from run_local import process_files, process_files_multi, process_single_file_worker
+from run_local import process_files, process_files_multi, process_single_file_worker, _get_code_version, SUBSTITUTION_POLICY
 
 # Database Initialization
 from database.db import engine, Base
@@ -242,7 +242,25 @@ def background_analysis(
                 "phred_threshold": phred_threshold,
                 "indel_threshold": indel_threshold,
                 "is_multi_reference": True,
-                "total_files": total_files
+                "total_files": total_files,
+                "code_version": _get_code_version(),
+                "input_filenames": list(temp_filenames),
+                "thresholds": {
+                    "phred_threshold": phred_threshold,
+                    "indel_threshold": indel_threshold,
+                    "assignment_margin_threshold": assignment_margin,
+                    "analyze_ambiguous": analyze_ambiguous,
+                    "rescue_ambiguous": rescue_ambiguous,
+                    "rescue_threshold": rescue_threshold,
+                },
+                "references": [
+                    {
+                        "gene": g.get("gene"),
+                        "target_ids": [t.get("target_id") for t in g.get("targets", [])],
+                    }
+                    for g in genes_payload
+                ],
+                "substitution_policy": SUBSTITUTION_POLICY,
             },
             "results": all_results
         }
