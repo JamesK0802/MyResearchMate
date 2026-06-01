@@ -1,27 +1,82 @@
 <!-- ══════════════ RESULTS DASHBOARD ══════════════ -->
-<div *ngIf="state.genes.length > 0" class="results-dashboard" id="resultsSection">
+<div *ngIf="state.genes.length > 0 || (state.isCuratedView && state.mergedGenes.length === 0)" class="results-dashboard" id="resultsSection">
+
+  <!-- ── Curated View Banner ── -->
+  <div *ngIf="state.isCuratedView" class="curated-banner">
+    <div class="curated-banner-text">
+      <strong>Curated View</strong> — Statistics recalculated from selected files/genes/targets/groups.
+    </div>
+    <div class="curated-exclusion-counts">
+      <span *ngIf="state.curationConfig?.excludedFiles?.length" class="excl-badge">
+        {{ state.curationConfig!.excludedFiles.length }} file(s) excluded
+      </span>
+      <span *ngIf="state.curationConfig?.excludedGenes?.length" class="excl-badge">
+        {{ state.curationConfig!.excludedGenes.length }} gene(s) excluded
+      </span>
+      <span *ngIf="state.curationConfig?.excludedTargets?.length" class="excl-badge">
+        {{ state.curationConfig!.excludedTargets.length }} target(s) excluded
+      </span>
+      <span *ngIf="state.curationConfig?.excludedGroups?.length" class="excl-badge">
+        {{ state.curationConfig!.excludedGroups.length }} group(s) excluded
+      </span>
+    </div>
+  </div>
 
   <!-- ── Export / Action Bar ── -->
-  <div class="export-bar">
-    <button *ngIf="state.activeMode === 'analysis'" type="button" class="btn-new-analysis"
-      (click)="state.newAnalysis()">
-      <span class="btn-icon"></span> New Analysis
-    </button>
-    <button *ngIf="state.activeMode === 'viewer'" type="button" class="btn-new-analysis" (click)="state.newViewer()">
-      New View
-    </button>
+  <div class="export-bar" style="justify-content: space-between;">
+    <div class="left-actions" style="display: flex; gap: 12px;">
+      <!-- Curate / Exit Button -->
+      <button *ngIf="!state.isCuratedView" type="button" class="btn-curate"
+        (click)="enterCuratedView()" [disabled]="state.mergedGenes.length === 0">
+        Create Curated View
+      </button>
+      <button *ngIf="state.isCuratedView" type="button" class="btn-exit-curate"
+        (click)="exitCuratedView()">
+        Back to Original
+      </button>
+    </div>
 
-    <!-- Save to My Data Button -->
-    <button type="button" class="btn-save-data" 
-      (click)="saveResult()"
-      [disabled]="state.mergedGenes.length === 0 || isSaving">
-      {{ isSaving ? 'Saving...' : 'Save to My Data' }}
-    </button>
+    <div class="right-actions" style="display: flex; gap: 12px;">
+      <button *ngIf="state.activeMode === 'analysis'" type="button" class="btn-new-analysis"
+        (click)="state.newAnalysis()">
+        New Analysis
+      </button>
+      <button *ngIf="state.activeMode === 'viewer'" type="button" class="btn-new-analysis" (click)="state.newViewer()">
+        New View
+      </button>
 
-    <button type="button" class="btn-export" (click)="state.exportToExcel()"
-      [disabled]="state.mergedGenes.length === 0">
-      Export Excel
-    </button>
+      <!-- Save to My Data Button -->
+      <button *ngIf="!state.isCuratedView" type="button" class="btn-save-data" 
+        (click)="saveResult()"
+        [disabled]="state.mergedGenes.length === 0 || isSaving">
+        {{ isSaving ? 'Saving...' : 'Save to My Data' }}
+      </button>
+
+      <!-- Save Curated View Button -->
+      <button *ngIf="state.isCuratedView" type="button" class="btn-save-curated"
+        (click)="saveCuratedView()" [disabled]="isSaving">
+        {{ isSaving ? 'Saving...' : 'Save Curated View' }}
+      </button>
+
+      <!-- Export Buttons -->
+      <ng-container *ngIf="!state.isCuratedView">
+        <button type="button" class="btn-export" (click)="state.exportToExcel()"
+          [disabled]="state.mergedGenes.length === 0">
+          Export Excel
+        </button>
+      </ng-container>
+      <ng-container *ngIf="state.isCuratedView">
+        <button type="button" class="btn-export" (click)="state.exportCuratedToExcel()"
+          [disabled]="state.mergedGenes.length === 0">
+          Export Curated
+        </button>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- ── No Data After Curation ── -->
+  <div *ngIf="state.isCuratedView && state.genes.length === 0" class="curated-empty-state">
+    <p>All items are excluded. Restore some files, genes, targets, or groups to see results.</p>
   </div>
 
   <!-- ── Result Scope Tabs (Merged vs Per-File) ── -->
@@ -31,9 +86,13 @@
         (click)="selectScope(-1)">
         All Merged
       </button>
-      <button type="button" class="scope-tab-btn" *ngFor="let res of state.allFileResults; let i = index"
-        [class.active]="state.selectedScopeIndex === i" (click)="selectScope(i)">
-        {{ state.getScopeName(i) }}
+      <button type="button" class="scope-tab-btn file-curate-tab" *ngFor="let fr of state.allFileResults; let i = index"
+        [class.active]="state.selectedScopeIndex === i"
+        [class.excluded-tab]="isFileExcluded(fr)"
+        (click)="selectScope(i)">
+        <span class="tab-name">{{ state.getScopeName(i) }}</span>
+        
+        <!-- Rename Icon -->
         <span class="edit-icon" style="margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; cursor: pointer; opacity: 0.5;" 
               (click)="state.editScopeName(i); $event.stopPropagation()" title="Rename File">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -41,18 +100,27 @@
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
           </svg>
         </span>
+        
+        <!-- Exclude Toggle -->
+        <span *ngIf="state.isCuratedView" class="exclude-toggle" [class.is-excluded]="isFileExcluded(fr)"
+          (click)="toggleFile(fr); $event.stopPropagation()">
+          {{ isFileExcluded(fr) ? '↩' : '✕' }}
+        </span>
       </button>
     </div>
   </div>
 
   <!-- ── Gene Tabs (Multi-Reference only) ── -->
-  <div *ngIf="state.genes.length >= 1" class="gene-tabs-wrapper">
+  <div *ngIf="state.genes.length >= 1 || (state.isCuratedView && originalGenes.length > 0)" class="gene-tabs-wrapper">
     <div class="gene-tabs" role="tablist">
+      <!-- Normal genes (included) -->
       <button *ngFor="let g of state.normalGenes; let i = index" role="tab" class="gene-tab-btn"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex"
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
+        <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
+          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.rescuedGenes; let i = index" role="tab" class="gene-tab-btn rescued-derived"
@@ -60,6 +128,8 @@
         style="background-color: #e8f5e9; border-color: #a5d6a7;">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
+        <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
+          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.ambiguousGenes; let i = index" role="tab" class="gene-tab-btn ambiguous-derived"
@@ -67,8 +137,20 @@
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
+        <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
+          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+      </button>
+
+      <!-- Excluded genes (curated mode only) -->
+      <button *ngFor="let gName of excludedGeneNames" role="tab"
+        class="gene-tab-btn excluded-tab"
+        (click)="toggleGene(gName)">
+        <span class="gene-tab-label">{{ gName }}</span>
+        <span class="gene-tab-count">excluded</span>
+        <span class="exclude-toggle gene-exclude is-excluded">↩</span>
       </button>
     </div>
+
     <div class="gene-info-stripe" *ngIf="state.currentGene">
       <span class="gene-info-item"><strong>Gene:</strong> {{ state.currentGene.gene }}</span>
       <span class="gene-info-sep">|</span>
@@ -92,7 +174,7 @@
   </div>
 
   <!-- ── Metric Cards ── -->
-  <div class="metrics-grid">
+  <div class="metrics-grid" *ngIf="state.genes.length > 0">
     <div class="metric-card">
       <span class="m-label">Total Reads</span>
       <span class="m-value">{{ state.metrics.totalReads | number }}</span>
@@ -120,21 +202,23 @@
   </div>
 
   <!-- ── Charts ── -->
-  <div class="charts-section">
+  <div class="charts-section" *ngIf="state.genes.length > 0">
     <div class="chart-card pie"><canvas id="mutationPieChart"></canvas></div>
     <div class="chart-card"><canvas id="indelChart"></canvas></div>
     <div class="chart-card donut"><canvas id="donutChart"></canvas></div>
   </div>
 
   <!-- ── Summary Table ── -->
-  <div class="table-card">
+  <div class="table-card" *ngIf="state.genes.length > 0">
     <h3>Detailed Summary Table
       <span class="table-gene-badge">{{ state.currentGene?.gene }}</span>
+      <span *ngIf="state.isCuratedView" class="curated-table-badge">CURATED</span>
     </h3>
     <div class="table-responsive">
       <table>
         <thead>
           <tr>
+            <th *ngIf="state.isCuratedView" style="width: 44px;"></th>
             <th>Gene</th>
             <th>Target</th>
             <th>Total</th>
@@ -149,6 +233,14 @@
           <tr *ngFor="let row of summaryTableData; let i = index" (click)="selectRow(i)"
             [class.row-selected]="i === state.selectedRowIndex"
             style="cursor: pointer; transition: background-color 0.2s;">
+            <td *ngIf="state.isCuratedView" class="exclude-cell">
+              <span class="exclude-btn-sm" 
+                [class.is-excluded]="isTargetExcluded(row.sample, row.target)"
+                (click)="toggleTarget(row.sample, row.target); $event.stopPropagation()"
+                title="Exclude/restore this target">
+                {{ isTargetExcluded(row.sample, row.target) ? '↩' : '✕' }}
+              </span>
+            </td>
             <td>{{ row.sample }}</td>
             <td><span class="badge">{{ row.target }}</span></td>
             <td>{{ row.total | number }}</td>
@@ -173,6 +265,7 @@
       <span style="font-size:0.8rem;color:#1a9e55;font-weight:600;">
         {{ state.currentGene?.gene }} › {{ state.selectedTarget?.target_id }}
       </span>
+      <span *ngIf="state.isCuratedView" class="curated-anno-badge">CURATED</span>
     </div>
     <div class="anno-legend">
       <span class="legend-item"><span class="badge del-bg">-</span> DELETION</span>
@@ -211,8 +304,17 @@
 
       <!-- Mutation Group Rows -->
       <div class="unified-row" *ngFor="let group of state.selectedTarget.top_groups"
+        [class.excluded-row]="isGroupExcludedObj(group)"
         style="border-bottom: 1px dotted #e0e0e0; background: white;">
-        <div class="sticky-left">GROUP {{ group.group_rank }}</div>
+        <div class="sticky-left">
+          <span *ngIf="state.isCuratedView" class="exclude-btn-group"
+            (click)="toggleGroup(group)"
+            [class.is-excluded]="isGroupExcludedObj(group)"
+            title="Exclude/restore this group">
+            {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
+          </span>
+          <ng-container *ngIf="!isGroupExcludedObj(group)">GROUP {{ group.group_rank }}</ng-container>
+        </div>
         <div class="seq-center" style="padding: 10px 15px 23px 15px; display: flex; align-items: flex-start;">
           <div class="seq-mono read-seq" style="display: flex; height: 16px;">
             <ng-container *ngFor="let t of group.tokens">
@@ -236,8 +338,10 @@
           <div style="line-height: 1.4;">
             <strong>TYPE: {{ group.classification }}{{ group.net_indel ? ' (' + group.net_indel + ' bp)' : ' (0 bp)'
               }}</strong><br>
-            <span style="color:#7f8c8d;">{{ group.read_count | number }} Reads &nbsp;·&nbsp; {{ group.read_pct
-              }}%</span>
+            <span style="color:#7f8c8d;">
+              {{ group.read_count | number }} Reads
+              <ng-container *ngIf="!isGroupExcludedObj(group)">&nbsp;·&nbsp; {{ group.read_pct }}%</ng-container>
+            </span>
           </div>
         </div>
       </div>

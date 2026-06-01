@@ -11,6 +11,7 @@ A high-precision pipeline for analyzing genome editing outcomes.
 - **Analysis Mode**: Process FASTQ sequencing data to quantify Indels and editing efficiency.
 - **Benchmark Mode**: Validate editing results against control samples with cluster-based rescue logic.
 - **Multi-Reference Support**: Assign reads to multiple genomic targets within a single sequencing run.
+- **Result Curation Mode**: Instantly subset analysis results by visually excluding irrelevant sequencing files, off-target genes, or specific annotation groups. All editing efficiencies and summary charts instantly recalculate on the fly based only on the included dataset. Curated views can be saved as pristine, standalone records to the cloud or exported directly to Excel for publication reporting.
 - **Gene-Level Collapsing Demultiplexing (New in v3.3)**: Advanced read-to-reference assignment supporting multi-gRNA/multi-target CRISPR screens.
   - *Evidence Collapsing*: Individual target windows within the same gene are grouped together as evidence rather than competing classes, avoiding false-positive ambiguous reads.
   - *Algorithm*: Scores each read against all target windows, collapses scores by taking the maximum for each gene/reference (`gene_score = max(target_window_scores)`), and applies a user-specified margin check between the top-1 and top-2 gene-level scores to ensure high-confidence assignment.

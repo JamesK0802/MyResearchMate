@@ -7,6 +7,8 @@ import { Chart } from 'chart.js/auto';
 
 import { AuthService } from '../../services/auth.service';
 import { ResultsService } from '../../services/results.service';
+import { MutationGroup } from '../../models/analysis.model';
+import { groupKey } from '../../models/curation.model';
 
 @Component({
   selector: 'app-result-dashboard',
@@ -218,6 +220,134 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Indel Editing (${selectedData.target_id})` } } }
       }));
+    }
+  }
+
+  // ── Curation UI Methods ──────────────────────────────────────────────────────
+
+  enterCuratedView() {
+    this.state.enterCuratedView();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  exitCuratedView() {
+    this.state.exitCuratedView();
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  /** Original file results from the snapshot (for file-level curation display) */
+  get originalFileResults(): string[] {
+    if (!this.state.originalSlotSnapshot) return [];
+    return this.state.originalSlotSnapshot.allFileResults.map(
+      (fr: any) => ((fr.fastq_file as string) || '').split('/').pop() || fr.fastq_file || ''
+    );
+  }
+
+  /** Original gene names from the snapshot (for excluded gene display) */
+  get originalGenes(): string[] {
+    if (!this.state.originalSlotSnapshot) return [];
+    return this.state.originalSlotSnapshot.mergedGenes.map(g => g.gene);
+  }
+
+  /** List of gene names that are currently excluded */
+  get excludedGeneNames(): string[] {
+    return this.state.curationConfig?.excludedGenes ?? [];
+  }
+
+  extractFileName(path: string): string {
+    return (path || '').split('/').pop() || path || '';
+  }
+
+  // ── File toggle ──
+  isFileExcluded(fileResult: any): boolean {
+    const path = typeof fileResult === 'string' ? fileResult : (fileResult?.fastq_file || '');
+    return this.state.isFileExcluded(this.extractFileName(path));
+  }
+
+  toggleFile(fileResult: any) {
+    if (!this.state.isCuratedView) return;
+    const path = typeof fileResult === 'string' ? fileResult : (fileResult?.fastq_file || '');
+    const fileName = this.extractFileName(path);
+    this.state.toggleFileExclusion(fileName);
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  toggleGene(geneName: string) {
+    if (!this.state.isCuratedView) return;
+    this.state.toggleGeneExclusion(geneName);
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  toggleTarget(geneName: string, targetId: string) {
+    if (!this.state.isCuratedView) return;
+    this.state.toggleTargetExclusion(geneName, targetId);
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  toggleGroup(group: MutationGroup) {
+    if (!this.state.isCuratedView) return;
+    const gene = this.state.currentGene?.gene;
+    const target = this.state.selectedTarget?.target_id;
+    if (!gene || !target) return;
+    this.state.toggleGroupExclusion(gene, target, group.read_inner);
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
+
+  isTargetExcluded(geneName: string, targetId: string): boolean {
+    return this.state.isTargetExcluded(geneName, targetId);
+  }
+
+  isGroupExcludedObj(group: MutationGroup): boolean {
+    const gene = this.state.currentGene?.gene;
+    const target = this.state.selectedTarget?.target_id;
+    if (!gene || !target) return false;
+    return this.state.isGroupExcluded(gene, target, group.read_inner);
+  }
+
+  // ── Save curated view ──
+  async saveCuratedView() {
+    const session = await this.auth.getSession();
+    if (!session) {
+      alert('Please sign in to save curated views.');
+      return;
+    }
+
+    const defaultName = this.state.curationConfig?.curatedViewName || 'Curated View';
+    const title = prompt('Name this curated view:', defaultName);
+    if (!title) return;
+
+    if (this.state.curationConfig) {
+      this.state.curationConfig.curatedViewName = title;
+    }
+
+    const exportData = this.state.getExportData();
+    if (!exportData) return;
+
+    this.isSaving = true;
+    try {
+      await this.resultsService.saveResult(
+        title,
+        { curated_config: this.state.curationConfig },
+        exportData
+      );
+      alert('Curated view saved successfully to "My Data"!');
+    } catch (err) {
+      console.error('Failed to save curated view:', err);
+      alert('Failed to save curated view. Please try again.');
+    } finally {
+      this.isSaving = false;
+      this.cdr.detectChanges();
     }
   }
 }

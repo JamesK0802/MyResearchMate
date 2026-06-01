@@ -4,7 +4,9 @@ import { BehaviorSubject, Subject, timer } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { AnalysisService, TaskStatus } from './analysis.service';
 import { ExcelExportService, ExportParams, ScopeData } from './excel-export.service';
+import { CurationService } from './curation.service';
 import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult, SplitPreview } from '../models/analysis.model';
+import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
 
 interface ProgressInfo {
@@ -64,6 +66,11 @@ export class AppStateService {
   viewerSlot: ResultSlot = emptySlot();
   activeMode: 'analysis' | 'viewer' = 'analysis';
 
+  // ── Curation state ─────────────────────────────────────────────────────────
+  isCuratedView = false;
+  curationConfig: CurationConfig | null = null;
+  originalSlotSnapshot: ResultSlot | null = null;
+
   // ── Active display state (points to the active slot) ──
   get slot(): ResultSlot {
     return this.activeMode === 'analysis' ? this.analysisSlot : this.viewerSlot;
@@ -106,6 +113,7 @@ export class AppStateService {
     private fb: FormBuilder,
     private analysisService: AnalysisService,
     private excelExportService: ExcelExportService,
+    private curationService: CurationService,
     public ngZone: NgZone
   ) { this.initForm(); }
 
@@ -423,7 +431,7 @@ export class AppStateService {
               if (newT.top_groups && extT.top_groups) {
                 const gm = new Map<string, any>();
                 [...extT.top_groups, ...newT.top_groups].forEach(g => { if (gm.has(g.read_inner)) { gm.get(g.read_inner).read_count += g.read_count; } else { gm.set(g.read_inner, { ...g }); } });
-                const mg = Array.from(gm.values()).sort((a, b) => b.read_count - a.read_count).slice(0, 10);
+                const mg = Array.from(gm.values()).sort((a, b) => b.read_count - a.read_count);
                 mg.forEach((g, i) => { g.group_rank = i + 1; g.read_pct = pct(g.read_count); });
                 extT.top_groups = mg;
               }
@@ -544,10 +552,220 @@ export class AppStateService {
 
   /** Reset viewer slot completely — used by "New Viewer" button */
   newViewer() {
+    this.exitCuratedView();
     this.activateSlot('viewer');
     this.viewerSlot = emptySlot();
     this.destroyCharts();
     this.clearProgress();
+  }
+
+  // ── Curation Methods ────────────────────────────────────────────────────────
+
+  enterCuratedView() {
+    if (this.isCuratedView) return;
+    // Snapshot the current viewer slot
+    this.originalSlotSnapshot = JSON.parse(JSON.stringify(this.slot));
+    this.curationConfig = emptyCurationConfig();
+    this.curationConfig.sourceResultTitle = this.lastRunParams?.dataType || 'Analysis';
+    this.curationConfig.curatedViewName = `Curated — ${new Date().toLocaleDateString()}`;
+    this.isCuratedView = true;
+    this.recalculateCuratedView();
+  }
+
+  /** Exit curated view: restore original state */
+  exitCuratedView() {
+    if (!this.isCuratedView) return;
+    if (this.originalSlotSnapshot) {
+      // Restore all result data from the snapshot
+      const snap = this.originalSlotSnapshot;
+      this.genes = snap.genes;
+      this.mergedGenes = snap.mergedGenes;
+      this.ambiguousReadCount = snap.ambiguousReadCount;
+      this.totalMergedAmbiguous = snap.totalMergedAmbiguous;
+      this.totalRawReads = snap.totalRawReads;
+      this.totalMergedRawReads = snap.totalMergedRawReads;
+      this.totalPhredPassed = snap.totalPhredPassed;
+      this.totalMergedPhredPassed = snap.totalMergedPhredPassed;
+      this.totalAnchorMatched = snap.totalAnchorMatched;
+      this.totalMergedAnchorMatched = snap.totalMergedAnchorMatched;
+      this.allFileResults = snap.allFileResults;
+      this.multiFileCount = snap.multiFileCount;
+      this.selectedScopeIndex = snap.selectedScopeIndex;
+      this.selectedGeneIndex = snap.selectedGeneIndex;
+      this.selectedRowIndex = 0;
+    }
+    this.isCuratedView = false;
+    this.curationConfig = null;
+    this.originalSlotSnapshot = null;
+    this.updateVisibleGenes();
+    this.resultsUpdated$.next();
+  }
+
+  /** Toggle file exclusion by file name */
+  toggleFileExclusion(fileName: string) {
+    if (!this.curationConfig) return;
+    const idx = this.curationConfig.excludedFiles.indexOf(fileName);
+    if (idx >= 0) this.curationConfig.excludedFiles.splice(idx, 1);
+    else this.curationConfig.excludedFiles.push(fileName);
+    this.recalculateCuratedView();
+  }
+
+  /** Toggle gene exclusion by gene name */
+  toggleGeneExclusion(geneName: string) {
+    if (!this.curationConfig) return;
+    const idx = this.curationConfig.excludedGenes.indexOf(geneName);
+    if (idx >= 0) this.curationConfig.excludedGenes.splice(idx, 1);
+    else this.curationConfig.excludedGenes.push(geneName);
+    this.recalculateCuratedView();
+  }
+
+  /** Toggle target exclusion by gene::target_id key */
+  toggleTargetExclusion(geneName: string, tgtId: string) {
+    if (!this.curationConfig) return;
+    const key = targetKey(geneName, tgtId);
+    const idx = this.curationConfig.excludedTargets.indexOf(key);
+    if (idx >= 0) this.curationConfig.excludedTargets.splice(idx, 1);
+    else this.curationConfig.excludedTargets.push(key);
+    this.recalculateCuratedView();
+  }
+
+  /** Toggle annotation group exclusion by gene::target::read_inner key */
+  toggleGroupExclusion(geneName: string, tgtId: string, readInner: string) {
+    if (!this.curationConfig) return;
+    const key = groupKey(geneName, tgtId, readInner);
+    const idx = this.curationConfig.excludedGroups.indexOf(key);
+    if (idx >= 0) this.curationConfig.excludedGroups.splice(idx, 1);
+    else this.curationConfig.excludedGroups.push(key);
+    this.recalculateCuratedView();
+  }
+
+  /** Recompute curated results from snapshot + config */
+  recalculateCuratedView() {
+    if (!this.originalSlotSnapshot || !this.curationConfig) return;
+    const snap = this.originalSlotSnapshot;
+    const out = this.curationService.computeCuratedResult(
+      snap.allFileResults,
+      snap.mergedGenes,
+      snap.totalMergedAmbiguous,
+      snap.totalMergedRawReads,
+      snap.totalMergedPhredPassed,
+      snap.totalMergedAnchorMatched,
+      this.curationConfig
+    );
+    // Apply curated output to active slot
+    this.mergedGenes = out.mergedGenes;
+    this.totalMergedAmbiguous = out.totalMergedAmbiguous;
+    this.totalMergedRawReads = out.totalMergedRawReads;
+    this.totalMergedPhredPassed = out.totalMergedPhredPassed;
+    this.totalMergedAnchorMatched = out.totalMergedAnchorMatched;
+    this.allFileResults = out.allFileResults;
+    this.multiFileCount = out.multiFileCount;
+    this.selectedScopeIndex = -1;
+    this.updateVisibleGenes();
+    this.resultsUpdated$.next();
+  }
+
+  /** Check if a file is excluded */
+  isFileExcluded(fileName: string): boolean {
+    return this.curationConfig?.excludedFiles.includes(fileName) ?? false;
+  }
+
+  /** Check if a gene is excluded */
+  isGeneExcluded(geneName: string): boolean {
+    return this.curationConfig?.excludedGenes.includes(geneName) ?? false;
+  }
+
+  /** Check if a target is excluded */
+  isTargetExcluded(geneName: string, tgtId: string): boolean {
+    return this.curationConfig?.excludedTargets.includes(targetKey(geneName, tgtId)) ?? false;
+  }
+
+  /** Check if an annotation group is excluded */
+  isGroupExcluded(geneName: string, tgtId: string, readInner: string): boolean {
+    return this.curationConfig?.excludedGroups.includes(groupKey(geneName, tgtId, readInner)) ?? false;
+  }
+
+  /** Get export data from the original (un-curated) slot */
+  getOriginalExportData() {
+    if (!this.originalSlotSnapshot) return null;
+    const snap = this.originalSlotSnapshot;
+    if (!snap.lastRunParams || snap.mergedGenes.length === 0) return null;
+
+    const scopes: ScopeData[] = [];
+    const totalAssigned = snap.mergedGenes
+      .filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived)
+      .reduce((s, g) => s + g.assigned_read_count, 0);
+
+    scopes.push({
+      sheetName: 'Merged',
+      readFlow: {
+        rawReads: snap.totalMergedRawReads,
+        phredPassed: snap.totalMergedPhredPassed,
+        anchorMatched: snap.totalMergedAnchorMatched,
+        usableForAssignment: snap.totalMergedAnchorMatched,
+        assignedReads: totalAssigned,
+        ambiguousReads: snap.totalMergedAmbiguous
+      },
+      genes: snap.mergedGenes
+    });
+
+    for (let i = 0; i < snap.allFileResults.length; i++) {
+      const fr = snap.allFileResults[i];
+      const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined;
+      if (!mrd) continue;
+      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
+      const fg = mrd.genes || [];
+      const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived)
+                   .reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
+      scopes.push({
+        sheetName: fn,
+        readFlow: {
+          rawReads: mrd.debug?.total_reads_parsed ?? 0,
+          phredPassed: mrd.debug?.phred_passed_count ?? 0,
+          anchorMatched: mrd.debug?.anchor_matched_count ?? 0,
+          usableForAssignment: mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0,
+          assignedReads: fa,
+          ambiguousReads: mrd.ambiguous_read_count ?? 0
+        },
+        genes: fg
+      });
+    }
+    return { params: snap.lastRunParams, scopes };
+  }
+
+  /** Export the original (un-curated) result to Excel */
+  async exportOriginalToExcel() {
+    const data = this.getOriginalExportData();
+    if (!data) {
+      // Fallback: if not in curated mode, just export normally
+      return this.exportToExcel();
+    }
+    try {
+      this.addLog('Generating original result export...');
+      const images = await this.generateChartImagesForExport(data.scopes);
+      await this.excelExportService.exportToExcel(data.params, data.scopes, images);
+      this.addLog('Original result Excel exported.');
+    } catch (e: any) {
+      console.error('Original export failed:', e);
+      this.addLog(`Original export failed: ${e.message}`);
+    }
+  }
+
+  /** Export the curated result to Excel (with curation metadata) */
+  async exportCuratedToExcel() {
+    const data = this.getExportData();
+    if (!data) return;
+    try {
+      this.addLog('Generating curated result export...');
+      const images = await this.generateChartImagesForExport(data.scopes);
+      await this.excelExportService.exportToExcel(
+        data.params, data.scopes, images, this.curationConfig ?? undefined
+      );
+      this.addLog('Curated result Excel exported.');
+    } catch (e: any) {
+      console.error('Curated export failed:', e);
+      this.addLog(`Curated export failed: ${e.message}`);
+    }
   }
 
   resetAnalysis() {
@@ -630,6 +848,12 @@ export class AppStateService {
       .reduce((s, g) => s + g.assigned_read_count, 0);
 
     // 1. Merged scope
+    // We deep clone the genes so we can safely remove excluded groups for the export
+    const cleanMergedGenes = JSON.parse(JSON.stringify(this.mergedGenes));
+    if (this.isCuratedView && this.curationConfig) {
+      this.stripExcludedGroups(cleanMergedGenes);
+    }
+
     scopes.push({
       sheetName: 'Merged',
       readFlow: {
@@ -640,17 +864,27 @@ export class AppStateService {
         assignedReads: totalAssigned,
         ambiguousReads: this.totalMergedAmbiguous
       },
-      genes: this.mergedGenes
+      genes: cleanMergedGenes
     });
 
     // 2. Individual file scopes
     for (let i = 0; i < this.allFileResults.length; i++) {
       const fr = this.allFileResults[i];
+      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
+      
+      // Skip excluded files if in curated view
+      if (this.isCuratedView && this.curationConfig && this.curationConfig.excludedFiles.includes(fn)) {
+        continue;
+      }
+
       const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined;
       if (!mrd) continue;
       
-      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
-      const fg = mrd.genes || [];
+      const fg = JSON.parse(JSON.stringify(mrd.genes || []));
+      if (this.isCuratedView && this.curationConfig) {
+        this.stripExcludedGroups(fg);
+      }
+
       const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived)
                    .reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
 
@@ -669,6 +903,20 @@ export class AppStateService {
     }
 
     return { params: this.lastRunParams, scopes };
+  }
+
+  private stripExcludedGroups(genes: GeneResult[]) {
+    if (!this.curationConfig) return;
+    for (const g of genes) {
+      if (!g.analysis_result?.targets) continue;
+      for (const t of g.analysis_result.targets) {
+        if (!t.top_groups) continue;
+        t.top_groups = t.top_groups.filter((grp: any) => {
+          const k = groupKey(g.gene, t.target_id, grp.read_inner);
+          return !this.curationConfig!.excludedGroups.includes(k);
+        });
+      }
+    }
   }
 
   private async generateChartImagesForExport(scopes: ScopeData[]): Promise<{ [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }> {

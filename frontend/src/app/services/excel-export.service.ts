@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { GeneResult } from '../models/analysis.model';
+import { CurationConfig } from '../models/curation.model';
 
 export interface ExportParams {
   windowSize: number; phredThreshold: number; indelThreshold: number;
@@ -36,16 +37,23 @@ export class ExcelExportService {
     right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
   };
 
-  async exportToExcel(params: ExportParams, scopes: ScopeData[], chartImages?: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }): Promise<void> {
+  async exportToExcel(params: ExportParams, scopes: ScopeData[], chartImages?: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }, curationConfig?: CurationConfig): Promise<void> {
     const wb = new ExcelJS.Workbook();
+
+    // If curated, add a Curation Info sheet first
+    if (curationConfig) {
+      this.buildCurationInfoSheet(wb, curationConfig);
+    }
+
     for (const scope of scopes) this.buildSheet(wb, scope, params, chartImages?.[scope.sheetName]);
     const dataSheet = wb.addWorksheet('.metadata', { state: 'hidden' });
-    const jsonData = JSON.stringify({ params, scopes });
+    const jsonData = JSON.stringify({ params, scopes, curationConfig: curationConfig || null });
     const chunkSize = 30000;
     for (let i = 0; i < jsonData.length; i += chunkSize) dataSheet.addRow([jsonData.substring(i, i + chunkSize)]);
     const buf = await wb.xlsx.writeBuffer();
     const ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 16);
-    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `crispr-analysis-report-${ts}.xlsx`);
+    const prefix = curationConfig ? 'curated-crispr-report' : 'crispr-analysis-report';
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${prefix}-${ts}.xlsx`);
   }
 
   private buildSheet(wb: ExcelJS.Workbook, scope: ScopeData, params: ExportParams, scopeCharts?: { [targetId: string]: { [chartName: string]: string } }): void {
@@ -262,5 +270,68 @@ export class ExcelExportService {
       try { const r = JSON.parse(jsonStr); if (r.params && r.scopes) return r; } catch (e) { }
     }
     return { params: {}, scopes: [] };
+  }
+
+  // ── Curation Info Sheet ──────────────────────────────────────────────────────
+
+  private buildCurationInfoSheet(wb: ExcelJS.Workbook, config: CurationConfig): void {
+    const ws = wb.addWorksheet('Curation Info');
+    ws.getColumn(1).width = 30;
+    ws.getColumn(2).width = 60;
+
+    let row = 1;
+
+    // Title
+    const titleRow = ws.getRow(row);
+    ws.mergeCells(row, 1, row, 2);
+    titleRow.getCell(1).value = 'Curated View Information';
+    titleRow.getCell(1).fill = this.SECTION_FILL;
+    titleRow.getCell(1).font = this.SECTION_FONT;
+    row++;
+    row++;
+
+    const addPair = (label: string, value: any) => {
+      const r = ws.getRow(row);
+      r.getCell(1).value = label;
+      r.getCell(1).font = { bold: true };
+      r.getCell(1).fill = this.PARAM_LABEL_FILL;
+      r.getCell(1).border = this.BORDER_THIN;
+      r.getCell(1).alignment = { horizontal: 'right' };
+      r.getCell(2).value = value;
+      r.getCell(2).border = this.BORDER_THIN;
+      row++;
+    };
+
+    addPair('Curated View Name', config.curatedViewName);
+    addPair('Source Result', config.sourceResultTitle);
+    addPair('Created At', config.createdAt);
+    row++;
+
+    // Exclusion summary
+    const addListSection = (title: string, items: string[]) => {
+      const sectionRow = ws.getRow(row);
+      ws.mergeCells(row, 1, row, 2);
+      sectionRow.getCell(1).value = `${title} (${items.length})`;
+      sectionRow.getCell(1).fill = this.HEADER_FILL;
+      sectionRow.getCell(1).font = this.HEADER_FONT;
+      row++;
+      if (items.length === 0) {
+        ws.getRow(row).getCell(1).value = '(none)';
+        ws.getRow(row).getCell(1).font = { italic: true, color: { argb: 'FF999999' } };
+        row++;
+      } else {
+        for (const item of items) {
+          ws.getRow(row).getCell(1).value = item;
+          ws.getRow(row).getCell(1).border = this.BORDER_THIN;
+          row++;
+        }
+      }
+      row++;
+    };
+
+    addListSection('Excluded Files', config.excludedFiles);
+    addListSection('Excluded Genes', config.excludedGenes);
+    addListSection('Excluded Targets', config.excludedTargets);
+    addListSection('Excluded Annotation Groups', config.excludedGroups);
   }
 }
