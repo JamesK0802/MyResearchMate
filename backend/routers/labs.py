@@ -5,6 +5,8 @@ from auth.dependencies import get_current_user, require_admin
 from database.db import get_db
 from database.models import Lab, LabMember, User, LabRegistrationRequest, LabJoinRequest
 from pydantic import BaseModel
+import os
+import re
 
 # IMPORTANT: We use a clean prefix to avoid confusion
 router = APIRouter(prefix="", tags=["labs"])
@@ -264,6 +266,15 @@ async def admin_approve_lab(
                 
     req.status = "approved"
     db.commit()
+    
+    # Create Labs Archive directory
+    try:
+        lab_dir_name = re.sub(r'[\\/*?:"<>|]', "", req.lab_name).strip()
+        archive_dir = os.path.join("..", "data", "Labs Archive", lab_dir_name)
+        os.makedirs(archive_dir, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Failed to create lab archive directory: {e}")
+        
     return {"message": "Lab created and approved"}
 
 @router.post("/admin/lab-requests/{request_id}/reject")

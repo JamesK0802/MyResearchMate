@@ -144,13 +144,13 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `,
   styles: [`
-    .my-data-container { padding: var(--space-10); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
-    .page-header { margin-bottom: var(--space-8); }
-    .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
-    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
+    .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
+    .page-header { margin-bottom: var(--space-3); }
+    .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: 0; letter-spacing: -0.025em; }
+    .page-header p { display: none; }
 
     /* Tabs */
-    .tabs-nav { display: flex; gap: 0; margin-bottom: var(--space-8); border-bottom: 1px solid var(--color-border); }
+    .tabs-nav { display: flex; gap: 0; margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
     .tabs-nav button { padding: 10px var(--space-6); border: none; background: none; font-family: var(--font-sans); font-weight: var(--fw-semi); font-size: var(--text-base); color: var(--color-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: var(--transition-fast); }
     .tabs-nav button:hover { color: var(--color-text-body); background: var(--color-surface-alt); }
     .tabs-nav button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }

@@ -1,0 +1,642 @@
+<div class="archive-page app-page">
+  <header class="page-header">
+    <div class="header-content">
+      <h1>{{ labName ? labName + ' Archive' : 'Lab Archive' }}</h1>
+      <p>Store records, attach files and links, and collaborate with your lab team.</p>
+    </div>
+  </header>
+
+  <!-- View Mode Tabs -->
+  <div class="view-mode-tabs">
+    <button class="app-btn" [class.app-btn-primary]="viewMode === 'card'" [class.app-btn-outline]="viewMode !== 'card'" (click)="setViewMode('card')">Records</button>
+    <button class="app-btn" [class.app-btn-primary]="viewMode === 'table'" [class.app-btn-outline]="viewMode !== 'table'" (click)="setViewMode('table')">Table</button>
+    <button class="app-btn" [class.app-btn-primary]="viewMode === 'explorer'" [class.app-btn-outline]="viewMode !== 'explorer'" (click)="setViewMode('explorer')">File Explorer</button>
+  </div>
+
+  <!-- Top Controls -->
+  <div class="section-card controls-bar" *ngIf="viewMode !== 'explorer'">
+    <div class="controls-left">
+      <div class="app-search-bar">
+        <span class="app-search-bar__icon">⌕</span>
+        <input type="text" [(ngModel)]="searchQuery" (input)="filterRecords()" placeholder="Search by title, summary, or description...">
+      </div>
+    </div>
+    <button class="app-btn app-btn-primary" (click)="openNewRecordModal()">+ New Record</button>
+  </div>
+
+  <!-- ═══ RECORDS VIEW ═══ -->
+  <div class="records-list" *ngIf="viewMode === 'card'">
+    <div *ngFor="let record of filteredRecords" class="record-row section-card" (click)="viewDetails(record)">
+      <div class="record-row-main">
+        <div class="record-info">
+          <div class="record-card-header">
+            <span class="record-title" [title]="record.title">{{ record.title }}</span>
+            <span class="record-date">{{ record.created_by }} · {{ record.created_at | date:'mediumDate' }}</span>
+          </div>
+          <span class="record-summary" *ngIf="record.summary" [title]="record.summary">{{ record.summary }}</span>
+          <p class="record-desc-preview" *ngIf="record.description" [title]="record.description">{{ record.description }}</p>
+          
+          <!-- Clickable Hyperlinks -->
+          <div class="record-card-links" *ngIf="record.links?.length" (click)="$event.stopPropagation()">
+            <span class="card-link-label">Links: </span>
+            <a *ngFor="let link of (record.links || []).slice(0, 1)" [href]="formatExternalLink(link)" target="_blank" class="card-hyperlink" [title]="link">{{ getDisplayText(link, 72) }}</a>
+            <span class="card-more-chip" *ngIf="(record.links?.length || 0) > 1">+{{ (record.links?.length || 0) - 1 }} more</span>
+          </div>
+
+          <!-- Attached Files (Click to open) -->
+          <div class="record-card-files" *ngIf="record.files?.length" (click)="$event.stopPropagation()">
+            <span class="card-file-label">Files: </span>
+            <a *ngFor="let file of (record.files || []).slice(0, 1)" [href]="getDownloadUrl(file.path)" target="_blank" class="card-file-item card-file-link">
+              <span class="file-icon-text">📄</span> <span class="file-name-text" [title]="file.filename">{{ getDisplayText(file.filename, 44) }}</span>
+            </a>
+            <span class="card-more-chip" *ngIf="(record.files?.length || 0) > 1">+{{ (record.files?.length || 0) - 1 }} more</span>
+          </div>
+
+          <!-- Comments Preview on Card -->
+          <div class="record-card-comments-list" *ngIf="record.comments?.length" (click)="$event.stopPropagation()">
+            <div class="card-comment-header-title">
+              <span>💬 Discussion ({{ record.comments.length }})</span>
+            </div>
+            <div *ngFor="let comment of (record.comments || []).slice(0, 3)" class="card-comment-row">
+              <span class="comment-author">{{ comment.user_name }}:</span>
+              <span class="comment-content" [title]="comment.text">{{ comment.text }}</span>
+              <span class="comment-time">{{ comment.created_at | date:'yyyy-MM-dd HH:mm' }}</span>
+            </div>
+            <div class="card-comment-more" *ngIf="(record.comments?.length || 0) > 3">+{{ (record.comments?.length || 0) - 3 }} more comments</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="empty-state" *ngIf="filteredRecords.length === 0 && !searchQuery">
+      <h3>No records yet</h3>
+      <p>Create a record to log activities and attach files.</p>
+      <button class="app-btn app-btn-primary" (click)="openNewRecordModal()">+ New Record</button>
+    </div>
+    <div class="empty-state" *ngIf="filteredRecords.length === 0 && searchQuery"><p>No matching records.</p></div>
+  </div>
+
+  <!-- ═══ TABLE VIEW ═══ -->
+  <div class="app-table-wrap" *ngIf="viewMode === 'table'">
+    <table class="app-table archive-table">
+      <colgroup>
+        <col class="archive-col-title" [style.width.%]="archiveColumnWidths[0]">
+        <col class="archive-col-summary" [style.width.%]="archiveColumnWidths[1]">
+        <col class="archive-col-links" [style.width.%]="archiveColumnWidths[2]">
+        <col class="archive-col-files" [style.width.%]="archiveColumnWidths[3]">
+        <col class="archive-col-meta" [style.width.%]="archiveColumnWidths[4]">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>
+            <span class="table-header-label">Title</span>
+            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(0, $event)"></span>
+          </th>
+          <th>
+            <span class="table-header-label">Summary</span>
+            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(1, $event)"></span>
+          </th>
+          <th>
+            <span class="table-header-label">Links</span>
+            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(2, $event)"></span>
+          </th>
+          <th>
+            <span class="table-header-label">Files</span>
+            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(3, $event)"></span>
+          </th>
+          <th><span class="table-header-label">Author/Date</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let record of filteredRecords" (click)="viewDetails(record)" style="cursor:pointer;">
+          <td><span class="table-title-text" [title]="record.title">{{ record.title }}</span></td>
+          <td><span class="table-summary-text" [title]="record.summary">{{ record.summary }}</span></td>
+          <td (click)="$event.stopPropagation()">
+            <div class="table-stack">
+              <a *ngFor="let link of (record.links || []).slice(0, (record.links?.length || 0) > 3 ? 2 : 3)" [href]="formatExternalLink(link)" target="_blank" class="table-hyperlink" [title]="link">
+                {{ getDisplayText(link, 64) }}
+              </a>
+              <span class="table-more-text" *ngIf="(record.links?.length || 0) > 3">+{{ (record.links?.length || 0) - 2 }} more</span>
+            </div>
+          </td>
+          <td (click)="$event.stopPropagation()">
+            <div class="table-stack">
+              <a *ngFor="let file of (record.files || []).slice(0, (record.files?.length || 0) > 3 ? 2 : 3)" [href]="getDownloadUrl(file.path)" target="_blank" class="table-filelink" [title]="file.filename">
+                <span class="file-icon-text">📄</span> {{ getDisplayText(file.filename, 38) }}
+              </a>
+              <span class="table-more-text" *ngIf="(record.files?.length || 0) > 3">+{{ (record.files?.length || 0) - 2 }} more</span>
+            </div>
+          </td>
+          <td class="table-meta-cell">
+            <div class="table-author" [title]="record.created_by">{{ record.created_by }}</div>
+            <div class="table-date">{{ record.created_at | date:'yyyy-MM-dd HH:mm' }}</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="empty-state" *ngIf="filteredRecords.length === 0" style="border:none;border-radius:0;"><p>No records found.</p></div>
+  </div>
+
+  <!-- ═══ FILE EXPLORER VIEW (Finder-style) ═══ -->
+  <div *ngIf="viewMode === 'explorer'" 
+       class="finder-container" 
+       (click)="clearSelection()"
+       (dragenter)="onContainerDragEnter($event)"
+       (dragover)="onContainerDragOver($event)"
+       (dragleave)="onContainerDragLeave($event)"
+       (drop)="onPcDrop($event)">
+    <!-- Finder Toolbar -->
+    <div class="finder-toolbar" (click)="$event.stopPropagation()">
+      <div class="finder-nav-buttons">
+        <button class="finder-nav-btn finder-sidebar-toggle"
+                (click)="explorerSidebarCollapsed = !explorerSidebarCollapsed"
+                title="Toggle folder sidebar">
+          <span *ngIf="!explorerSidebarCollapsed">◀</span>
+          <span *ngIf="explorerSidebarCollapsed">▶</span>
+        </button>
+        <button class="finder-nav-btn" 
+                (click)="navigateUp()" 
+                [disabled]="!currentPath" 
+                title="Go up"
+                (dragover)="onParentBtnDragOver($event)"
+                (dragleave)="onParentBtnDragLeave($event)"
+                (drop)="onDropToParent($event)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2l-6 6h4v6h4V8h4z"/></svg>
+        </button>
+      </div>
+      <div class="finder-breadcrumb">
+        <span class="breadcrumb-item root" 
+              (click)="navigateToRoot()"
+              (dragover)="$event.preventDefault()"
+              (drop)="onDropToPath($event, '')">
+          {{ labName || 'Root' }}
+        </span>
+        <ng-container *ngFor="let crumb of breadcrumbs">
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-item" 
+                (click)="navigateTo(crumb.path)"
+                (dragover)="$event.preventDefault()"
+                (drop)="onDropToPath($event, crumb.path)">
+            {{ crumb.name }}
+          </span>
+        </ng-container>
+      </div>
+      <div style="flex:1;"></div>
+      <button class="app-btn app-btn-outline app-btn-sm" (click)="showMkdirModal = true">New Folder</button>
+      <button class="app-btn app-btn-primary app-btn-sm" (click)="triggerFilePicker()">Upload</button>
+    </div>
+
+    <!-- Finder Explorer Body (Split Layout) -->
+    <div class="finder-body" [class.sidebar-hidden]="explorerSidebarCollapsed">
+      <!-- Left Sidebar Tree View -->
+      <aside class="finder-sidebar" (click)="$event.stopPropagation()">
+        <div class="sidebar-header"
+             (dragover)="onSidebarHeaderDragOver($event)"
+             (dragleave)="onSidebarHeaderDragLeave($event)"
+             (drop)="onDropToSidebarHeader($event)">
+          Folders
+        </div>
+        <div class="sidebar-tree">
+          <ng-container *ngFor="let node of treeNodes">
+            <ng-container *ngTemplateOutlet="treeNodeTpl; context: { node: node, depth: 0 }"></ng-container>
+          </ng-container>
+          <div *ngIf="treeNodes.length === 0" class="sidebar-empty">
+            No folders found
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Main File List -->
+      <div class="finder-main-list">
+        <div class="finder-header">
+          <span class="col-name">Name</span>
+          <span class="col-size">Size</span>
+          <span class="col-modified">Modified</span>
+          <span class="col-actions">Actions</span>
+        </div>
+        <div *ngFor="let file of fsItems" 
+             class="finder-row" 
+             [class.linked]="file.is_linked" 
+             [class.folder-row]="file.is_dir"
+             [class.selected]="selectedItem === file"
+             [class.cut]="clipboardItem?.rel_path === file.rel_path && clipboardItem?.action === 'cut'"
+             [draggable]="true"
+             (dragstart)="onDragStart($event, file)"
+             (dragover)="onDragOver($event, file)"
+             (dragleave)="onDragLeave($event, file)"
+             (drop)="onDrop($event, file)"
+             (click)="selectRow(file, $event)"
+             (dblclick)="file.is_dir ? navigateInto(file.name) : openFile(file)">
+          <span class="col-name">
+            <span class="file-icon" *ngIf="file.is_dir">📁</span>
+            <span *ngIf="editingItem !== file" 
+                  class="file-name" 
+                  [class.dir-name]="file.is_dir"
+                  (click)="file.is_dir ? navigateFolder(file, $event) : null"
+                  [style.cursor]="file.is_dir ? 'pointer' : 'default'">
+              {{ file.name }}
+            </span>
+            <input *ngIf="editingItem === file"
+                   id="rename-input"
+                   type="text"
+                   [(ngModel)]="editNameValue"
+                   (keydown.enter)="saveRename()"
+                   (keydown.escape)="cancelRename()"
+                   (blur)="saveRename()"
+                   class="rename-input-box"
+                   (click)="$event.stopPropagation()">
+            <span class="linked-badge" *ngIf="file.is_linked">Linked</span>
+          </span>
+          <span class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</span>
+          <span class="col-modified">{{ file.modified_at | date:'MMM d, yyyy' }}</span>
+          <span class="col-actions">
+            <a *ngIf="!file.is_dir" [href]="getDownloadUrl(file.rel_path)" target="_blank" class="app-btn app-btn-outline app-btn-sm finder-action-btn">Download</a>
+            <button *ngIf="!file.is_linked" class="app-btn app-btn-danger app-btn-sm finder-action-btn" (click)="deleteFsItem(file)">Delete</button>
+            <span *ngIf="file.is_linked && !file.is_dir" class="linked-lock" title="Linked to a record — cannot delete">🔒</span>
+          </span>
+        </div>
+        <div *ngIf="fsItems.length === 0" class="finder-empty">
+          <p>This folder is empty.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PC Drop Overlay -->
+    <div class="pc-drop-overlay" *ngIf="isDraggingPcFiles">
+      <div class="drop-overlay-box">
+        <div class="drop-overlay-icon">☁️</div>
+        <div class="drop-overlay-text">Drop files or folders here</div>
+        <div class="drop-overlay-subtext">Upload directly to /{{ currentPath || 'Root' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RECORD DETAIL MODAL ═══ -->
+  <div class="app-modal-overlay" *ngIf="selectedRecord" (click)="closeDetails()">
+    <div class="app-modal detail-modal" (click)="$event.stopPropagation()">
+      <div class="app-modal-header detail-modal-header">
+        <div class="detail-title-block">
+          <h2>{{ selectedRecord.title }}</h2>
+          <span class="detail-record-meta">By {{ selectedRecord.created_by }} · {{ selectedRecord.created_at | date:'medium' }}</span>
+        </div>
+        <div class="detail-header-actions">
+          <button class="app-btn app-btn-outline app-btn-sm" (click)="openEditRecordModal(selectedRecord)">Edit</button>
+          <button class="app-btn app-btn-danger app-btn-sm" (click)="deleteRecord(selectedRecord.id)">Delete</button>
+          <button class="app-modal-close" (click)="closeDetails()">✕</button>
+        </div>
+      </div>
+      <div class="app-modal-body detail-layout">
+        <div class="detail-left">
+          <div class="detail-block">
+            <label class="app-label">Summary</label>
+            <p class="detail-text detail-summary">{{ selectedRecord.summary }}</p>
+          </div>
+          <div class="detail-block">
+            <label class="app-label">Description</label>
+            <div class="description-box">{{ selectedRecord.description || 'No description provided.' }}</div>
+          </div>
+        </div>
+        <aside class="detail-side-panel">
+          <div class="detail-resource-grid">
+            <div class="detail-block">
+              <label class="app-label">Links</label>
+              <div *ngIf="!selectedRecord.links?.length" class="detail-empty-note">None</div>
+              <div class="links-list">
+                <a *ngFor="let link of selectedRecord.links" [href]="formatExternalLink(link)" target="_blank" class="link-item" [title]="link">{{ getDisplayText(link, 96) }}</a>
+              </div>
+            </div>
+            <div class="detail-block">
+              <div class="attached-files-header">
+                <label class="app-label">Attached Files</label>
+              </div>
+              <div *ngIf="!selectedRecord.files?.length" class="detail-empty-note">None</div>
+              <div class="files-list">
+                <div *ngFor="let file of selectedRecord.files" class="file-item">
+                  <div class="attached-file-main">
+                    <span class="attached-file-icon">FILE</span>
+                    <span class="attached-file-name" [title]="file.filename">{{ file.filename }}</span>
+                  </div>
+                  <div class="attached-file-actions">
+                    <a [href]="getDownloadUrl(file.path)" target="_blank" class="file-action-link">Download</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="detail-block">
+            <button class="detail-explorer-btn" (click)="openExplorerForRecord()">Open in File Explorer</button>
+          </div>
+          <div class="detail-block">
+            <label class="app-label">Discussion ({{ selectedRecord.comments?.length || 0 }})</label>
+            <div class="comments-thread">
+              <div class="thread-item" *ngFor="let comment of selectedRecord.comments">
+                <div class="thread-header">
+                  <strong>{{ comment.user_name }}</strong>
+                  <div class="thread-meta-actions">
+                    <span>{{ comment.created_at | date:'short' }}</span>
+                    <button class="delete-comment-btn" (click)="deleteComment(comment.id)">✕</button>
+                  </div>
+                </div>
+                <p class="detail-comment-text" [title]="comment.text">{{ comment.text }}</p>
+              </div>
+              <div *ngIf="!selectedRecord.comments?.length" class="detail-empty-note">No comments yet.</div>
+            </div>
+            <div class="comment-compose">
+              <textarea class="app-textarea comment-input" [(ngModel)]="newCommentText" placeholder="Write a comment..." rows="2"></textarea>
+              <button class="app-btn app-btn-primary app-btn-sm" (click)="addComment()" [disabled]="!newCommentText.trim()">Post</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ NEW RECORD MODAL ═══ -->
+  <div class="app-modal-overlay" *ngIf="showNewModal" (click)="showNewModal = false">
+    <div class="app-modal record-form-modal" (click)="$event.stopPropagation()">
+      <div class="app-modal-header">
+        <h2>New Record</h2>
+        <button class="app-modal-close" (click)="showNewModal = false">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <div class="app-form-group">
+          <label class="app-label">Title</label>
+          <input class="app-input" type="text" [(ngModel)]="newRecord.title" placeholder="e.g. Weekly Meeting Notes">
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Short Summary</label>
+          <input class="app-input" type="text" [(ngModel)]="newRecord.summary" placeholder="Brief summary...">
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Description</label>
+          <textarea class="app-textarea" [(ngModel)]="newRecord.description" rows="4" placeholder="Full details..."></textarea>
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Links (Optional)</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <input class="app-input" type="text" [(ngModel)]="tempLink" placeholder="https://..." (keyup.enter)="addLinkToNewRecord()" style="flex:1;">
+            <button class="app-btn app-btn-outline app-btn-sm" (click)="addLinkToNewRecord()">Add</button>
+          </div>
+          <div class="link-chips" *ngIf="newRecord.links.length">
+            <span *ngFor="let link of newRecord.links; let i = index" class="link-chip">
+              <span class="link-chip-text" [title]="link">{{ getDisplayText(link, 40) }}</span>
+              <button (click)="removeLinkFromNewRecord(i)" class="chip-remove">✕</button>
+            </span>
+          </div>
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Files (Optional)</label>
+          <label class="file-drop-zone">
+            <input type="file" multiple style="display:none" (change)="onPendingFilesSelected($event)">
+            <span *ngIf="!pendingFiles.length">Click to select files or drop them here</span>
+            <span *ngIf="pendingFiles.length">{{ pendingFiles.length }} file(s) selected — click to add more</span>
+          </label>
+          <div class="pending-files-list" *ngIf="pendingFiles.length">
+            <div *ngFor="let f of pendingFiles; let i = index" class="pending-file">
+              <span class="pending-file-name" [title]="f.name">📄 {{ f.name }}</span>
+              <button class="chip-remove" (click)="removePendingFile(i)">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="app-form-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label class="app-label" style="margin-bottom:0;">Link Existing Files (Optional)</label>
+            <button class="app-btn app-btn-outline app-btn-sm" style="font-size:var(--text-xs);padding:4px 10px;" (click)="openLinkExistingModal(null)">+ Link Existing</button>
+          </div>
+          <div class="pending-files-list" *ngIf="pendingExistingFiles.length">
+            <div *ngFor="let path of pendingExistingFiles; let i = index" class="pending-file">
+              <span class="pending-file-name" [title]="path">📄 {{ path }}</span>
+              <button class="chip-remove" (click)="removePendingExistingFile(i)">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="showNewModal = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="createRecord()" [disabled]="!newRecord.title || isCreating">
+          {{ isCreating ? 'Creating...' : 'Create Record' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload / Mkdir Modals -->
+  <div class="app-modal-overlay" *ngIf="showUploadModal" (click)="showUploadModal = false">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:440px;">
+      <div class="app-modal-header"><h2>Upload File</h2><button class="app-modal-close" (click)="showUploadModal = false">✕</button></div>
+      <div class="app-modal-body">
+        <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:16px;">Upload to: <strong>/{{ currentPath || 'Root' }}</strong></p>
+        <input type="file" (change)="onFileSelected($event)" class="app-input">
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="showUploadModal = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="uploadFile()" [disabled]="!selectedFile || isUploading">{{ isUploading ? 'Uploading...' : 'Upload' }}</button>
+      </div>
+    </div>
+  </div>
+  <div class="app-modal-overlay" *ngIf="showMkdirModal" (click)="showMkdirModal = false">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:440px;">
+      <div class="app-modal-header"><h2>New Folder</h2><button class="app-modal-close" (click)="showMkdirModal = false">✕</button></div>
+      <div class="app-modal-body">
+        <div class="app-form-group"><label class="app-label">Folder Name</label><input class="app-input" type="text" [(ngModel)]="newFolderName" placeholder="e.g. Raw Data"></div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="showMkdirModal = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="createFolder()" [disabled]="!newFolderName || isCreatingFolder">
+          {{ isCreatingFolder ? 'Creating...' : 'Create' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Link Existing File Modal -->
+  <div class="app-modal-overlay nested-modal-overlay" *ngIf="showLinkFileModal" (click)="showLinkFileModal = false">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:540px;">
+      <div class="app-modal-header">
+        <h2>Link Existing File</h2>
+        <button class="app-modal-close" (click)="showLinkFileModal = false">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:12px;">
+          Choose a file from explorer to link:
+        </p>
+
+        <!-- Path browsing inside Link File Modal -->
+        <div class="move-path-browser">
+          <div class="move-path-toolbar">
+            <button class="finder-nav-btn" (click)="navigateLinkFileUp()" [disabled]="!linkFileCurrentPath" title="Go up">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2l-6 6h4v6h4V8h4z"/></svg>
+            </button>
+            <div class="move-path-breadcrumb">
+              <span class="breadcrumb-item root" (click)="linkFileCurrentPath = ''; loadLinkFileItems();">{{ labName || 'Root' }}</span>
+              <ng-container *ngFor="let crumb of linkFileBreadcrumbs">
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-item" (click)="linkFileCurrentPath = crumb.path; loadLinkFileItems();">{{ crumb.name }}</span>
+              </ng-container>
+            </div>
+          </div>
+
+          <div class="move-folder-list">
+            <div *ngFor="let item of linkFileItems" 
+                 class="move-folder-row" 
+                 (click)="item.is_dir ? navigateLinkFileInto(item.name) : selectFileToLink(item)">
+              <span class="folder-icon">{{ item.is_dir ? '📁' : '📄' }}</span>
+              <span class="folder-name">{{ item.name }}</span>
+            </div>
+            <div *ngIf="linkFileItems.length === 0" class="move-folder-empty">
+              This folder is empty
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <span style="font-size:var(--text-xs);color:var(--color-text-tertiary);margin-right:auto;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;max-width:320px;">
+          Current path: /{{ linkFileCurrentPath || 'Root' }}
+        </span>
+        <button class="app-btn app-btn-ghost" (click)="showLinkFileModal = false">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div class="app-modal-overlay" *ngIf="showMoveModal" (click)="showMoveModal = false">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:540px;">
+      <div class="app-modal-header">
+        <h2>Move Item</h2>
+        <button class="app-modal-close" (click)="showMoveModal = false">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:12px;">
+          Move <strong>{{ movingItem?.name }}</strong> to:
+        </p>
+
+        <!-- Path browsing inside Move Modal -->
+        <div class="move-path-browser">
+          <div class="move-path-toolbar">
+            <button class="finder-nav-btn" (click)="navigateMoveUp()" [disabled]="!moveCurrentPath" title="Go up">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2l-6 6h4v6h4V8h4z"/></svg>
+            </button>
+            <div class="move-path-breadcrumb">
+              <span class="breadcrumb-item root" (click)="navigateMoveToRoot()">{{ labName || 'Root' }}</span>
+              <ng-container *ngFor="let crumb of moveBreadcrumbs">
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-item" (click)="navigateMoveTo(crumb.path)">{{ crumb.name }}</span>
+              </ng-container>
+            </div>
+          </div>
+
+          <div class="move-folder-list">
+            <div *ngFor="let folder of moveFolders" class="move-folder-row" (click)="navigateMoveInto(folder.name)">
+              <span class="folder-icon">📁</span>
+              <span class="folder-name">{{ folder.name }}</span>
+            </div>
+            <div *ngIf="moveFolders.length === 0" class="move-folder-empty">
+              No subfolders here
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <span style="font-size:var(--text-xs);color:var(--color-text-tertiary);margin-right:auto;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;max-width:240px;">
+          Target: /{{ moveCurrentPath || 'Root' }}
+        </span>
+        <button class="app-btn app-btn-ghost" (click)="showMoveModal = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="executeMove()" [disabled]="isMovingItem">
+          {{ isMovingItem ? 'Moving...' : 'Move Here' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ EDIT RECORD MODAL ═══ -->
+  <div class="app-modal-overlay" *ngIf="showEditModal" (click)="showEditModal = false">
+    <div class="app-modal record-form-modal" (click)="$event.stopPropagation()">
+      <div class="app-modal-header">
+        <h2>Edit Record</h2>
+        <button class="app-modal-close" (click)="showEditModal = false">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <div class="app-form-group">
+          <label class="app-label">Title</label>
+          <input class="app-input" type="text" [(ngModel)]="editingRecordData.title" placeholder="e.g. Weekly Meeting Notes">
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Short Summary (Optional)</label>
+          <input class="app-input" type="text" [(ngModel)]="editingRecordData.summary" placeholder="Brief summary...">
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Description (Optional)</label>
+          <textarea class="app-textarea" [(ngModel)]="editingRecordData.description" rows="4" placeholder="Full details..."></textarea>
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Links (Optional)</label>
+          <div class="record-form-inline-row">
+            <input class="app-input" type="text" [(ngModel)]="editTempLink" placeholder="https://..." (keyup.enter)="addLinkToEditRecord()">
+            <button class="app-btn app-btn-outline app-btn-sm record-form-add-btn" (click)="addLinkToEditRecord()">Add</button>
+          </div>
+          <div class="link-chips" *ngIf="editingRecordData.links.length">
+            <span *ngFor="let link of editingRecordData.links; let i = index" class="link-chip">
+              <span class="link-chip-text" [title]="link">{{ getDisplayText(link, 40) }}</span>
+              <button (click)="removeLinkFromEditRecord(i)" class="chip-remove">✕</button>
+            </span>
+          </div>
+        </div>
+        <div class="app-form-group">
+          <label class="app-label">Files (Optional)</label>
+          <label class="file-drop-zone">
+            <input type="file" multiple style="display:none" (change)="uploadEditAttachment($event)">
+            <span>{{ isUploadingEditAttachment ? 'Uploading...' : 'Click to select files or drop them here' }}</span>
+          </label>
+          <div class="pending-files-list" *ngIf="editingRecordData.files.length">
+            <div *ngFor="let file of editingRecordData.files" class="pending-file edit-file-row">
+              <span class="pending-file-name" [title]="file.filename">📄 {{ file.filename }}</span>
+              <div class="edit-file-actions">
+                <a [href]="getDownloadUrl(file.path)" target="_blank" class="app-btn app-btn-outline app-btn-sm record-form-file-btn">Download</a>
+                <button class="app-btn app-btn-danger app-btn-sm record-form-file-btn" (click)="unlinkEditFile(file)">Unlink</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="app-form-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label class="app-label" style="margin-bottom:0;">Link Existing Files (Optional)</label>
+            <button class="app-btn app-btn-outline app-btn-sm" style="font-size:var(--text-xs);padding:4px 10px;" (click)="openLinkExistingModal(editingRecordData.id)">+ Link Existing</button>
+          </div>
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="showEditModal = false">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="saveRecordEdit()" [disabled]="!editingRecordData.title || isSavingEdit">
+          {{ isSavingEdit ? 'Saving...' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recursive Tree Node Template -->
+  <ng-template #treeNodeTpl let-node="node" let-depth="depth">
+    <div class="tree-node-row" 
+         [style.padding-left.px]="depth * 14 + 10"
+         [class.active]="currentPath === node.relPath"
+         [class.drag-over]="node.isDragOver"
+         [draggable]="true"
+         (dragstart)="onTreeNodeDragStart($event, node)"
+         (click)="onTreeNodeClick(node, $event)"
+         (dragover)="onTreeNodeDragOver($event, node)"
+         (dragleave)="onTreeNodeDragLeave($event, node)"
+         (drop)="onTreeNodeDrop($event, node)">
+      <span class="tree-caret" 
+            *ngIf="node.isDir" 
+            (click)="toggleNode(node, $event)">
+        {{ node.isExpanded ? '▼' : '▶' }}
+      </span>
+      <span class="tree-caret-empty" *ngIf="!node.isDir"></span>
+      <span class="tree-icon">{{ getTreeNodeIcon(node) }}</span>
+      <span class="tree-name" [title]="node.name">{{ node.name }}</span>
+    </div>
+    <div *ngIf="node.isDir && node.isExpanded && node.children">
+      <ng-container *ngFor="let child of node.children">
+        <ng-container *ngTemplateOutlet="treeNodeTpl; context: { node: child, depth: depth + 1 }"></ng-container>
+      </ng-container>
+    </div>
+  </ng-template>
+  <!-- Hidden PC Uploader Inputs -->
+  <input type="file" id="pc-file-input" multiple style="display:none" (change)="onFilesSelectedForUpload($event)">
+</div>

@@ -4,6 +4,28 @@
 
 :host { display: block; min-height: 100vh; background: var(--color-bg); font-family: var(--font-sans); }
 
+.booking-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-6);
+}
+
+.booking-page .page-header {
+  margin-bottom: var(--space-3);
+}
+
+.booking-page .page-header h1 {
+  margin-bottom: 0;
+}
+
+.booking-page .page-header p {
+  display: none;
+}
+
+.booking-page .app-badge {
+  display: none;
+}
+
 /* Controls */
 .controls-bar { margin-bottom: var(--space-6); padding: var(--space-4) var(--space-6); }
 .controls-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }

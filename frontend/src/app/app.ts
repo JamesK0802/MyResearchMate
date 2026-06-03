@@ -1,4 +1,4 @@
-import { Component, ViewEncapsulation } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -6,6 +6,7 @@ import { AuthService } from './services/auth.service';
 import { environment } from '../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { LabService } from './services/lab.service';
 
 @Component({
   selector: 'app-root',
@@ -15,11 +16,26 @@ import { firstValueFrom } from 'rxjs';
   styleUrl: './app.css',
   encapsulation: ViewEncapsulation.None
 })
-export class App {
+export class App implements OnInit {
   appVersion = environment.version;
   isMobileMenuOpen = false;
+  myLabs: any[] = [];
 
-  constructor(public auth: AuthService, private http: HttpClient) {}
+  constructor(public auth: AuthService, private http: HttpClient, private labService: LabService) {}
+
+  ngOnInit() {
+    this.auth.session$.subscribe(async session => {
+      if (session) {
+        try {
+          this.myLabs = await this.labService.getMyLabs();
+        } catch (e) {
+          console.error("Failed to load user labs in navbar:", e);
+        }
+      } else {
+        this.myLabs = [];
+      }
+    });
+  }
 
   toggleMobileMenu() {
     this.isMobileMenuOpen = !this.isMobileMenuOpen;

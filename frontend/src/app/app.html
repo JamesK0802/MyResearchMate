@@ -24,6 +24,13 @@
             <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
             <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
             <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
+            <ng-container *ngIf="myLabs && myLabs.length > 0">
+              <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
+              <div style="padding: 6px 16px; font-size: 0.75rem; font-weight: 800; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;">Labs Archive</div>
+              <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="dropdown-item" style="padding-left: 24px;">
+                📁 {{ lab.lab_name }}
+              </a>
+            </ng-container>
           </div>
         </div>
 
@@ -142,6 +149,12 @@
         <a routerLink="/labs/my" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🏢 My Labs</a>
         <a routerLink="/labs/find" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">🔍 Find Lab</a>
         <a routerLink="/labs/register" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">➕ Register Lab</a>
+        <ng-container *ngIf="myLabs && myLabs.length > 0">
+          <div class="drawer-section-title" style="margin-top: 16px;">Labs Archive</div>
+          <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">
+            📁 {{ lab.lab_name }}
+          </a>
+        </ng-container>
       </div>
 
       <!-- Admin options (logged in) -->

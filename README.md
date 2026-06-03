@@ -49,6 +49,14 @@ Share research workspaces with labs and individual researchers.
 - **Visual Sharing Badges**: Instant CSS-based hover tooltips on cards and modals listing who has access, with premium glassmorphic styling.
 - **Template Sharing**: Send workflow preset templates directly to another researcher's inbox for them to accept or reject.
 
+### 6. Lab Team Archive
+Store lab-level records, reference files, links, and discussion threads in one shared archive.
+- **Record, Table, and File Explorer Views**: Switch between compact record cards, resizable data-table columns, and a Finder-style file browser.
+- **Attachment Management**: Upload new files, link existing archive files, download attachments, and open linked records directly in the file explorer.
+- **Readable Long Content Handling**: Long URLs, filenames, summaries, and descriptions are visually truncated in list/table previews while preserving full input values and full detail views.
+- **Collapsible Folder Sidebar**: Hide or restore the file explorer folder tree to prioritize the main file list on wide screens.
+- **Compact Workspace Layout**: Lab archive, My Data, Lab Notes, and Facility Booking pages use tighter headers with preserved desktop side margins for more usable working space.
+
 ---
 
 ## 🛠 Technology Stack
@@ -189,6 +197,7 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 
 ### v3.5.0
 - **Nicole Booking Gimmick Removal**: Completely cleaned up the codebase by removing the gimmick "Nicole Booking System" (`/booking/nicole` and `/api/nicole-gimmick`) while keeping the core ANU RSB Facility Booking system fully intact and operational.
+- **Lab Team Archive**: Added a lab-level archive with records, links, file attachments, discussion threads, resizable table columns, compact previews, a detail modal, and a Finder-style file explorer with a collapsible folder sidebar.
 - **Parallel Workers Progress Overlay**: Engineered visual multi-thread progress bars inside the loading overlay on the CRISPR analysis page, displaying real-time processing statistics for each FASTQ worker process.
 - **Premium SVG Icon Overhaul**: Replaced outdated, low-fidelity browser-default emojis with beautifully crafted custom vector SVG icons across tab views (📋, 🗺️, 📆), outcome sharing modals, edit ledgers, and action buttons.
 - **Unified Results Toolbar**: Standardized and aligned margins, padding, heights, and border consistency for all action buttons (New Analysis, Save to My Data, Export Excel) inside the result viewer.

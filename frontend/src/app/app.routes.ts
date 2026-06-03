@@ -40,6 +40,7 @@ export const routes: Routes = [
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
   { path: 'labs/my', loadComponent: () => import('./pages/my-labs/my-labs.component').then(m => m.MyLabsComponent), canActivate: [authGuard] },
+  { path: 'labs/:labId/archive', loadComponent: () => import('./pages/lab-group-archive-page/lab-group-archive-page.component').then(m => m.LabGroupArchivePageComponent), canActivate: [authGuard] },
   {
     path: 'admin/labs',
     loadComponent: () => import('./pages/admin-panel/admin-panel.component').then(m => m.AdminPanelComponent),
