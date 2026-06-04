@@ -62,6 +62,27 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
       flex: 1; padding: 24px 28px; background: #f7f8fa;
       max-width: 1100px; width: 100%; margin: 0 auto;
     }
+
+    @media (max-width: 760px) {
+      .sub-nav { padding: 0 16px; }
+      .sub-nav-inner {
+        gap: 0;
+        justify-content: space-between;
+      }
+      .sub-tab {
+        flex: 1;
+        justify-content: center;
+        padding: 13px 8px;
+        text-align: center;
+      }
+      .sub-tab-text { align-items: center; }
+      .sub-tab-text strong {
+        font-size: 0.86rem;
+        line-height: 1.15;
+      }
+      .sub-tab-text small { display: none; }
+      .crispr-body { padding: 18px 20px; }
+    }
   `]
 })
 export class CrisprLayoutComponent {}

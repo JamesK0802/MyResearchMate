@@ -8,9 +8,8 @@
       <div class="upload-zone" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
         (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (click)="fileInput.click()">
         <input type="file" #fileInput (change)="onFileSelected($event)" multiple hidden accept=".fastq,.fq" />
-        <div class="upload-icon">📁</div>
-        <p><strong>Drag & Drop FASTQ files</strong> or click to browse</p>
-        <span class="hint">Supports Illumina .fastq / .fq files · Multiple files allowed</span>
+        <p><strong>Upload files</strong></p>
+        <span class="hint">FASTQ / FQ · Multiple files allowed</span>
       </div>
 
       <div class="file-list" *ngIf="state.selectedFiles.length > 0">
@@ -21,7 +20,7 @@
         </div>
       </div>
 
-      <div class="form-row">
+      <div class="form-row analysis-controls-grid">
         <div class="form-group flex-wide">
           <label>
             Window Size (bp)
@@ -96,7 +95,7 @@
             <button type="button" class="btn-autofill" (click)="showAutofill = !showAutofill">
               Auto Fill
             </button>
-            <button type="button" class="btn-add" (click)="state.addGene()">+ Add Gene</button>
+            <button type="button" class="btn-add" (click)="state.addGene()">Add Gene</button>
           </div>
         </div>
 
@@ -136,7 +135,7 @@
               <div class="gene-targets-section">
                 <div class="gene-targets-header">
                   <span class="gene-targets-label">Targets within this gene</span>
-                  <button type="button" class="btn-add-small" (click)="state.addGeneTarget(gi)">+ Add Target</button>
+                  <button type="button" class="btn-add-small" (click)="state.addGeneTarget(gi)">Add Target</button>
                 </div>
                 <div formArrayName="geneTargets">
                   <div *ngFor="let gt of state.getGeneTargets(gi).controls; let ti = index" [formGroupName]="ti"

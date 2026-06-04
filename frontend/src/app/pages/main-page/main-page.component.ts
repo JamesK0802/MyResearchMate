@@ -151,7 +151,7 @@ import { AuthService } from '../../services/auth.service';
     /* Hero */
     .hero { padding: 100px 40px 60px; text-align: center; max-width: 750px; margin: 0 auto; }
     .hero-label { font-size: 0.75rem; font-weight: 700; color: #94a3b8; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 24px; }
-    h1 { font-size: 3.5rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 20px; line-height: 1.1; }
+    h1 { font-size: 3.5rem; font-weight: 900; letter-spacing: 0; margin-bottom: 20px; line-height: 1.1; overflow-wrap: anywhere; }
     .highlight { color: #3b82f6; }
     .hero-sub { font-size: 1.15rem; color: #64748b; line-height: 1.6; margin-bottom: 48px; }
     .hero-cta { display: flex; gap: 12px; justify-content: center; }
@@ -188,7 +188,7 @@ import { AuthService } from '../../services/auth.service';
 
     .mech-header { margin-bottom: 60px; padding-bottom: 40px; border-bottom: 1px solid #f1f5f9; }
     .m-badge { font-size: 0.75rem; font-weight: 800; color: #3b82f6; letter-spacing: 0.2em; display: block; margin-bottom: 12px; }
-    .mech-header h2 { font-size: 2.8rem; font-weight: 900; margin-bottom: 12px; letter-spacing: -0.04em; }
+    .mech-header h2 { font-size: 2.8rem; font-weight: 900; margin-bottom: 12px; letter-spacing: 0; }
     .m-intro { color: #64748b; font-size: 1.2rem; font-weight: 500; line-height: 1.5; margin: 0; }
 
     /* Dual Cards */
@@ -219,6 +219,21 @@ import { AuthService } from '../../services/auth.service';
       .cards-grid, .dual-cards, .steps-grid { grid-template-columns: 1fr; }
       .mechanism-container { padding: 40px 24px; }
       h1 { font-size: 2.8rem; }
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 0 20px; }
+      .hero { padding: 72px 22px 48px; max-width: 100%; overflow: hidden; }
+      .hero-label { letter-spacing: 0.08em; line-height: 1.5; }
+      h1 { font-size: 2.35rem; line-height: 1.14; }
+      .hero-sub { font-size: 1rem; margin-bottom: 32px; }
+      .hero-cta { align-items: stretch; }
+      .hero-cta a { flex: 1; padding: 14px 18px; text-align: center; }
+      .tool-card { padding: 28px; border-radius: 12px; }
+      .mechanism-container { border-radius: 18px; padding: 32px 20px; }
+      .mech-header h2 { font-size: 2rem; }
+      .d-card, .step-card { padding: 28px 22px; border-radius: 14px; }
+      .s-header { align-items: flex-start; }
     }
   `]
 })
