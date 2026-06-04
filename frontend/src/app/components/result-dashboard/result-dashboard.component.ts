@@ -18,6 +18,8 @@ import { groupKey } from '../../models/curation.model';
 })
 export class ResultDashboardComponent implements OnInit, OnDestroy {
   isSaving = false;
+  showDetailedStats = false;
+  showCharts = false;
 
   constructor(
     public state: AppStateService,
@@ -89,6 +91,24 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     this.refreshDashboard();
   }
 
+
+
+  onScopeChange(event: Event) {
+    const selectElement = event.target as HTMLSelectElement;
+    const index = parseInt(selectElement.value, 10);
+    this.selectScope(index);
+  }
+
+  toggleCharts() {
+    this.showCharts = !this.showCharts;
+    this.cdr.detectChanges();
+    if (this.showCharts) {
+      setTimeout(() => {
+        this.updateChartsForSelected();
+      }, 50);
+    }
+  }
+
   selectRow(index: number) {
     this.state.selectedRowIndex = index;
     this.refreshDashboard();
@@ -154,8 +174,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     const container = document.querySelector('.unified-anno-container');
     if (!container || !this.state.selectedTarget) return;
     const cutIdx = this.state.selectedTarget.cut_site_index || 0;
-    const stickyLeftWidth = 150;
-    const baseWidth = 13;
+    const stickyLeftWidth = 0;
+    const baseWidth = 10;
     const padding = 15;
     const xPos = stickyLeftWidth + (cutIdx * baseWidth) + padding;
     const viewportWidth = container.clientWidth;
