@@ -966,7 +966,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 
 .seq-mono {
   font-family: 'Courier New', Courier, monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -976,8 +976,8 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 10px;
-  height: 14px;
+  width: 13px;
+  height: 16px;
   box-sizing: border-box;
 }
 
@@ -1369,6 +1369,34 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   position: relative;
 }
 
+.sticky-left {
+  position: sticky;
+  left: 0;
+  background: white;
+  z-index: 20;
+  padding: 15px;
+  width: 150px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-right: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.sticky-right {
+  position: sticky;
+  right: 0;
+  background: white;
+  z-index: 20;
+  padding: 15px;
+  width: 300px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-left: 1px solid #eee;
+}
+
 .row-header-sticky {
   position: sticky;
   left: 0;
@@ -1410,6 +1438,18 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   font-size: 9px;
   color: #64748b;
   font-weight: 500;
+}
+
+/* Responsive visibility classes */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
 }
 
 .seq-center {
@@ -3187,6 +3227,17 @@ select.form-control {
 .btn-action-icon svg {
   width: 16px;
   height: 16px;
+}
+
+/* Mobile specific overrides */
+@media (max-width: 768px) {
+  .mobile-only .seq-mono {
+    font-size: 10px;
+  }
+  .mobile-only .base-box {
+    width: 10px;
+    height: 14px;
+  }
 }
 
 
