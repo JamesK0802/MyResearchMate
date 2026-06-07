@@ -14,8 +14,8 @@ import { AuthService } from '../../services/auth.service';
         <p class="hero-label">Australian National University · RSB</p>
         <h1>Unified Research <span class="highlight">Platform</span></h1>
         <p class="hero-sub">
-          A dedicated platform for pooled CRISPR analysis, lab collaboration, 
-          and genomic data management.
+          A dedicated platform for pooled CRISPR analysis, lab notebooks, facility booking,
+          and team-based research records.
         </p>
         <div class="hero-cta">
           <a *ngIf="!auth.isLoggedIn" routerLink="/login" class="cta-fill">Get Started</a>
@@ -32,10 +32,11 @@ import { AuthService } from '../../services/auth.service';
             <a routerLink="/crispr" class="tool-card">
               <div class="card-body">
                 <h3>CRISPR Tool</h3>
-                <p>Pooled experiment analysis with multi-target competitive mapping and benchmarking.</p>
+                <p>Run pooled CRISPR editing analysis from FASTQ files, define multiple genes and targets, review annotations, and save or export finished results.</p>
                 <div class="tag-row">
-                  <span>Multiplex Analysis</span>
-                  <span>Competitive Mapping</span>
+                  <span>FASTQ Analysis</span>
+                  <span>Multi-reference</span>
+                  <span>Benchmarking</span>
                   <span>Result Viewer</span>
                 </div>
               </div>
@@ -45,8 +46,8 @@ import { AuthService } from '../../services/auth.service';
                 <h3>PCR Setup Calculator</h3>
                 <p>Calculate mastermix volumes, dilutions, and primer concentrations with customizable presets.</p>
                 <div class="tag-row">
-                  <span>Personalized</span>
-                  <span>Sharing</span>
+                  <span>Presets</span>
+                  <span>Team Sharing</span>
                 </div>
               </div>
             </a>
@@ -59,14 +60,67 @@ import { AuthService } from '../../services/auth.service';
           </div>
         </section>
 
-        <!-- 3. Collaboration & Labs Grid -->
+        <!-- 3. Lab Workflow Grid -->
+        <section class="grid-section">
+          <p class="sec-label">LAB WORKFLOW</p>
+          <div class="cards-grid">
+            <a routerLink="/lab/notes" class="tool-card">
+              <div class="card-body">
+                <h3>General Notes</h3>
+                <p>Keep free-form lab notes, observations, meeting records, and daily research updates in one place.</p>
+                <div class="tag-row">
+                  <span>Notes</span>
+                  <span>Daily Records</span>
+                </div>
+              </div>
+            </a>
+            <a routerLink="/lab/experiments" class="tool-card">
+              <div class="card-body">
+                <h3>My Experiments</h3>
+                <p>Track active experiments step by step, attach files, and archive completed work with a success rating.</p>
+                <div class="tag-row">
+                  <span>Experiment Steps</span>
+                  <span>Attachments</span>
+                </div>
+              </div>
+            </a>
+            <a routerLink="/lab/archive" class="tool-card">
+              <div class="card-body">
+                <h3>Experiment Archive</h3>
+                <p>Review completed experiments with filters, ratings, comments, linked labs, and preserved workflow context.</p>
+                <div class="tag-row">
+                  <span>Completed Work</span>
+                  <span>Searchable</span>
+                </div>
+              </div>
+            </a>
+            <a routerLink="/booking" class="tool-card">
+              <div class="card-body">
+                <h3>Facility Booking</h3>
+                <p>Reserve shared spaces and growth facilities, check availability, and manage booking timelines.</p>
+                <div class="tag-row">
+                  <span>Availability</span>
+                  <span>Facility Use</span>
+                </div>
+              </div>
+            </a>
+            <div class="tool-card placeholder">
+              <div class="card-body">
+                <h3>More Coming Soon</h3>
+                <p>Additional workflow helpers will be added as lab routines become ready for shared use.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Collaboration & Labs Grid -->
         <section class="grid-section">
           <p class="sec-label">COLLABORATION & LABS</p>
           <div class="cards-grid">
             <a routerLink="/labs/my" class="tool-card">
               <div class="card-body">
                 <h3>My Labs</h3>
-                <p>Access your research groups, manage members, and view shared datasets.</p>
+                <p>Access your research groups, manage members, and move into each lab's shared archive workspace.</p>
               </div>
             </a>
             <a routerLink="/labs/find" class="tool-card">
@@ -78,30 +132,56 @@ import { AuthService } from '../../services/auth.service';
             <a routerLink="/labs/register" class="tool-card">
               <div class="card-body">
                 <h3>Register Lab</h3>
-                <p>Create a new lab group to start sharing results and presets with your team.</p>
+                <p>Create a new lab group to start sharing records, files, results, and presets with your team.</p>
+              </div>
+            </a>
+            <a routerLink="/labs/my" class="tool-card">
+              <div class="card-body">
+                <h3>Lab Archives</h3>
+                <p>Each lab can maintain its own file archive, sample records, experiment notes, and linked attachments.</p>
+                <div class="tag-row">
+                  <span>Per-lab Files</span>
+                  <span>Samples</span>
+                  <span>Records</span>
+                </div>
               </div>
             </a>
           </div>
         </section>
 
-        <!-- 4. How CRISPR Tool Works -->
+        <!-- 5. How CRISPR Tool Works -->
         <section class="mechanism-container">
           <div class="mech-header">
             <div class="mech-title-wrap">
               <span class="m-badge">TECHNICAL CORE</span>
               <h2>How CRISPR Tool Works</h2>
-              <p class="m-intro">Most pipelines discard ambiguity. This pipeline models it.</p>
+              <p class="m-intro">The CRISPR workflow is the main analysis engine: it converts pooled sequencing reads into target-level editing summaries while keeping ambiguous reads visible.</p>
             </div>
           </div>
 
           <div class="dual-cards">
             <div class="d-card challenge">
               <span class="d-label">THE CHALLENGE</span>
-              <p>Traditional pipelines assume one reference per read. In pooled/multiplex experiments, highly similar targets cause unstable alignment and forced misassignment.</p>
+              <p>Pooled CRISPR experiments often include related references, repeated target neighborhoods, and multiple guide sites in the same run. A read can look plausible for more than one target, so forced single-reference assignment can inflate or distort editing estimates.</p>
             </div>
             <div class="d-card solution">
               <span class="d-label">OUR SOLUTION</span>
-              <p>Our engine performs Multi-Reference Competitive Classification. Every read is evaluated against all candidate targets in parallel, ensuring the most confident match is selected.</p>
+              <p>The tool evaluates reads against configured candidate windows, checks orientation and quality, separates confident assignments from ambiguous cases, then summarizes mutation classes only within the selected target context.</p>
+            </div>
+          </div>
+
+          <div class="crispr-feature-grid">
+            <div>
+              <span>Input</span>
+              <strong>FASTQ reads plus reference/target definitions</strong>
+            </div>
+            <div>
+              <span>Assignment</span>
+              <strong>Multi-gene, multi-target comparison with ambiguity handling</strong>
+            </div>
+            <div>
+              <span>Output</span>
+              <strong>Annotated read groups, editing metrics, saved results, and Excel export</strong>
             </div>
           </div>
 
@@ -109,30 +189,51 @@ import { AuthService } from '../../services/auth.service';
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">01</span>
-                <h3>k-mer Competitive Assignment</h3>
+                <h3>Input Model and References</h3>
               </div>
-              <p>Efficient pre-alignment classification using k-mer indexing. This enables scalable multiplex analysis across hundreds of competing reference sequences.</p>
+              <p>Users upload FASTQ reads and define genes, reference sequences, target names, and guide sequences. These inputs describe the candidate targets that can compete for each read.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">02</span>
-                <h3>Confidence Margin System</h3>
+                <h3>Target Window Construction</h3>
               </div>
-              <p>Prevents aggressive misclassification by identifying reads where competing targets are too similar. Only high-confidence assignments proceed to primary reporting.</p>
+              <p>For each target, the tool builds a comparison window around the guide/PAM context when available, or uses the submitted reference sequence directly when no guide window is defined.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">03</span>
-                <h3>Reliability: The Rescue Layer</h3>
+                <h3>Orientation and Quality Checks</h3>
               </div>
-              <p>Unresolved reads are moved to an Ambiguous Pool for secondary clustering. This preserves statistical transparency without compromising primary classification integrity.</p>
+              <p>Reads are evaluated in original and reverse-complement orientation. Candidate matches must pass usability checks before they can contribute to assignment or mutation analysis.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">04</span>
-                <h3>Final Mutation Interpretation</h3>
+                <h3>Competitive Similarity Scoring</h3>
               </div>
-              <p>Precise biological classification (In-frame vs Out-of-frame) performed after confident target assignment, ensuring reliable editing efficiency metrics.</p>
+              <p>Each usable read is compared against eligible target windows. The best candidate must be sufficiently separated from competing candidates before the read is assigned.</p>
+            </div>
+            <div class="step-card">
+              <div class="s-header">
+                <span class="s-num">05</span>
+                <h3>Ambiguous Read Handling</h3>
+              </div>
+              <p>Reads that pass basic checks but cannot be assigned cleanly are reported separately. This keeps the primary result conservative while still showing how much signal was excluded as ambiguous.</p>
+            </div>
+            <div class="step-card">
+              <div class="s-header">
+                <span class="s-num">06</span>
+                <h3>Mutation Grouping</h3>
+              </div>
+              <p>Assigned reads are grouped by observed sequence pattern within each target window. The dashboard keeps these groups inspectable so common edited and unedited read classes can be reviewed.</p>
+            </div>
+            <div class="step-card step-card-wide">
+              <div class="s-header">
+                <span class="s-num">07</span>
+                <h3>Editing Summary, Review, and Export</h3>
+              </div>
+              <p>Groups are summarized as unmodified, substitution, in-frame indel, or out-of-frame indel. Results can be inspected in the dashboard, reopened through the result viewer, saved to My Data, or exported to Excel.</p>
             </div>
           </div>
         </section>
@@ -201,9 +302,38 @@ import { AuthService } from '../../services/auth.service';
     .d-card.challenge p { color: #475569; }
     .d-card.solution p { color: #94a3b8; }
 
+    .crispr-feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .crispr-feature-grid div {
+      background: #f8fafc;
+      border: 1px solid #f1f5f9;
+      border-radius: 18px;
+      padding: 22px;
+    }
+    .crispr-feature-grid span {
+      color: #3b82f6;
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .crispr-feature-grid strong {
+      color: #1e293b;
+      display: block;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
     /* Uniform Steps Grid */
     .steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     .step-card { padding: 40px; border-radius: 28px; border: 1px solid #f1f5f9; background: #ffffff; }
+    .step-card-wide { grid-column: 1 / -1; }
     
     .s-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
     .s-num { font-size: 0.8rem; font-weight: 800; color: #3b82f6; background: #eff6ff; padding: 4px 12px; border-radius: 8px; }
@@ -216,8 +346,9 @@ import { AuthService } from '../../services/auth.service';
     .v-tag { font-family: monospace; color: #cbd5e1; margin-top: 8px; }
 
     @media (max-width: 950px) {
-      .cards-grid, .dual-cards, .steps-grid { grid-template-columns: 1fr; }
+      .cards-grid, .dual-cards, .steps-grid, .crispr-feature-grid { grid-template-columns: 1fr; }
       .mechanism-container { padding: 40px 24px; }
+      .step-card-wide { grid-column: auto; }
       h1 { font-size: 2.8rem; }
     }
 

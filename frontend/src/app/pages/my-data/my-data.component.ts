@@ -13,10 +13,6 @@ import { AuthService } from '../../services/auth.service';
   imports: [CommonModule, RouterLink, FormsModule],
   template: `
     <div class="my-data-container">
-      <div class="page-header">
-        <h1>Research Data Explorer</h1>
-        <p>Manage your CRISPR analysis results and collaborate with your lab teams.</p>
-      </div>
 
       <!-- Tab Navigation -->
       <div class="tabs-nav">

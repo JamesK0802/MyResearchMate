@@ -29,13 +29,18 @@ export const routes: Routes = [
       { 
         path: 'result-viewer', 
         loadComponent: () => import('./pages/result-viewer-page/result-viewer-page.component').then(m => m.ResultViewerPageComponent) 
+      },
+      {
+        path: 'my-data',
+        loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
+        canActivate: [authGuard]
       }
     ]
   },
   {
     path: 'my-data',
-    loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
-    canActivate: [authGuard]
+    redirectTo: 'crispr/my-data',
+    pathMatch: 'full'
   },
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },

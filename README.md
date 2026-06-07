@@ -197,11 +197,16 @@ cat mrm_backup.sql | docker exec -i mrm_db psql -U james
 
 ### v3.5.0
 - **Nicole Booking Gimmick Removal**: Completely cleaned up the codebase by removing the gimmick "Nicole Booking System" (`/booking/nicole` and `/api/nicole-gimmick`) while keeping the core ANU RSB Facility Booking system fully intact and operational.
+- **Facility Booking Mobile Layout**: Resolved the broken layout of the facility booking Yearly Overview on mobile by making the table horizontally scrollable, pinning the `SPOT` column sticky on the left with a solid background and subtle boundary shadow, and stacking the controls vertically.
 - **Lab Team Archive**: Added a lab-level archive with records, links, file attachments, discussion threads, resizable table columns, compact previews, a detail modal, and a Finder-style file explorer with a collapsible folder sidebar.
+- **File Explorer & Archive Enhancements**: Fixed upload failure issues, simplified action columns with clean SVG buttons, removed redundant search bars, and resolved tree node spacing in the folder explorer.
+- **Sidebar Drag Resizing**: Added dynamic drag resizing for the left sidebar explorer, allowing researchers to adjust side panel width seamlessly.
+- **Data & Path Persistence**: Linked backend `fs/move` events to automatically update references in all records and samples databases, and configured container data directories to write directly to host bind mounts for robust persistence.
 - **Parallel Workers Progress Overlay**: Engineered visual multi-thread progress bars inside the loading overlay on the CRISPR analysis page, displaying real-time processing statistics for each FASTQ worker process.
 - **Premium SVG Icon Overhaul**: Replaced outdated, low-fidelity browser-default emojis with beautifully crafted custom vector SVG icons across tab views (📋, 🗺️, 📆), outcome sharing modals, edit ledgers, and action buttons.
 - **Unified Results Toolbar**: Standardized and aligned margins, padding, heights, and border consistency for all action buttons (New Analysis, Save to My Data, Export Excel) inside the result viewer.
 - **Dashboard Stat Widgets**: Restructured the monthly booking calendar overview with sleek, responsive dashboard stat indicators (Total, Booked, Available) utilizing custom themed palettes and matching SVGs.
+
 
 ### v3.4.0
 - **X-Padding Architecture**: Redesigned the CRISPR read classification and analysis pipeline. Terminal unobserved sequences (due to short reads) are now explicitly padded with `X` and treated as unobserved rather than being erroneously classified as biological deletions or triggering false-positive reference restorations.

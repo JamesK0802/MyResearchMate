@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef, NgZone, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, ChangeDetectorRef, NgZone, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -18,9 +18,9 @@ import { groupKey } from '../../models/curation.model';
 })
 export class ResultDashboardComponent implements OnInit, OnDestroy {
   isSaving = false;
-  showDetailedStats = false;
-  showCharts = false;
-  isMobile = false;
+  mobileActionsOpen = false;
+  mobileGeneInfoOpen = false;
+  mobileChartsOpen = false;
 
   constructor(
     public state: AppStateService,
@@ -61,21 +61,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  @HostListener('window:resize', ['$event'])
-  onResize(event: any) {
-    this.checkScreenSize();
-  }
-
-  checkScreenSize() {
-    this.isMobile = window.innerWidth <= 768;
-    if (!this.isMobile) {
-      this.showDetailedStats = true;
-      this.showCharts = true;
-    }
-  }
-
   ngOnInit() {
-    this.checkScreenSize();
     this.state.resultsUpdated$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.refreshDashboard();
     });
@@ -106,21 +92,38 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     this.refreshDashboard();
   }
 
-
-
-  onScopeChange(event: Event) {
-    const selectElement = event.target as HTMLSelectElement;
-    const index = parseInt(selectElement.value, 10);
-    this.selectScope(index);
+  onMobileScopeChange(event: Event) {
+    const value = Number((event.target as HTMLSelectElement).value);
+    this.selectScope(value);
   }
 
-  toggleCharts() {
-    this.showCharts = !this.showCharts;
-    this.cdr.detectChanges();
-    if (this.showCharts) {
-      setTimeout(() => {
-        this.updateChartsForSelected();
-      }, 50);
+  runMobileResultAction(action: string) {
+    this.mobileActionsOpen = false;
+    switch (action) {
+      case 'curate':
+        this.enterCuratedView();
+        break;
+      case 'original':
+        this.exitCuratedView();
+        break;
+      case 'new-analysis':
+        this.state.newAnalysis();
+        break;
+      case 'new-view':
+        this.state.newViewer();
+        break;
+      case 'save':
+        void this.saveResult();
+        break;
+      case 'save-curated':
+        void this.saveCuratedView();
+        break;
+      case 'export':
+        this.state.exportToExcel();
+        break;
+      case 'export-curated':
+        this.state.exportCuratedToExcel();
+        break;
     }
   }
 
@@ -189,8 +192,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     const container = document.querySelector('.unified-anno-container');
     if (!container || !this.state.selectedTarget) return;
     const cutIdx = this.state.selectedTarget.cut_site_index || 0;
-    const stickyLeftWidth = this.isMobile ? 0 : 150;
-    const baseWidth = this.isMobile ? 10 : 13;
+    const stickyLeftWidth = 150;
+    const baseWidth = 13;
     const padding = 15;
     const xPos = stickyLeftWidth + (cutIdx * baseWidth) + padding;
     const viewportWidth = container.clientWidth;

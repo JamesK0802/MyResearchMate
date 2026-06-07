@@ -9,16 +9,16 @@
   <!-- View Mode Tabs -->
   <div class="view-mode-tabs">
     <button class="app-btn" [class.app-btn-primary]="viewMode === 'card'" [class.app-btn-outline]="viewMode !== 'card'" (click)="setViewMode('card')">Records</button>
-    <button class="app-btn" [class.app-btn-primary]="viewMode === 'table'" [class.app-btn-outline]="viewMode !== 'table'" (click)="setViewMode('table')">Table</button>
+    <button class="app-btn" [class.app-btn-primary]="viewMode === 'table'" [class.app-btn-outline]="viewMode !== 'table'" (click)="setViewMode('table')">Sample Table</button>
     <button class="app-btn" [class.app-btn-primary]="viewMode === 'explorer'" [class.app-btn-outline]="viewMode !== 'explorer'" (click)="setViewMode('explorer')">File Explorer</button>
   </div>
 
   <!-- Top Controls -->
-  <div class="section-card controls-bar" *ngIf="viewMode !== 'explorer'">
+  <div class="section-card controls-bar" *ngIf="viewMode === 'card'">
     <div class="controls-left">
       <div class="app-search-bar">
         <span class="app-search-bar__icon">⌕</span>
-        <input type="text" [(ngModel)]="searchQuery" (input)="filterRecords()" placeholder="Search by title, summary, or description...">
+        <input type="text" [(ngModel)]="searchQuery" (input)="filterRecords()" placeholder="Search by title or description...">
       </div>
     </div>
     <button class="app-btn app-btn-primary" (click)="openNewRecordModal()">+ New Record</button>
@@ -33,7 +33,7 @@
             <span class="record-title" [title]="record.title">{{ record.title }}</span>
             <span class="record-date">{{ record.created_by }} · {{ record.created_at | date:'mediumDate' }}</span>
           </div>
-          <span class="record-summary" *ngIf="record.summary" [title]="record.summary">{{ record.summary }}</span>
+
           <p class="record-desc-preview" *ngIf="record.description" [title]="record.description">{{ record.description }}</p>
           
           <!-- Clickable Hyperlinks -->
@@ -75,65 +75,269 @@
     <div class="empty-state" *ngIf="filteredRecords.length === 0 && searchQuery"><p>No matching records.</p></div>
   </div>
 
-  <!-- ═══ TABLE VIEW ═══ -->
-  <div class="app-table-wrap" *ngIf="viewMode === 'table'">
-    <table class="app-table archive-table">
-      <colgroup>
-        <col class="archive-col-title" [style.width.%]="archiveColumnWidths[0]">
-        <col class="archive-col-summary" [style.width.%]="archiveColumnWidths[1]">
-        <col class="archive-col-links" [style.width.%]="archiveColumnWidths[2]">
-        <col class="archive-col-files" [style.width.%]="archiveColumnWidths[3]">
-        <col class="archive-col-meta" [style.width.%]="archiveColumnWidths[4]">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>
-            <span class="table-header-label">Title</span>
-            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(0, $event)"></span>
-          </th>
-          <th>
-            <span class="table-header-label">Summary</span>
-            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(1, $event)"></span>
-          </th>
-          <th>
-            <span class="table-header-label">Links</span>
-            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(2, $event)"></span>
-          </th>
-          <th>
-            <span class="table-header-label">Files</span>
-            <span class="table-resize-handle" (mousedown)="startArchiveColumnResize(3, $event)"></span>
-          </th>
-          <th><span class="table-header-label">Author/Date</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let record of filteredRecords" (click)="viewDetails(record)" style="cursor:pointer;">
-          <td><span class="table-title-text" [title]="record.title">{{ record.title }}</span></td>
-          <td><span class="table-summary-text" [title]="record.summary">{{ record.summary }}</span></td>
-          <td (click)="$event.stopPropagation()">
-            <div class="table-stack">
-              <a *ngFor="let link of (record.links || []).slice(0, (record.links?.length || 0) > 3 ? 2 : 3)" [href]="formatExternalLink(link)" target="_blank" class="table-hyperlink" [title]="link">
-                {{ getDisplayText(link, 64) }}
-              </a>
-              <span class="table-more-text" *ngIf="(record.links?.length || 0) > 3">+{{ (record.links?.length || 0) - 2 }} more</span>
-            </div>
-          </td>
-          <td (click)="$event.stopPropagation()">
-            <div class="table-stack">
-              <a *ngFor="let file of (record.files || []).slice(0, (record.files?.length || 0) > 3 ? 2 : 3)" [href]="getDownloadUrl(file.path)" target="_blank" class="table-filelink" [title]="file.filename">
-                <span class="file-icon-text">📄</span> {{ getDisplayText(file.filename, 38) }}
-              </a>
-              <span class="table-more-text" *ngIf="(record.files?.length || 0) > 3">+{{ (record.files?.length || 0) - 2 }} more</span>
-            </div>
-          </td>
-          <td class="table-meta-cell">
-            <div class="table-author" [title]="record.created_by">{{ record.created_by }}</div>
-            <div class="table-date">{{ record.created_at | date:'yyyy-MM-dd HH:mm' }}</div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="empty-state" *ngIf="filteredRecords.length === 0" style="border:none;border-radius:0;"><p>No records found.</p></div>
+  <!-- ═══ SAMPLE TABLE VIEW (Excel-like spreadsheet) ═══ -->
+  <div class="sample-table-view app-table-wrap" *ngIf="viewMode === 'table'">
+    <!-- Spreadsheet Toolbar -->
+    <div class="spreadsheet-toolbar">
+      <div class="toolbar-left">
+        <button class="app-btn app-btn-outline app-btn-sm" (click)="addSampleRow()">+ Add Sample</button>
+        
+        <!-- Desktop buttons: hidden on mobile -->
+        <div class="toolbar-actions-desktop" style="display:flex; gap:8px; align-items:center;">
+          <button class="app-btn app-btn-outline app-btn-sm" (click)="downloadExcelTemplate()">📥 Template</button>
+          <label class="app-btn app-btn-outline app-btn-sm" style="cursor:pointer; margin-bottom:0; display:inline-flex; align-items:center;">
+            📤 Import Excel
+            <input type="file" accept=".xlsx,.xls" style="display:none" (change)="importExcelFile($event)">
+          </label>
+          <button class="app-btn app-btn-outline app-btn-sm" (click)="exportCurrentTable()">📥 Export Table</button>
+          <button class="app-btn app-btn-outline app-btn-sm" [class.app-btn-primary]="showFilterRow" (click)="showFilterRow = !showFilterRow">🔍 Filters</button>
+        </div>
+
+        <!-- Mobile vertical ellipsis (3-dot) dropdown: hidden on desktop -->
+        <div class="toolbar-actions-mobile" (click)="$event.stopPropagation()">
+          <button class="app-btn app-btn-outline app-btn-sm dropdown-toggle" (click)="showSpreadsheetDropdown = !showSpreadsheetDropdown">
+            ⋮
+          </button>
+          <div class="dropdown-menu-container" *ngIf="showSpreadsheetDropdown">
+            <button class="dropdown-item" (click)="downloadExcelTemplate(); showSpreadsheetDropdown = false;">📥 Download Template</button>
+            <label class="dropdown-item" style="cursor:pointer; margin-bottom:0; display:flex; align-items:center; width:100%;">
+              📤 Import Excel
+              <input type="file" accept=".xlsx,.xls" style="display:none" (change)="importExcelFile($event); showSpreadsheetDropdown = false;">
+            </label>
+            <button class="dropdown-item" (click)="exportCurrentTable(); showSpreadsheetDropdown = false;">📥 Export Table</button>
+            <button class="dropdown-item" (click)="showFilterRow = !showFilterRow; showSpreadsheetDropdown = false;" [class.active]="showFilterRow">🔍 Filters</button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <!-- Auto-save status -->
+        <div *ngIf="syncState === 'saved'" class="status-indicator-wrapper">
+          <span class="status-dot dot-saved"></span>
+          <span class="status-text text-saved">Saved to Cloud</span>
+        </div>
+        <div *ngIf="syncState === 'saving'" class="status-indicator-wrapper">
+          <span class="spinner-small"></span>
+          <span class="status-text text-saving">Saving changes...</span>
+        </div>
+        <div *ngIf="syncState === 'error'" class="status-indicator-wrapper">
+          <span class="status-dot dot-error"></span>
+          <span class="status-text text-error">Sync error</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Excel-like grid -->
+    <div class="spreadsheet-grid-container">
+      <table class="spreadsheet-table">
+        <colgroup>
+          <col *ngFor="let w of colWidths; let i = index" [style.width.px]="w">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="col-drag"></th>
+            <th class="col-num">#</th>
+            <th class="col-location" (click)="toggleSort('storage_location')" style="cursor: pointer;">
+              Storage Location <span class="sort-icon">{{ getSortIcon('storage_location') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(2, $event)"></div>
+            </th>
+            <th class="col-barcode" (click)="toggleSort('barcode')" style="cursor: pointer;">
+              Barcode <span class="sort-icon">{{ getSortIcon('barcode') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(3, $event)"></div>
+            </th>
+            <th class="col-name" (click)="toggleSort('sample_name')" style="cursor: pointer;">
+              Sample Name <span class="sort-icon">{{ getSortIcon('sample_name') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(4, $event)"></div>
+            </th>
+            <th class="col-person" (click)="toggleSort('person')" style="cursor: pointer;">
+              Person <span class="sort-icon">{{ getSortIcon('person') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(5, $event)"></div>
+            </th>
+            <th class="col-project" (click)="toggleSort('project')" style="cursor: pointer;">
+              Project <span class="sort-icon">{{ getSortIcon('project') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(6, $event)"></div>
+            </th>
+            <th class="col-lab" (click)="toggleSort('lab')" style="cursor: pointer;">
+              Lab <span class="sort-icon">{{ getSortIcon('lab') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(7, $event)"></div>
+            </th>
+            <th class="col-files" (click)="toggleSort('files')" style="cursor: pointer;">
+              Files <span class="sort-icon">{{ getSortIcon('files') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(8, $event)"></div>
+            </th>
+            <th class="col-links" (click)="toggleSort('links')" style="cursor: pointer;">
+              Links <span class="sort-icon">{{ getSortIcon('links') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(9, $event)"></div>
+            </th>
+            <th class="col-record" (click)="toggleSort('record_link')" style="cursor: pointer;">
+              Record Link <span class="sort-icon">{{ getSortIcon('record_link') }}</span>
+              <div class="table-resize-handle" (mousedown)="startResize(10, $event)"></div>
+            </th>
+            <th class="col-actions"></th>
+          </tr>
+          
+          <tr *ngIf="showFilterRow" class="filter-inputs-row">
+            <th class="col-drag"></th>
+            <th class="col-num"></th>
+            <th class="col-location">
+              <input type="text" [(ngModel)]="filterQueries['storage_location']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-barcode">
+              <input type="text" [(ngModel)]="filterQueries['barcode']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-name">
+              <input type="text" [(ngModel)]="filterQueries['sample_name']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-person">
+              <input type="text" [(ngModel)]="filterQueries['person']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-project">
+              <input type="text" [(ngModel)]="filterQueries['project']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-lab">
+              <input type="text" [(ngModel)]="filterQueries['lab']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-files">
+              <input type="text" [(ngModel)]="filterQueries['files']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-links">
+              <input type="text" [(ngModel)]="filterQueries['links']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-record">
+              <input type="text" [(ngModel)]="filterQueries['record_link']" class="filter-grid-input" placeholder="Filter..." (click)="$event.stopPropagation()">
+            </th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sample of filteredAndSortedSamples; let idx = index" 
+              [draggable]="rowDraggableIndex === samples.indexOf(sample)"
+              (dragstart)="onSampleRowDragStart($event, samples.indexOf(sample))"
+              (dragover)="onSampleRowDragOver($event, samples.indexOf(sample))"
+              (dragleave)="onSampleRowDragLeave($event, samples.indexOf(sample))"
+              (drop)="onSampleRowDrop($event, samples.indexOf(sample))"
+              (dragend)="onSampleRowDragEnd()"
+              [class.row-dragging]="draggedRowIndex === samples.indexOf(sample)"
+              [class.row-drag-over-top]="dragOverRowIndex === samples.indexOf(sample) && draggedRowIndex !== null && draggedRowIndex > samples.indexOf(sample)"
+              [class.row-drag-over-bottom]="dragOverRowIndex === samples.indexOf(sample) && draggedRowIndex !== null && draggedRowIndex < samples.indexOf(sample)">
+            
+            <!-- Drag Handle -->
+            <td class="col-drag cell-readonly">
+              <span class="drag-handle" 
+                    *ngIf="!isTableFilteredOrSorted"
+                    (mousedown)="rowDraggableIndex = samples.indexOf(sample)" 
+                    (mouseup)="rowDraggableIndex = null" 
+                    (dragend)="rowDraggableIndex = null"
+                    title="Drag to reorder">⋮⋮</span>
+              <span class="drag-handle-disabled" 
+                    *ngIf="isTableFilteredOrSorted"
+                    title="Clear filters/sorting to drag rows" style="opacity: 0.35; cursor: not-allowed;">⋮⋮</span>
+            </td>
+
+            <!-- Row number -->
+            <td class="col-num cell-readonly">{{ samples.indexOf(sample) + 1 }}</td>
+            
+            <!-- Storage Location (calculated, read-only) -->
+            <td class="col-location cell-readonly">
+              <input type="text" [value]="sample.storage_location" readonly placeholder="Auto-calculated" class="grid-input" tabindex="-1">
+            </td>
+            
+            <!-- Barcode (editable) -->
+            <td class="col-barcode">
+              <input type="text" [(ngModel)]="sample.barcode" (ngModelChange)="onSamplesChange()" placeholder="e.g. BC001" class="grid-input">
+            </td>
+            
+            <!-- Sample Name (editable) -->
+            <td class="col-name">
+              <input type="text" [(ngModel)]="sample.sample_name" (ngModelChange)="onSamplesChange()" placeholder="Sample name" class="grid-input">
+            </td>
+            
+            <!-- Person (editable) -->
+            <td class="col-person">
+              <input type="text" [(ngModel)]="sample.person" (ngModelChange)="onSamplesChange()" placeholder="Researcher" class="grid-input">
+            </td>
+            
+            <!-- Project (editable) -->
+            <td class="col-project">
+              <input type="text" [(ngModel)]="sample.project" (ngModelChange)="onSamplesChange()" placeholder="Project name" class="grid-input">
+            </td>
+            
+            <!-- Lab (editable) -->
+            <td class="col-lab">
+              <input type="text" [(ngModel)]="sample.lab" (ngModelChange)="onSamplesChange()" placeholder="Lab group" class="grid-input">
+            </td>
+            
+            <!-- Files -->
+            <td class="col-files">
+              <div class="cell-attachments-inline">
+                <div class="inline-chips-container flex-col">
+                  <!-- Attached Files list directly as clickable text -->
+                  <div *ngFor="let file of (sample.files || []).slice(0, 2); let fIdx = index" class="sample-file-text-row">
+                    <a [href]="getDownloadUrl(file.path)" target="_blank" class="inline-file-link" [title]="file.filename">
+                      📄 {{ getDisplayText(file.filename, 22) }}
+                    </a>
+                    <button type="button" class="chip-delete-x" (click)="removeSampleFileFromRow(sample, fIdx)">✕</button>
+                  </div>
+                  <!-- Plus button and more indicator inline -->
+                  <div class="inline-attachments-bottom-row">
+                    <button type="button" class="add-attachment-plus" (click)="openSampleFilesManager(sample)" title="Add Files">+</button>
+                    <span *ngIf="(sample.files?.length || 0) > 2" class="more-attachments-text" (click)="openSampleFilesManager(sample)">
+                      +{{ (sample.files?.length || 0) - 2 }} more
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Links -->
+            <td class="col-links">
+              <div class="cell-attachments-inline">
+                <div class="inline-chips-container flex-col">
+                  <!-- Attached Links list directly as clickable text -->
+                  <div *ngFor="let link of (sample.links || []).slice(0, 2); let lIdx = index" class="sample-link-text-row">
+                    <a [href]="formatExternalLink(link)" target="_blank" class="inline-url-link" [title]="link">
+                      🔗 {{ getDisplayText(link, 22) }}
+                    </a>
+                    <button type="button" class="chip-delete-x" (click)="removeLinkFromRow(sample, lIdx)">✕</button>
+                  </div>
+                  <!-- Plus button and more indicator inline -->
+                  <div class="inline-attachments-bottom-row">
+                    <button type="button" class="add-attachment-plus" (click)="openAddLinkModal(sample)" title="Add Link">+</button>
+                    <span *ngIf="(sample.links?.length || 0) > 2" class="more-attachments-text" (click)="openAddLinkModal(sample)">
+                      +{{ (sample.links?.length || 0) - 2 }} more
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Record Link (moved to end) -->
+            <td class="col-record">
+              <div class="cell-record-link-display">
+                <div *ngIf="sample.linked_record_id" class="linked-record-chip">
+                  <a (click)="openLinkedRecord(sample.linked_record_id)" class="record-chip-link" [title]="getRecordTitle(sample.linked_record_id)">
+                    {{ getDisplayText(getRecordTitle(sample.linked_record_id), 16) }}
+                  </a>
+                  <button type="button" class="record-action-icon" (click)="openRecordLinkModal(sample)" title="Change Record">🔄</button>
+                  <button type="button" class="record-action-icon danger" (click)="unlinkRecordFromSample(sample)" title="Unlink Record">✕</button>
+                </div>
+                <button *ngIf="!sample.linked_record_id" type="button" class="app-btn app-btn-outline app-btn-xs" (click)="openRecordLinkModal(sample)">
+                  + Link
+                </button>
+              </div>
+            </td>
+            
+            <!-- Delete Row -->
+            <td class="col-actions">
+              <button class="delete-row-btn" (click)="deleteSampleRow(samples.indexOf(sample))" title="Delete Row">✕</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="empty-state" *ngIf="samples.length === 0" style="border:none;">
+        <h3>No samples in table</h3>
+        <p>Click "+ Add Sample" or paste from Excel to populate this sheet.</p>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ FILE EXPLORER VIEW (Finder-style) ═══ -->
@@ -186,9 +390,14 @@
     </div>
 
     <!-- Finder Explorer Body (Split Layout) -->
-    <div class="finder-body" [class.sidebar-hidden]="explorerSidebarCollapsed">
+    <div class="finder-body" [class.sidebar-hidden]="explorerSidebarCollapsed" [class.is-resizing]="resizingSidebar">
       <!-- Left Sidebar Tree View -->
-      <aside class="finder-sidebar" (click)="$event.stopPropagation()">
+      <aside class="finder-sidebar" 
+             [style.width.px]="sidebarWidth"
+             (click)="$event.stopPropagation()"
+             (dragover)="onSidebarTreeDragOver($event)"
+             (dragleave)="onSidebarTreeDragLeave($event)"
+             (drop)="onDropToSidebarTree($event)">
         <div class="sidebar-header"
              (dragover)="onSidebarHeaderDragOver($event)"
              (dragleave)="onSidebarHeaderDragLeave($event)"
@@ -204,6 +413,13 @@
           </div>
         </div>
       </aside>
+
+      <!-- Sidebar Resize Handle -->
+      <div class="sidebar-resizer" 
+           *ngIf="!explorerSidebarCollapsed"
+           [class.resizing]="resizingSidebar"
+           (mousedown)="startSidebarResize($event)">
+      </div>
 
       <!-- Right Main File List -->
       <div class="finder-main-list">
@@ -249,8 +465,19 @@
           <span class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</span>
           <span class="col-modified">{{ file.modified_at | date:'MMM d, yyyy' }}</span>
           <span class="col-actions">
-            <a *ngIf="!file.is_dir" [href]="getDownloadUrl(file.rel_path)" target="_blank" class="app-btn app-btn-outline app-btn-sm finder-action-btn">Download</a>
-            <button *ngIf="!file.is_linked" class="app-btn app-btn-danger app-btn-sm finder-action-btn" (click)="deleteFsItem(file)">Delete</button>
+            <a *ngIf="!file.is_dir" [href]="getDownloadUrl(file.rel_path)" target="_blank" class="finder-action-icon-btn download-btn" title="Download file">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </a>
+            <button *ngIf="!file.is_linked" class="finder-action-icon-btn delete-btn" (click)="deleteFsItem(file)" title="Delete file">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
             <span *ngIf="file.is_linked && !file.is_dir" class="linked-lock" title="Linked to a record — cannot delete">🔒</span>
           </span>
         </div>
@@ -286,10 +513,6 @@
       </div>
       <div class="app-modal-body detail-layout">
         <div class="detail-left">
-          <div class="detail-block">
-            <label class="app-label">Summary</label>
-            <p class="detail-text detail-summary">{{ selectedRecord.summary }}</p>
-          </div>
           <div class="detail-block">
             <label class="app-label">Description</label>
             <div class="description-box">{{ selectedRecord.description || 'No description provided.' }}</div>
@@ -362,10 +585,7 @@
           <label class="app-label">Title</label>
           <input class="app-input" type="text" [(ngModel)]="newRecord.title" placeholder="e.g. Weekly Meeting Notes">
         </div>
-        <div class="app-form-group">
-          <label class="app-label">Short Summary</label>
-          <input class="app-input" type="text" [(ngModel)]="newRecord.summary" placeholder="Brief summary...">
-        </div>
+
         <div class="app-form-group">
           <label class="app-label">Description</label>
           <textarea class="app-textarea" [(ngModel)]="newRecord.description" rows="4" placeholder="Full details..."></textarea>
@@ -557,10 +777,7 @@
           <label class="app-label">Title</label>
           <input class="app-input" type="text" [(ngModel)]="editingRecordData.title" placeholder="e.g. Weekly Meeting Notes">
         </div>
-        <div class="app-form-group">
-          <label class="app-label">Short Summary (Optional)</label>
-          <input class="app-input" type="text" [(ngModel)]="editingRecordData.summary" placeholder="Brief summary...">
-        </div>
+
         <div class="app-form-group">
           <label class="app-label">Description (Optional)</label>
           <textarea class="app-textarea" [(ngModel)]="editingRecordData.description" rows="4" placeholder="Full details..."></textarea>
@@ -628,8 +845,9 @@
         {{ node.isExpanded ? '▼' : '▶' }}
       </span>
       <span class="tree-caret-empty" *ngIf="!node.isDir"></span>
-      <span class="tree-icon">{{ getTreeNodeIcon(node) }}</span>
+      <span class="tree-icon" *ngIf="node.isDir">{{ getTreeNodeIcon(node) }}</span>
       <span class="tree-name" [title]="node.name">{{ node.name }}</span>
+      <span class="linked-badge-mini" *ngIf="node.isLinked">LINKED</span>
     </div>
     <div *ngIf="node.isDir && node.isExpanded && node.children">
       <ng-container *ngFor="let child of node.children">
@@ -637,6 +855,157 @@
       </ng-container>
     </div>
   </ng-template>
+  <!-- ═══ BULK PASTE MODAL ═══ -->
+  <div class="app-modal-overlay" *ngIf="showBulkPasteModal" (click)="closeBulkPasteModal()">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:560px;">
+      <div class="app-modal-header">
+        <h2>Bulk Import from Excel</h2>
+        <button class="app-modal-close" (click)="closeBulkPasteModal()">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:12px;">
+          Copy rows from your spreadsheet (Columns in order: Barcode, Sample Name, Person, Project, Lab) and paste them here:
+        </p>
+        <textarea class="app-textarea bulk-paste-textarea" [(ngModel)]="bulkPasteText" rows="8" placeholder="BC001&#9;My Sample&#9;Alice&#9;Project A&#9;Group X&#10;BC002&#9;Another Sample&#9;Bob&#9;Project B&#9;Group Y" style="font-family:monospace; white-space:pre;"></textarea>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="closeBulkPasteModal()">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="importBulkPaste()" [disabled]="!bulkPasteText.trim()">Import Rows</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SAMPLE FILES MODAL ═══ -->
+  <div class="app-modal-overlay nested-modal-overlay" *ngIf="showSampleFilesModal" (click)="closeSampleFilesManager()">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:500px;">
+      <div class="app-modal-header">
+        <h2>Manage Files: {{ selectedSampleForAttachments?.sample_name || 'Selected Sample' }}</h2>
+        <button class="app-modal-close" (click)="closeSampleFilesManager()">✕</button>
+      </div>
+      <div class="app-modal-body" *ngIf="selectedSampleForAttachments">
+        <!-- Files section -->
+        <div class="app-form-group">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="app-label" style="margin-bottom:0;">Upload New File</label>
+            <button class="app-btn app-btn-outline app-btn-sm" style="font-size:var(--text-xs); padding:4px 10px;" (click)="openLinkExistingForSample(selectedSampleForAttachments)">+ Link Existing</button>
+          </div>
+          <label class="file-drop-zone">
+            <input type="file" style="display:none" (change)="uploadSampleFile($event)">
+            <span>{{ isFsLoading ? 'Uploading...' : 'Click to select a file' }}</span>
+          </label>
+          
+          <div class="attached-files-sub-title" style="margin-top:16px; font-weight:var(--fw-bold); font-size:var(--text-sm); margin-bottom:8px; color:var(--color-text-secondary);">Attached Files:</div>
+          <div class="pending-files-list" *ngIf="selectedSampleForAttachments.files?.length">
+            <div *ngFor="let f of selectedSampleForAttachments.files; let i = index" class="pending-file" style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--color-border-subtle)">
+              <span class="pending-file-name" [title]="f.filename" style="font-size:var(--text-sm);">📄 {{ f.filename }}</span>
+              <button class="chip-remove" (click)="removeSampleFileFromRow(selectedSampleForAttachments, i)">✕</button>
+            </div>
+          </div>
+          <p style="font-size:var(--text-xs);color:var(--color-text-tertiary);margin-top:4px;" *ngIf="!selectedSampleForAttachments.files?.length">No files uploaded yet.</p>
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-primary" (click)="closeSampleFilesManager()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ADD LINK MODAL ═══ -->
+  <div class="app-modal-overlay nested-modal-overlay" *ngIf="showAddLinkModal" (click)="closeAddLinkModal()">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:440px;">
+      <div class="app-modal-header">
+        <h2>Add Hyperlink URL</h2>
+        <button class="app-modal-close" (click)="closeAddLinkModal()">✕</button>
+      </div>
+      <div class="app-modal-body">
+        <div class="app-form-group">
+          <label class="app-label">URL Link</label>
+          <input class="app-input" type="text" [(ngModel)]="newLinkUrl" placeholder="https://..." (keyup.enter)="addLinkToSampleDirect()">
+        </div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="closeAddLinkModal()">Cancel</button>
+        <button class="app-btn app-btn-primary" (click)="addLinkToSampleDirect()" [disabled]="!newLinkUrl.trim()">Add Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RECORD LINK SELECTOR MODAL ═══ -->
+  <div class="app-modal-overlay nested-modal-overlay" *ngIf="showRecordLinkModal" (click)="closeRecordLinkModal()">
+    <div class="app-modal" (click)="$event.stopPropagation()" style="max-width:1000px; width: min(1000px, calc(100vw - 32px));">
+      <div class="app-modal-header">
+        <h2>Select Record to Link</h2>
+        <button class="app-modal-close" (click)="closeRecordLinkModal()">✕</button>
+      </div>
+      <div class="app-modal-body" style="max-height:65vh; display:flex; flex-direction:column; gap:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:var(--text-sm); color:var(--color-text-secondary); font-weight:var(--fw-bold);">
+            Browse Existing Records
+          </span>
+          <button type="button" class="app-btn app-btn-outline app-btn-xs" (click)="openCreateRecordForLink()">
+            + Create and Link New Record
+          </button>
+        </div>
+
+        <!-- Records List View -->
+        <div class="app-search-bar" style="margin-bottom:0; width:100%;">
+          <span class="app-search-bar__icon">⌕</span>
+          <input type="text" [(ngModel)]="recordLinkSearchQuery" (input)="filterModalRecords()" placeholder="Search records by title or description..." style="width:100%;">
+        </div>
+        
+        <!-- Table displaying records -->
+        <div class="app-table-wrap" style="flex:1; overflow-y:auto; border:1px solid var(--color-border-light); border-radius:8px;">
+          <table class="app-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Description</th>
+                  <th>Files</th>
+                  <th>Links</th>
+                  <th>Author</th>
+                  <th>Date</th>
+                  <th style="width:80px; text-align:center;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of filteredModalRecords">
+                  <td><strong style="color:var(--color-primary);">{{ r.title }}</strong></td>
+                  <td><span style="font-size:var(--text-sm); color:var(--color-text-secondary);">{{ r.description || r.summary || '(No description)' }}</span></td>
+                  <td>
+                    <div class="table-stack" *ngIf="r.files?.length">
+                      <a *ngFor="let file of r.files" [href]="getDownloadUrl(file.path)" target="_blank" class="table-filelink" [title]="file.filename" (click)="$event.stopPropagation()">
+                        📄 {{ getDisplayText(file.filename, 20) }}
+                      </a>
+                    </div>
+                    <span *ngIf="!r.files?.length" style="color:var(--color-text-tertiary); font-size:var(--text-xs);">—</span>
+                  </td>
+                  <td>
+                    <div class="table-stack" *ngIf="r.links?.length">
+                      <a *ngFor="let link of r.links" [href]="formatExternalLink(link)" target="_blank" class="table-hyperlink" [title]="link" (click)="$event.stopPropagation()">
+                        🔗 {{ getDisplayText(link, 20) }}
+                      </a>
+                    </div>
+                    <span *ngIf="!r.links?.length" style="color:var(--color-text-tertiary); font-size:var(--text-xs);">—</span>
+                  </td>
+                  <td><span style="font-size:var(--text-xs); color:var(--color-text-tertiary);">{{ r.created_by }}</span></td>
+                  <td><span style="font-size:var(--text-xs); color:var(--color-text-tertiary);">{{ r.created_at | date:'yyyy-MM-dd' }}</span></td>
+                  <td style="text-align:center;">
+                    <button type="button" class="app-btn app-btn-primary app-btn-xs" (click)="selectRecordForSample(r.id)">Select</button>
+                  </td>
+                </tr>
+                <tr *ngIf="filteredModalRecords.length === 0">
+                  <td colspan="7" style="text-align:center; color:var(--color-text-tertiary); padding:24px;">No records found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+      </div>
+      <div class="app-modal-footer">
+        <button class="app-btn app-btn-ghost" (click)="closeRecordLinkModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden PC Uploader Inputs -->
   <input type="file" id="pc-file-input" multiple style="display:none" (change)="onFilesSelectedForUpload($event)">
 </div>

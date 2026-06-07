@@ -22,7 +22,45 @@
     </div>
   </div>
 
-  <!-- ── Export / Action Bar ── -->
+  <!-- ── Mobile Top Bar (Select file + Menu button) ── -->
+  <div class="mobile-top-bar">
+    <div class="mobile-select-wrapper" *ngIf="state.isMultiReference && state.multiFileCount > 1">
+      <select class="mobile-scope-select" [value]="state.selectedScopeIndex" (change)="onMobileScopeChange($event)">
+        <option [value]="-1">All Merged</option>
+        <option *ngFor="let fr of state.allFileResults; let i = index" [value]="i">
+          {{ isFileExcluded(fr) ? '✕ ' : '' }}{{ state.getScopeName(i) }}
+        </option>
+      </select>
+
+      <!-- Exclude / Restore Button on Mobile for Curation -->
+      <button *ngIf="state.isCuratedView && state.selectedScopeIndex !== -1" 
+        type="button" 
+        class="mobile-file-exclude-btn"
+        [class.is-excluded]="isFileExcluded(state.allFileResults[state.selectedScopeIndex])"
+        (click)="toggleFile(state.allFileResults[state.selectedScopeIndex])"
+        [title]="isFileExcluded(state.allFileResults[state.selectedScopeIndex]) ? 'Restore file' : 'Exclude file'">
+        {{ isFileExcluded(state.allFileResults[state.selectedScopeIndex]) ? '↩' : '✕' }}
+      </button>
+    </div>
+
+    <div class="mobile-results-actions">
+      <button type="button" class="mobile-action-trigger" (click)="mobileActionsOpen = !mobileActionsOpen" aria-label="Result actions">
+        ⋮
+      </button>
+      <div class="mobile-action-menu" *ngIf="mobileActionsOpen">
+        <button *ngIf="!state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('curate')">Create curated view</button>
+        <button *ngIf="state.isCuratedView" type="button" (click)="runMobileResultAction('original')">Back to original</button>
+        <button type="button" (click)="runMobileResultAction(state.activeMode === 'viewer' ? 'new-view' : 'new-analysis')">
+          {{ state.activeMode === 'viewer' ? 'New view' : 'New analysis' }}
+        </button>
+        <button *ngIf="!state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('save')">Save to My Data</button>
+        <button *ngIf="state.isCuratedView" type="button" (click)="runMobileResultAction('save-curated')">Save curated view</button>
+        <button *ngIf="!state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('export')">Export Excel</button>
+        <button *ngIf="state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('export-curated')">Export curated</button>
+      </div>
+    </div>
+  </div>
+
   <div class="export-bar" style="justify-content: space-between;">
     <div class="left-actions" style="display: flex; gap: 12px;">
       <!-- Curate / Exit Button -->
@@ -39,36 +77,36 @@
     <div class="right-actions" style="display: flex; gap: 12px;">
       <button *ngIf="state.activeMode === 'analysis'" type="button" class="btn-new-analysis"
         (click)="state.newAnalysis()">
-        New<span class="desktop-only"> Analysis</span>
+        New Analysis
       </button>
       <button *ngIf="state.activeMode === 'viewer'" type="button" class="btn-new-analysis" (click)="state.newViewer()">
-        New<span class="desktop-only"> View</span>
+        New View
       </button>
 
       <!-- Save to My Data Button -->
       <button *ngIf="!state.isCuratedView" type="button" class="btn-save-data" 
         (click)="saveResult()"
         [disabled]="state.mergedGenes.length === 0 || isSaving">
-        {{ isSaving ? 'Saving...' : 'Save' }}<span class="desktop-only"> to My Data</span>
+        {{ isSaving ? 'Saving...' : 'Save to My Data' }}
       </button>
 
       <!-- Save Curated View Button -->
       <button *ngIf="state.isCuratedView" type="button" class="btn-save-curated"
         (click)="saveCuratedView()" [disabled]="isSaving">
-        {{ isSaving ? 'Saving...' : 'Save' }}<span class="desktop-only"> Curated View</span>
+        {{ isSaving ? 'Saving...' : 'Save Curated View' }}
       </button>
 
       <!-- Export Buttons -->
       <ng-container *ngIf="!state.isCuratedView">
         <button type="button" class="btn-export" (click)="state.exportToExcel()"
           [disabled]="state.mergedGenes.length === 0">
-          Export<span class="desktop-only"> Excel</span>
+          Export Excel
         </button>
       </ng-container>
       <ng-container *ngIf="state.isCuratedView">
         <button type="button" class="btn-export" (click)="state.exportCuratedToExcel()"
           [disabled]="state.mergedGenes.length === 0">
-          Export<span class="desktop-only"> Curated</span>
+          Export Curated
         </button>
       </ng-container>
     </div>
@@ -80,7 +118,7 @@
   </div>
 
   <!-- ── Result Scope Tabs (Merged vs Per-File) ── -->
-  <div class="result-scope-wrapper desktop-only" *ngIf="state.isMultiReference && state.multiFileCount > 1">
+  <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.multiFileCount > 1">
     <div class="scope-tabs">
       <button type="button" class="scope-tab-btn" [class.active]="state.selectedScopeIndex === -1"
         (click)="selectScope(-1)">
@@ -95,7 +133,7 @@
         <!-- Rename Icon -->
         <span class="edit-icon" style="margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; cursor: pointer; opacity: 0.5;" 
               (click)="state.editScopeName(i); $event.stopPropagation()" title="Rename File">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 100%; height: 100%;">
             <path d="M12 20h9"></path>
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
           </svg>
@@ -107,34 +145,6 @@
           {{ isFileExcluded(fr) ? '↩' : '✕' }}
         </span>
       </button>
-    </div>
-  </div>
-
-  <div class="result-scope-wrapper mobile-only" *ngIf="state.isMultiReference && state.multiFileCount > 1">
-    <div class="scope-dropdown-container">
-      <select class="scope-select" (change)="onScopeChange($event)">
-        <option value="-1" [selected]="state.selectedScopeIndex === -1">All Merged</option>
-        <option *ngFor="let fr of state.allFileResults; let i = index" [value]="i" [selected]="state.selectedScopeIndex === i">
-          {{ state.getScopeName(i) }} {{ isFileExcluded(fr) ? '(Excluded)' : '' }}
-        </option>
-      </select>
-      
-      <div class="scope-actions" *ngIf="state.selectedScopeIndex !== -1">
-        <!-- Rename Icon -->
-        <span class="edit-icon btn-action-icon" 
-              (click)="state.editScopeName(state.selectedScopeIndex); $event.stopPropagation()" title="Rename File">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-        </span>
-        
-        <!-- Exclude Toggle -->
-        <span *ngIf="state.isCuratedView" class="exclude-toggle btn-action-icon" [class.is-excluded]="isFileExcluded(state.allFileResults[state.selectedScopeIndex])"
-          (click)="toggleFile(state.allFileResults[state.selectedScopeIndex]); $event.stopPropagation()">
-          {{ isFileExcluded(state.allFileResults[state.selectedScopeIndex]) ? '↩' : '✕' }}<span class="desktop-only">{{ isFileExcluded(state.allFileResults[state.selectedScopeIndex]) ? ' Restore' : ' Exclude' }}</span>
-        </span>
-      </div>
     </div>
   </div>
 
@@ -179,13 +189,20 @@
       </button>
     </div>
 
-    <!-- Desktop: always visible gene-info-stripe -->
-    <div class="gene-info-stripe desktop-only" *ngIf="state.currentGene">
+    <button type="button" class="mobile-gene-info-toggle"
+      *ngIf="state.currentGene"
+      (click)="mobileGeneInfoOpen = !mobileGeneInfoOpen">
+      {{ mobileGeneInfoOpen ? 'Hide details' : 'Show details' }}
+    </button>
+
+    <div class="gene-info-stripe" *ngIf="state.currentGene" [class.mobile-open]="mobileGeneInfoOpen">
       <span class="gene-info-item"><strong>Gene:</strong> {{ state.currentGene.gene }}</span>
       <span class="gene-info-sep">|</span>
-      <span class="gene-info-item"><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number }}</span>
+      <span class="gene-info-item"><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number
+        }}</span>
       <span class="gene-info-sep">|</span>
-      <span class="gene-info-item ambiguous"><strong>Ambiguous Excluded:</strong> {{ state.ambiguousReadCount | number }}</span>
+      <span class="gene-info-item ambiguous"><strong>Ambiguous Excluded:</strong> {{ state.ambiguousReadCount | number
+        }}</span>
       <span class="gene-info-sep">|</span>
       <span class="gene-info-item"><strong>Raw Read:</strong> {{ state.totalRawReads | number }}</span>
       <span class="gene-info-sep">|</span>
@@ -194,39 +211,9 @@
       <span class="gene-info-item"><strong>Usable for Assignment:</strong> {{ state.totalAnchorMatched | number }}</span>
       <span class="gene-info-sep" *ngIf="state.multiFileCount > 1">|</span>
       <span class="gene-info-item" *ngIf="state.multiFileCount > 1">
-        <strong>Source:</strong> {{ state.selectedScopeIndex === -1 ? 'All Merged' : state.getScopeName(state.selectedScopeIndex) }}
+        <strong>Source:</strong> {{ state.selectedScopeIndex === -1 ? 'All Merged' :
+        state.getScopeName(state.selectedScopeIndex) }}
       </span>
-    </div>
-
-    <!-- Mobile: collapsible gene-info-stripe -->
-    <div class="mobile-only" style="width: 100%;">
-      <div class="gene-info-summary-row" *ngIf="state.currentGene" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 8px; margin-bottom: 10px; margin-top: 10px;">
-        <div style="font-weight: 600; font-size: 0.85rem; color: #1e293b;">
-          Gene: <span style="background:#e0f2fe; color:#0369a1; padding: 2px 6px; border-radius: 4px; font-weight:700;">{{ state.currentGene.gene }}</span> 
-          &middot; Assigned Reads: <strong>{{ state.currentGene.assigned_read_count | number }}</strong>
-        </div>
-        <button type="button" class="btn-action-icon" (click)="showDetailedStats = !showDetailedStats" style="font-size:0.75rem; padding: 4px 8px; min-height: 28px !important;">
-          {{ showDetailedStats ? 'Hide Stats ▲' : 'Show Stats ▼' }}
-        </button>
-      </div>
-
-      <div class="gene-info-stripe" *ngIf="state.currentGene && showDetailedStats" style="margin-top: 5px;">
-        <span class="gene-info-item"><strong>Gene:</strong> {{ state.currentGene.gene }}</span>
-        <span class="gene-info-sep">|</span>
-        <span class="gene-info-item"><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number }}</span>
-        <span class="gene-info-sep">|</span>
-        <span class="gene-info-item ambiguous"><strong>Ambiguous Excluded:</strong> {{ state.ambiguousReadCount | number }}</span>
-        <span class="gene-info-sep">|</span>
-        <span class="gene-info-item"><strong>Raw Read:</strong> {{ state.totalRawReads | number }}</span>
-        <span class="gene-info-sep">|</span>
-        <span class="gene-info-item"><strong>Phred Passed:</strong> {{ state.totalPhredPassed | number }}</span>
-        <span class="gene-info-sep">|</span>
-        <span class="gene-info-item"><strong>Usable for Assignment:</strong> {{ state.totalAnchorMatched | number }}</span>
-        <span class="gene-info-sep" *ngIf="state.multiFileCount > 1">|</span>
-        <span class="gene-info-item" *ngIf="state.multiFileCount > 1">
-          <strong>Source:</strong> {{ state.selectedScopeIndex === -1 ? 'All Merged' : state.getScopeName(state.selectedScopeIndex) }}
-        </span>
-      </div>
     </div>
   </div>
 
@@ -258,16 +245,12 @@
     </div>
   </div>
 
-  <!-- ── Charts Toggle (Mobile only) ── -->
-  <div class="section-toggle-row mobile-only" *ngIf="state.genes.length > 0" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; margin-bottom: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
-    <span style="font-size: 0.85rem; font-weight: 600; color: #475569;">Visual Mutation Charts</span>
-    <button type="button" class="btn-action-icon" (click)="toggleCharts()" style="font-size:0.75rem; padding: 4px 8px; min-height: 28px !important;">
-      {{ showCharts ? 'Hide Charts ▲' : 'Show Charts ▼' }}
-    </button>
-  </div>
-
-  <!-- ── Charts Section (desktop always visible, mobile toggleable) ── -->
-  <div class="charts-section" *ngIf="state.genes.length > 0 && (!isMobile || showCharts)" style="margin-bottom: 20px;">
+  <!-- ── Charts ── -->
+  <button type="button" class="mobile-chart-toggle" *ngIf="state.genes.length > 0"
+    (click)="mobileChartsOpen = !mobileChartsOpen">
+    {{ mobileChartsOpen ? 'Hide charts' : 'Show charts' }}
+  </button>
+  <div class="charts-section" *ngIf="state.genes.length > 0" [class.mobile-open]="mobileChartsOpen">
     <div class="chart-card pie"><canvas id="mutationPieChart"></canvas></div>
     <div class="chart-card"><canvas id="indelChart"></canvas></div>
     <div class="chart-card donut"><canvas id="donutChart"></canvas></div>
@@ -280,7 +263,7 @@
       <span *ngIf="state.isCuratedView" class="curated-table-badge">CURATED</span>
     </h3>
     <div class="table-responsive">
-      <table>
+      <table class="summary-table">
         <thead>
           <tr>
             <th *ngIf="state.isCuratedView" style="width: 44px;"></th>
@@ -317,6 +300,49 @@
           </tr>
         </tbody>
       </table>
+
+      <div class="mobile-summary-list">
+        <button type="button" class="mobile-summary-row" *ngFor="let row of summaryTableData; let i = index"
+          [class.row-selected]="i === state.selectedRowIndex"
+          (click)="selectRow(i)">
+          <div class="mobile-summary-grid">
+            <div class="summary-grid-item">
+              <span class="item-label">Gene</span>
+              <span class="item-value gene-name">{{ row.sample }}</span>
+            </div>
+            <div class="summary-grid-item">
+              <span class="item-label">Target</span>
+              <span class="item-value"><span class="badge mobile-summary-target">{{ row.target }}</span></span>
+            </div>
+            <div class="summary-grid-item">
+              <span class="item-label">Total Reads</span>
+              <span class="item-value">{{ row.total | number }}</span>
+            </div>
+          </div>
+          <div class="mobile-summary-metrics">
+            <div class="metric-sub-item">
+              <span class="metric-lbl">Aligned</span>
+              <span class="metric-val">{{ row.matched | number }}</span>
+            </div>
+            <div class="metric-sub-item">
+              <span class="metric-lbl">OOF</span>
+              <span class="metric-val highlight-oof">{{ row.outOfFrame | number:'1.1-2' }}%</span>
+            </div>
+            <div class="metric-sub-item">
+              <span class="metric-lbl">IF</span>
+              <span class="metric-val">{{ row.inFrame | number:'1.1-2' }}%</span>
+            </div>
+            <div class="metric-sub-item">
+              <span class="metric-lbl">Unmod</span>
+              <span class="metric-val">{{ row.noIndel | number:'1.1-2' }}%</span>
+            </div>
+            <div class="metric-sub-item">
+              <span class="metric-lbl">Sub</span>
+              <span class="metric-val">{{ row.substitution | number:'1.1-2' }}%</span>
+            </div>
+          </div>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -340,8 +366,8 @@
   </div>
 
   <div class="unified-anno-container">
-    <!-- Desktop layout: original side-by-side columns -->
-    <div class="unified-table desktop-only">
+    <div class="unified-table">
+
       <!-- Reference Row -->
       <div class="unified-row" style="border-bottom: 2px solid #f1f2f6;">
         <div class="sticky-left">REFERENCE 5'→3'</div>
@@ -411,54 +437,49 @@
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Mobile layout: vertically stacked -->
-    <div class="unified-table mobile-only">
-      <!-- Reference Row -->
-      <div class="unified-row" style="border-bottom: 2px solid #f1f2f6; flex-direction: column; align-items: flex-start;">
-        <div class="row-header-sticky">REFERENCE 5'→3'</div>
-        <div class="seq-center" style="padding: 24px 15px 5px 15px;">
-          <div class="grna-track"
-            *ngIf="state.selectedTarget.grna_start_index !== undefined && state.selectedTarget.grna_start_index !== -1">
-            <div style="position: absolute; display: flex; bottom: 2px; border-bottom: 2px solid #34495e;"
-              [style.left.px]="state.selectedTarget.grna_start_index * 10">
-              <span class="base-box"
-                *ngFor="let char of (state.selectedTarget.display_sgrna_seq || state.selectedTarget.sgrna_seq || '').split('')"
-                style="font-size: 9px; font-weight: 800; color: #34495e; font-family: monospace;">{{ char }}</span>
-            </div>
-          </div>
-          <div class="seq-mono ref-seq" style="display: flex; height: 16px;">
-            <span class="base-box text-box"
-              *ngFor="let char of (state.selectedTarget.ref_sequence || '').split(''); let i = index"
-              [style.color]="(state.selectedTarget.grna_start_index >= 0 && i >= state.selectedTarget.grna_start_index && i < state.selectedTarget.grna_start_index + (state.selectedTarget.sgrna_seq?.length || 0)) ? '#3498db' : '#333'"
-              [style.font-weight]="(state.selectedTarget.grna_start_index >= 0 && i >= state.selectedTarget.grna_start_index && i < state.selectedTarget.grna_start_index + (state.selectedTarget.sgrna_seq?.length || 0)) ? 'bold' : 'normal'">
-              {{ char }}
-            </span>
-          </div>
+  <div class="mobile-annotation-list">
+    <div class="mobile-sequence-scroll">
+      <!-- Reference Header -->
+      <div class="mobile-group-summary mobile-reference-summary">
+        <strong class="group-rank-badge" style="color: #3498db;">REF</strong>
+        <span class="group-classification">Reference Sequence (5'→3')</span>
+      </div>
+      <!-- Reference Sequence Line -->
+      <div class="mobile-sequence-line mobile-reference-line">
+        <div class="seq-mono mobile-sequence-bases">
+          <span class="base-box text-box"
+            *ngFor="let char of (state.selectedTarget.ref_sequence || '').split(''); let i = index"
+            [style.color]="(state.selectedTarget.grna_start_index >= 0 && i >= state.selectedTarget.grna_start_index && i < state.selectedTarget.grna_start_index + (state.selectedTarget.sgrna_seq?.length || 0)) ? '#3498db' : '#333'"
+            [style.font-weight]="(state.selectedTarget.grna_start_index >= 0 && i >= state.selectedTarget.grna_start_index && i < state.selectedTarget.grna_start_index + (state.selectedTarget.sgrna_seq?.length || 0)) ? 'bold' : 'normal'">
+            {{ char }}
+          </span>
         </div>
       </div>
 
-      <!-- Mutation Group Rows -->
-      <div class="unified-row" *ngFor="let group of state.selectedTarget.top_groups"
-        [class.excluded-row]="isGroupExcludedObj(group)"
-        style="border-bottom: 1px dotted #e0e0e0; background: white; flex-direction: column; align-items: flex-start;">
-        <div class="row-header-sticky">
+      <!-- Mutation Groups -->
+      <ng-container *ngFor="let group of state.selectedTarget.top_groups">
+        <!-- Group Header -->
+        <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
-            (click)="toggleGroup(group); $event.stopPropagation()"
+            (click)="toggleGroup(group)"
             [class.is-excluded]="isGroupExcludedObj(group)"
             title="Exclude/restore this group">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
           </span>
-          <strong class="g-rank-label">G{{ group.group_rank }}:</strong>
-          <span class="group-type-text" *ngIf="!isGroupExcludedObj(group)">
-            {{ group.classification }}{{ group.net_indel ? '(' + group.net_indel + 'bp)' : '(0bp)' }}
-          </span>
-          <span class="group-reads-text" *ngIf="!isGroupExcludedObj(group)">
-            &middot; {{ group.read_count | number }} Reads ({{ group.read_pct }}%)
-          </span>
+          <div class="mobile-group-info-line">
+            <strong class="group-rank-badge">G{{ group.group_rank }}</strong>
+            <span class="group-classification">
+              {{ group.classification }}{{ group.net_indel ? ' (' + group.net_indel + ' bp)' : ' (0 bp)' }}
+            </span>
+            <span class="group-reads">{{ group.read_count | number }} reads</span>
+            <span class="group-pct" *ngIf="!isGroupExcludedObj(group)">{{ group.read_pct }}%</span>
+          </div>
         </div>
-        <div class="seq-center" style="padding: 8px 15px 8px 15px; display: flex; align-items: flex-start;">
-          <div class="seq-mono read-seq" style="display: flex; height: 16px;">
+        <!-- Group Sequence Line -->
+        <div class="mobile-sequence-line mobile-read-line" [class.excluded-row]="isGroupExcludedObj(group)">
+          <div class="seq-mono mobile-sequence-bases">
             <ng-container *ngFor="let t of group.tokens">
               <ng-container *ngIf="t.type === 'equal'">
                 <span class="base-box text-box" *ngFor="let char of t.val.split('')">{{ char }}</span>
@@ -476,7 +497,7 @@
             </ng-container>
           </div>
         </div>
-      </div>
+      </ng-container>
     </div>
   </div>
 </div>

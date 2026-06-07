@@ -100,7 +100,7 @@
       </label>
     </div>
 
-    <div class="app-table-container">
+    <div class="app-table-container booking-table-container">
       <table class="app-table">
         <thead>
           <tr>
@@ -130,6 +130,44 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="mobile-booking-list">
+      <button type="button" class="mobile-booking-card" *ngFor="let b of filteredBookings" (click)="openEditModal(b)">
+        <div class="mobile-booking-top">
+          <div>
+            <span class="mobile-card-label">Spot</span>
+            <strong>{{ b.spot_name }}</strong>
+            <small>{{ b.spot_room }}</small>
+          </div>
+          <span class="mobile-edit-pill">Edit</span>
+        </div>
+        <div class="mobile-booking-grid">
+          <div>
+            <span class="mobile-card-label">Name</span>
+            <strong>{{ b.user_name }}</strong>
+          </div>
+          <div>
+            <span class="mobile-card-label">Species</span>
+            <strong>{{ b.species || '—' }}</strong>
+          </div>
+          <div>
+            <span class="mobile-card-label">From</span>
+            <strong>{{ formatDate(b.start_date) }}</strong>
+          </div>
+          <div>
+            <span class="mobile-card-label">Until</span>
+            <strong>{{ formatDate(b.end_date) }}</strong>
+          </div>
+        </div>
+        <div class="mobile-booking-comment" *ngIf="b.comment">
+          <span class="mobile-card-label">Comment</span>
+          <p>{{ b.comment }}</p>
+        </div>
+      </button>
+      <div *ngIf="filteredBookings.length === 0" class="mobile-empty-bookings">
+        No bookings found.
+      </div>
     </div>
   </div>
 
@@ -313,7 +351,7 @@
   <!-- ═══ TAB 3: YEARLY OVERVIEW ═══ -->
   <div *ngIf="!loading && !error && activeTab === 'yearly' && yearlySummary" class="tab-content" style="margin-top: 24px;">
     
-    <div class="controls-bar section-card" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+    <div class="controls-bar section-card yearly-controls" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 16px;">
         <span style="font-weight: 600; color: var(--color-text-secondary);">Overview Year:</span>
         <select class="app-select compact-select" [(ngModel)]="selectedYear" (ngModelChange)="onFilterChange()">

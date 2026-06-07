@@ -185,6 +185,50 @@ import { AuthService } from '../../services/auth.service';
     .history-list { display: flex; flex-direction: column; gap: var(--space-3); animation: slideDown 0.3s cubic-bezier(0.16,1,0.3,1); }
     .history-list .request-card { padding: var(--space-4); opacity: 0.85; border-radius: var(--radius-lg); }
     @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 768px) {
+      .lab-reg-container { padding: 28px 20px; }
+      .page-header { margin-bottom: var(--space-8); }
+      .page-header h1 { font-size: 2.35rem; line-height: 1.08; }
+      .page-header p { font-size: 1rem; line-height: 1.55; }
+
+      .reg-layout {
+        grid-template-columns: 1fr;
+        gap: var(--space-8);
+      }
+
+      .form-card {
+        border-radius: 18px;
+        padding: 28px 22px;
+      }
+
+      .grid-2 {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+      }
+
+      .section-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      .btn-add-member {
+        width: 100%;
+      }
+
+      .status-sidebar {
+        position: static;
+      }
+
+      .status-sidebar h3 {
+        margin-bottom: var(--space-4);
+      }
+
+      .history-section {
+        margin-bottom: 0;
+      }
+    }
   `]
 })
 export class LabRegistrationPageComponent implements OnInit {

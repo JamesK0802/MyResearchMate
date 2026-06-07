@@ -131,4 +131,28 @@ export class LabArchiveService {
       this.http.patch(`${this.apiUrl}/${labId}/records/${recordId}`, record, { headers })
     );
   }
+
+  // --- Samples ---
+  async getSamples(labId: string): Promise<any[]> {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(
+      this.http.get<any[]>(`${this.apiUrl}/${labId}/samples`, { headers })
+    );
+  }
+
+  async saveSamples(labId: string, samples: any[]): Promise<any[]> {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(
+      this.http.post<any[]>(`${this.apiUrl}/${labId}/samples`, { samples }, { headers })
+    );
+  }
+
+  async uploadSampleAttachment(labId: string, sampleId: string, file: File): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const formData = new FormData();
+    formData.append('file', file);
+    return firstValueFrom(
+      this.http.post(`${this.apiUrl}/${labId}/samples/${sampleId}/upload`, formData, { headers })
+    );
+  }
 }

@@ -279,6 +279,7 @@ a { color: inherit; }
 
 
 .app-btn-sm { padding: 7px 14px; font-size: var(--text-sm); border-radius: var(--radius-sm); }
+.app-btn-xs { padding: 4px 10px; font-size: var(--text-xs); border-radius: var(--radius-sm); border-width: 1px; }
 .app-btn-lg { padding: 14px 32px; font-size: var(--text-md); border-radius: var(--radius-lg); }
 
 /* ── Alerts / Messages ── */

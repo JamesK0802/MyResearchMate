@@ -16,7 +16,9 @@ from jose import jwt
 
 router = APIRouter(prefix="/lab-archive", tags=["lab-archive"])
 
-BASE_DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "Labs Archive"))
+DEFAULT_DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+BASE_DATA_DIR_ROOT = os.getenv("LAB_NOTEBOOK_DATA_DIR", DEFAULT_DATA_DIR)
+BASE_DATA_DIR = os.path.join(BASE_DATA_DIR_ROOT, "Labs Archive")
 
 def sanitize_name(name: str) -> str:
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
@@ -54,8 +56,23 @@ def write_records(lab_dir: str, records: list):
     with open(records_file, "w") as f:
         json.dump(records, f, indent=2)
 
+def read_samples(lab_dir: str) -> list:
+    samples_file = os.path.join(lab_dir, "archive_samples.json")
+    if not os.path.exists(samples_file):
+        return []
+    try:
+        with open(samples_file, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def write_samples(lab_dir: str, samples: list):
+    samples_file = os.path.join(lab_dir, "archive_samples.json")
+    with open(samples_file, "w") as f:
+        json.dump(samples, f, indent=2)
+
 def get_linked_paths(lab_dir: str) -> dict:
-    """Returns dict of {relative_path: record_id} for all files linked to records."""
+    """Returns dict of {relative_path: record_id} for all files linked to records or samples."""
     records = read_records(lab_dir)
     linked = {}
     for r in records:
@@ -64,6 +81,14 @@ def get_linked_paths(lab_dir: str) -> dict:
             if p:
                 normalized = p.replace('\\', '/').strip('/')
                 linked[normalized] = r.get("id")
+    
+    samples = read_samples(lab_dir)
+    for s in samples:
+        for f in s.get("files", []):
+            p = f.get("path")
+            if p:
+                normalized = p.replace('\\', '/').strip('/')
+                linked[normalized] = s.get("id") or "sample"
     return linked
 
 # --- Models ---
@@ -99,6 +124,28 @@ class FsMkdirRequest(BaseModel):
 
 class FsDeleteRequest(BaseModel):
     path: str
+
+class SampleFileItem(BaseModel):
+    filename: str
+    path: str
+    uploaded_at: Optional[str] = None
+
+class SampleItem(BaseModel):
+    id: Optional[str] = None
+    barcode: Optional[str] = ""
+    sample_name: Optional[str] = ""
+    storage_location: Optional[str] = ""
+    person: Optional[str] = ""
+    project: Optional[str] = ""
+    lab: Optional[str] = ""
+    links: List[str] = []
+    files: List[SampleFileItem] = []
+    linked_record_id: Optional[str] = ""
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class SamplesSaveRequest(BaseModel):
+    samples: List[SampleItem]
 
 # --- Records API ---
 @router.get("/{lab_id}/records")
@@ -316,6 +363,75 @@ async def unlink_record_file(lab_id: str, record_id: str, req: LinkFileRequest, 
     write_records(lab_dir, records)
     return {"status": "success"}
 
+# --- Samples API ---
+@router.get("/{lab_id}/samples")
+async def list_samples(lab_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_lab_membership(db, current_user, lab_id)
+    lab_dir = get_lab_dir(db, lab_id)
+    samples = read_samples(lab_dir)
+    return samples
+
+@router.post("/{lab_id}/samples")
+async def save_samples(lab_id: str, req: SamplesSaveRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_lab_membership(db, current_user, lab_id)
+    lab_dir = get_lab_dir(db, lab_id)
+    
+    saved_samples = []
+    for s in req.samples:
+        s_id = s.id or str(uuid.uuid4())
+        created_at = s.created_at or now_iso()
+        updated_at = now_iso()
+        
+        saved_samples.append({
+            "id": s_id,
+            "barcode": s.barcode or "",
+            "sample_name": s.sample_name or "",
+            "storage_location": s.storage_location or "",
+            "person": s.person or "",
+            "project": s.project or "",
+            "lab": s.lab or "",
+            "links": s.links or [],
+            "files": [f.dict() for f in s.files] if s.files else [],
+            "linked_record_id": s.linked_record_id or "",
+            "created_at": created_at,
+            "updated_at": updated_at
+        })
+        
+    write_samples(lab_dir, saved_samples)
+    return saved_samples
+
+@router.post("/{lab_id}/samples/{sample_id}/upload")
+async def upload_sample_attachment(
+    lab_id: str, 
+    sample_id: str, 
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+):
+    check_lab_membership(db, current_user, lab_id)
+    lab_dir = get_lab_dir(db, lab_id)
+    
+    filename = file.filename
+    file_path = os.path.join(lab_dir, filename)
+    
+    if os.path.exists(file_path):
+        base, ext = os.path.splitext(filename)
+        counter = 1
+        while os.path.exists(file_path):
+            filename = f"{base}_{counter}{ext}"
+            file_path = os.path.join(lab_dir, filename)
+            counter += 1
+            
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+        
+    file_entry = {
+        "filename": filename,
+        "path": filename,
+        "uploaded_at": now_iso()
+    }
+    return file_entry
+
 # --- File Explorer API ---
 @router.get("/{lab_id}/fs")
 async def fs_list(lab_id: str, path: str = "", db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -333,8 +449,8 @@ async def fs_list(lab_id: str, path: str = "", db: Session = Depends(get_db), cu
     
     files = []
     for item in os.listdir(safe_path):
-        # Hide the JSON index file
-        if path == "" and item == "archive_records.json":
+        # Hide the JSON index files
+        if path == "" and (item == "archive_records.json" or item == "archive_samples.json"):
             continue
         item_path = os.path.join(safe_path, item)
         is_dir = os.path.isdir(item_path)
@@ -355,7 +471,7 @@ async def fs_list(lab_id: str, path: str = "", db: Session = Depends(get_db), cu
     return files
 
 @router.post("/{lab_id}/fs/upload")
-async def fs_upload(lab_id: str, path: str = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+async def fs_upload(lab_id: str, path: str = Form(""), file: UploadFile = File(...), db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     check_lab_membership(db, current_user, lab_id)
     lab_dir = get_lab_dir(db, lab_id)
     safe_path = os.path.normpath(os.path.join(lab_dir, path.lstrip('/')))
@@ -429,17 +545,39 @@ async def fs_move(lab_id: str, req: FsMoveRequest, db: Session = Depends(get_db)
     else:
         dst_rel = os.path.relpath(dst_path, lab_dir).replace('\\', '/')
     
-    # Update any record references to the moved file
+    src_rel_slash = src_rel + '/'
+    
+    # Update any record references to the moved file/folder
     records = read_records(lab_dir)
     changed = False
     for r in records:
         for f_entry in r.get("files", []):
-            if f_entry.get("path") == src_rel:
+            p = f_entry.get("path")
+            if p == src_rel:
                 f_entry["path"] = dst_rel
                 f_entry["filename"] = os.path.basename(dst_rel)
                 changed = True
+            elif p and p.startswith(src_rel_slash):
+                f_entry["path"] = dst_rel + p[len(src_rel):]
+                changed = True
     if changed:
         write_records(lab_dir, records)
+        
+    # Update any sample references to the moved file/folder
+    samples = read_samples(lab_dir)
+    samples_changed = False
+    for s in samples:
+        for f_entry in s.get("files", []):
+            p = f_entry.get("path")
+            if p == src_rel:
+                f_entry["path"] = dst_rel
+                f_entry["filename"] = os.path.basename(dst_rel)
+                samples_changed = True
+            elif p and p.startswith(src_rel_slash):
+                f_entry["path"] = dst_rel + p[len(src_rel):]
+                samples_changed = True
+    if samples_changed:
+        write_samples(lab_dir, samples)
     
     return {"status": "success", "new_path": dst_rel}
 

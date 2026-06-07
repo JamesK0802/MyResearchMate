@@ -378,6 +378,10 @@
   font-weight: var(--fw-bold);
 }
 
+.mobile-booking-list {
+  display: none;
+}
+
 /* ── Tabs ── */
 .app-tabs {
   display: flex;
@@ -490,17 +494,309 @@
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-  .floor-plan {
-    flex-direction: column;
-    gap: 24px;
+  .booking-page {
+    padding: 24px 16px;
+    overflow-x: hidden;
   }
-  .room-acacia .room-body, .room-speed-breeding .room-body {
+
+  .booking-form-card {
+    border-radius: 16px;
+    padding: 18px;
+  }
+
+  .form-grid-inline {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
-  .fp-right-top, .fp-right-mid, .fp-right-bot {
+
+  .booking-form-card .form-actions {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 10px !important;
+  }
+
+  .booking-form-card .form-actions .app-btn {
+    width: 100%;
+  }
+
+  .app-tabs {
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .app-tab {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    padding: 10px 12px;
+  }
+
+  .tab-svg-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .tab-content {
+    min-width: 0;
+  }
+
+  .tab-content > div[style*="justify-content: flex-end"] {
+    justify-content: flex-start !important;
+  }
+
+  .booking-table-container {
+    display: none;
+  }
+
+  .mobile-booking-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mobile-booking-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: 14px;
+    box-shadow: var(--shadow-xs);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    display: block;
+    font-family: var(--font-sans);
+    padding: 14px;
+    text-align: left;
+    width: 100%;
+  }
+
+  .mobile-booking-top {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--color-border-light);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .mobile-booking-top strong,
+  .mobile-booking-grid strong {
+    color: var(--color-text-primary);
+    display: block;
+    font-size: 0.9rem;
+    font-weight: var(--fw-black);
+    line-height: 1.25;
+  }
+
+  .mobile-booking-top small {
+    color: var(--color-text-tertiary);
+    display: block;
+    font-size: 0.7rem;
+    font-weight: var(--fw-bold);
+    margin-top: 2px;
+  }
+
+  .mobile-edit-pill {
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-weight: var(--fw-black);
+    padding: 5px 10px;
+  }
+
+  .mobile-booking-grid {
+    display: grid;
+    gap: 12px 10px;
     grid-template-columns: 1fr 1fr;
   }
-  .controls-row { flex-direction: column; align-items: stretch; }
+
+  .mobile-card-label {
+    color: var(--color-text-tertiary);
+    display: block;
+    font-size: 0.62rem;
+    font-weight: var(--fw-black);
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .mobile-booking-comment {
+    margin-top: 12px;
+  }
+
+  .mobile-booking-comment p {
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .mobile-empty-bookings {
+    color: var(--color-text-secondary);
+    padding: 24px 0;
+    text-align: center;
+  }
+
+  .controls-bar {
+    padding: 16px;
+  }
+
+  .controls-row {
+    align-items: stretch;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .month-nav {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .month-label {
+    font-size: 1rem;
+    min-width: 0;
+  }
+
+  .compact-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .summary-row {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-stat {
+    align-items: flex-start;
+    box-shadow: none;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+  }
+
+  .stat-icon-wrapper {
+    height: 30px;
+    width: 30px;
+  }
+
+  .stat-svg {
+    height: 16px;
+    width: 16px;
+  }
+
+  .stat-value {
+    font-size: 1.05rem;
+  }
+
+  .stat-label {
+    font-size: 0.58rem;
+    letter-spacing: 0;
+  }
+
+  .floor-plan {
+    align-items: stretch;
+    flex-direction: row;
+    gap: 14px;
+    margin-left: -16px;
+    margin-right: -16px;
+    overflow-x: auto;
+    padding: 0 16px 12px;
+    scroll-snap-type: x proximity;
+  }
+
+  .room-container {
+    border-radius: 16px;
+    flex: 0 0 auto;
+    padding: 18px;
+    scroll-snap-align: start;
+  }
+
+  .room-acacia {
+    width: 540px;
+  }
+
+  .room-speed-breeding {
+    width: 640px;
+  }
+
+  .room-acacia .room-body {
+    grid-template-columns: 300px 100px;
+  }
+
+  .room-speed-breeding .room-body {
+    grid-template-columns: 1fr 120px;
+  }
+
+  .fp-right-top {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fp-right-mid,
+  .fp-right-bot {
+    grid-template-columns: 140px 1fr;
+  }
+
   .detail-grid, .form-grid { grid-template-columns: 1fr; }
-  .app-tabs { overflow-x: auto; white-space: nowrap; }
+
+  .yearly-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .app-table-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 16px;
+  }
+
+  .yearly-table {
+    min-width: 900px;
+  }
+
+  .yearly-table th.yt-spot-col,
+  .yearly-table td.yt-spot-col {
+    position: -webkit-sticky;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+  }
+
+  .yearly-table th.yt-spot-col {
+    background: var(--color-surface-alt) !important;
+  }
+
+  .yearly-table td.yt-spot-col {
+    background: var(--color-surface) !important;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+  }
+}
+
+@media (max-width: 520px) {
+  .room-acacia {
+    width: 500px;
+  }
+
+  .room-speed-breeding {
+    width: 600px;
+  }
+
+  .room-container {
+    padding: 16px;
+  }
+
+  .fp-cell {
+    min-height: 64px;
+    padding: 8px 7px;
+  }
+
+  .fp-cell-tall {
+    min-height: 132px;
+  }
 }
