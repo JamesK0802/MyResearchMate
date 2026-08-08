@@ -77,16 +77,16 @@ import { LabService } from '../../services/lab.service';
           </div>
 
           <div class="lab-footer">
-            <div *ngIf="isMember(lab.id)" class="member-status">
+            <div *ngIf="isMember(lab)" class="member-status">
               <span class="status-badge">Already a Member</span>
             </div>
             
-            <div *ngIf="!isMember(lab.id) && getRequestStatus(lab.id) === 'pending'" class="member-status">
+            <div *ngIf="!isMember(lab) && getLabStatus(lab) === 'pending'" class="member-status">
               <span class="status-badge pending">Pending Approval</span>
             </div>
 
             <button 
-              *ngIf="!isMember(lab.id) && getRequestStatus(lab.id) !== 'pending'"
+              *ngIf="!isMember(lab) && getLabStatus(lab) !== 'pending'"
               (click)="joinLab(lab)" 
               [disabled]="isJoining === lab.id"
               class="btn-join">
@@ -227,8 +227,14 @@ export class FindLabComponent implements OnInit {
     this.filteredLabs = results;
   }
 
-  isMember(labId: string): boolean {
-    return this.myLabIds.includes(labId);
+  isMember(lab: any): boolean {
+    // /labs/all is the authoritative membership snapshot. Keep myLabIds as a
+    // fallback for older API responses while that request is still loading.
+    return lab?.status === 'member' || this.myLabIds.includes(typeof lab === 'string' ? lab : lab?.id);
+  }
+
+  getLabStatus(lab: any): string | null {
+    return lab?.status && lab.status !== 'none' ? lab.status : this.getRequestStatus(lab?.id);
   }
 
   getRequestStatus(labId: string): string | null {
@@ -246,6 +252,10 @@ export class FindLabComponent implements OnInit {
       await this.loadMyJoinRequests(); // Refresh list immediately!
       this.cdr.detectChanges();
     } catch (err: any) {
+      if (err.error?.detail === 'Already a member') {
+        lab.status = 'member';
+        if (!this.myLabIds.includes(lab.id)) this.myLabIds.push(lab.id);
+      }
       alert(err.error?.detail || 'Failed to send join request');
     } finally {
       this.isJoining = null;
