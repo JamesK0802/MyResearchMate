@@ -15,7 +15,7 @@
   font-size: 2.2rem;
   font-weight: 900;
   color: #0f172a;
-  margin-bottom: 8px;
+  margin: 0;
   letter-spacing: -0.02em;
 }
 .header-content p {
@@ -143,6 +143,7 @@ input:focus, select:focus {
 /* ── Results Panel ── */
 .results-panel { display: flex; flex-direction: column; gap: 24px; }
 .results-actions { display: flex; gap: 12px; justify-content: flex-end; }
+.pcr-header-actions { flex-shrink: 0; }
 
 .btn-save-preset, .btn-export {
   display: flex; align-items: center; gap: 8px;

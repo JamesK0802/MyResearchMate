@@ -2,7 +2,14 @@
   <div class="pcr-header">
     <div class="header-content">
       <h1>PCR Setup Calculator</h1>
-      <p>Precision protocol planning for CRISPR validation and benchmarking.</p>
+    </div>
+    <div class="results-actions pcr-header-actions">
+      <button type="button" class="btn-save-preset" (click)="saveAsPreset()" [disabled]="!auth.isLoggedIn">
+        <span class="icon">💾</span> {{ auth.isLoggedIn ? 'Save to My Data' : 'Log in to Save' }}
+      </button>
+      <button type="button" class="btn-export" (click)="exportPDF()">
+        <span class="icon">📄</span> Export PDF Protocol
+      </button>
     </div>
   </div>
 
@@ -107,15 +114,6 @@
 
       <!-- Right Panel: Results -->
       <div class="results-panel">
-        <div class="results-actions">
-          <button type="button" class="btn-save-preset" (click)="saveAsPreset()" [disabled]="!auth.isLoggedIn">
-            <span class="icon">💾</span> {{ auth.isLoggedIn ? 'Save to My Data' : 'Log in to Save' }}
-          </button>
-          <button type="button" class="btn-export" (click)="exportPDF()">
-            <span class="icon">📄</span> Export PDF Protocol
-          </button>
-        </div>
-
         <div class="results-card card">
           <div class="section-header">
             <h2>Preparation Table</h2>
