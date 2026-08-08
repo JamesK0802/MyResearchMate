@@ -1,6 +1,7 @@
 
 services:
   db:
+    profiles: ["container-db"]
     image: postgres:15-alpine
     container_name: mrm_db
     restart: always
@@ -24,9 +25,6 @@ services:
       dockerfile: Dockerfile
     container_name: mrm_backend
     restart: always
-    depends_on:
-      db:
-        condition: service_healthy
     env_file:
       - .env
     environment:

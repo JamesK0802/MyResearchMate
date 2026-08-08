@@ -7,6 +7,7 @@ import { environment } from '../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { LabService } from './services/lab.service';
+import { AppStateService } from './services/app-state.service';
 
 @Component({
   selector: 'app-root',
@@ -21,7 +22,12 @@ export class App implements OnInit {
   isMobileMenuOpen = false;
   myLabs: any[] = [];
 
-  constructor(public auth: AuthService, private http: HttpClient, private labService: LabService) {}
+  constructor(
+    public auth: AuthService,
+    public analysisState: AppStateService,
+    private http: HttpClient,
+    private labService: LabService
+  ) {}
 
   ngOnInit() {
     this.auth.session$.subscribe(async session => {

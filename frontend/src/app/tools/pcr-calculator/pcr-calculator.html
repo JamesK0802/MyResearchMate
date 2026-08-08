@@ -4,12 +4,6 @@
       <h1>PCR Setup Calculator</h1>
       <p>Precision protocol planning for CRISPR validation and benchmarking.</p>
     </div>
-    <div class="header-actions">
-      <button class="btn-manage" (click)="viewMode = 'manager'">
-        <span class="icon">⚙️</span> Manage Presets
-        <span *ngIf="incomingTransfers.length > 0" class="notif-dot"></span>
-      </button>
-    </div>
   </div>
 
   <!-- Calculator View -->
@@ -115,7 +109,7 @@
       <div class="results-panel">
         <div class="results-actions">
           <button type="button" class="btn-save-preset" (click)="saveAsPreset()" [disabled]="!auth.isLoggedIn">
-            <span class="icon">💾</span> {{ auth.isLoggedIn ? 'Save as New Preset' : 'Log in to Save' }}
+            <span class="icon">💾</span> {{ auth.isLoggedIn ? 'Save to My Data' : 'Log in to Save' }}
           </button>
           <button type="button" class="btn-export" (click)="exportPDF()">
             <span class="icon">📄</span> Export PDF Protocol

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LabNotebookService } from '../../services/lab-notebook.service';
 import { LabService } from '../../services/lab.service';
+import { AuthService } from '../../services/auth.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 
@@ -85,6 +86,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   constructor(
     private labService: LabNotebookService,
     private coreLabService: LabService,
+    private auth: AuthService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -106,6 +108,17 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   async loadData() {
+    if (this.auth.isDemo) {
+      this.activeExperiments = await this.labService.getActiveExperiments();
+      this.presets = [];
+      this.myLabs = await this.coreLabService.getMyLabs();
+      for (const exp of this.activeExperiments) {
+        this.syncStates[exp.id] = 'saved';
+        exp.samples_raw = (exp.samples || []).join(', ');
+      }
+      this.cdr.detectChanges();
+      return;
+    }
     try {
       this.activeExperiments = await this.labService.getActiveExperiments().catch(e => {
         console.error('Failed to load active experiments:', e);

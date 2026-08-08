@@ -13,7 +13,10 @@
           <span class="nav-tab" style="cursor: pointer;">Tools ▾</span>
           <div class="dropdown-content">
             <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">CRISPR Tool</a>
+            <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
+            <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="dropdown-item">Protocol Builder</a>
             <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
+            <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="dropdown-item">Tool Directory</a>
           </div>
         </div>
 
@@ -39,6 +42,8 @@
           <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
           <div class="dropdown-content">
             <a routerLink="/crispr/my-data" routerLinkActive="active" class="dropdown-item">CRISPR Analysis Results</a>
+            <a routerLink="/data/protocol-trees" routerLinkActive="active" class="dropdown-item">Protocol Trees</a>
+            <a routerLink="/data/pcr-protocols" routerLinkActive="active" class="dropdown-item">PCR Protocols</a>
           </div>
         </div>
 
@@ -126,7 +131,16 @@
       <div class="drawer-section">
         <div class="drawer-section-title">Tools</div>
         <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">CRISPR Tool</a>
+        <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
+        <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Protocol Builder</a>
         <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">PCR Calculator</a>
+      </div>
+
+      <div class="drawer-section" *ngIf="auth.isLoggedIn">
+        <div class="drawer-section-title">My Data</div>
+        <a routerLink="/crispr/my-data" class="drawer-link" (click)="isMobileMenuOpen = false">CRISPR Analysis Results</a>
+        <a routerLink="/data/protocol-trees" class="drawer-link" (click)="isMobileMenuOpen = false">Protocol Trees</a>
+        <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">PCR Protocols</a>
       </div>
 
       <!-- Lab Note entries (logged in) -->
@@ -201,4 +215,18 @@
   <main class="app-content">
     <router-outlet></router-outlet>
   </main>
+
+  <ng-container *ngIf="analysisState.exportStatus$ | async as status">
+    <div class="global-export-overlay" *ngIf="status.active">
+      <div class="export-loading-card">
+        <div class="export-spinner-ring"></div>
+        <div class="export-loading-content">
+          <h4>{{ status.title }}</h4>
+          <p>{{ status.stage }}</p>
+          <div class="export-progress-track"><div class="export-progress-bar" [style.width.%]="status.percent"></div></div>
+          <span class="export-percent-num">{{ status.percent }}%</span>
+        </div>
+      </div>
+    </div>
+  </ng-container>
 </div>

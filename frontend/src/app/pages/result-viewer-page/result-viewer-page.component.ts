@@ -2,8 +2,7 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppStateService } from '../../services/app-state.service';
 import { ResultDashboardComponent } from '../../components/result-dashboard/result-dashboard.component';
-import { ExcelExportService, ExportParams, ScopeData } from '../../services/excel-export.service';
-import { GeneResult, MultiReferenceResponse } from '../../models/analysis.model';
+import { ExcelExportService } from '../../services/excel-export.service';
 
 @Component({
   selector: 'app-result-viewer-page',

@@ -62,6 +62,11 @@ export interface YearlySummaryResponse {
 @Injectable({ providedIn: 'root' })
 export class FacilityBookingService {
   private apiUrl = '/api/facility';
+  private readonly demoSpots: FacilitySpot[] = [
+    ...['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'].map((number, index) => ({ id: `acacia-${index + 1}`, name: `Acacia Room 18_${number}`, room: 'Acacia Room 18', category: 'Growth Space', display_order: index + 1, map_group: 'Acacia', is_active: true })),
+    ...['Speed Breeding Station_01', 'Speed Breeding Station_02', 'Speed Breeding Station_03', 'Speed Drying Station_01', 'Overflow_01', 'Overflow_02'].map((name, index) => ({ id: `speed-${index + 1}`, name, room: 'Speed Breeding & Drying Room', category: 'Growth Space', display_order: index + 11, map_group: 'Speed', is_active: true })),
+  ];
+  private demoBookings: FacilityBooking[] = this.makeDemoBookings();
 
   constructor(private http: HttpClient, private auth: AuthService) {}
 
@@ -70,7 +75,26 @@ export class FacilityBookingService {
     return new HttpHeaders({ 'Authorization': `Bearer ${session?.access_token}` });
   }
 
+  private makeDemoBookings(): FacilityBooking[] {
+    const year = new Date().getFullYear();
+    return [
+      ['demo-booking-1', 'acacia-1', 'Nicole', 2, 5, 'Arabidopsis growth trial'],
+      ['demo-booking-2', 'acacia-4', 'Ayesha', 4, 7, 'Tissue culture experiment'],
+      ['demo-booking-3', 'speed-1', 'James', 1, 3, 'CRISPR genotyping'],
+      ['demo-booking-4', 'speed-3', 'Nicole', 8, 10, 'PCR validation series'],
+      ['demo-booking-5', 'acacia-10', 'James', 11, 12, 'Seed propagation'],
+    ].map(([id, spot_id, user_name, start, end, comment]) => ({
+      id: id as string, spot_id: spot_id as string, user_name: user_name as string,
+      start_date: `${year}-${String(start).padStart(2, '0')}-01`,
+      end_date: `${year}-${String(end).padStart(2, '0')}-28`, comment: comment as string,
+      created_by_name: user_name as string,
+    }));
+  }
+
+  private isDemo() { return this.auth.isDemo; }
+
   async getSpots(room?: string): Promise<FacilitySpot[]> {
+    if (this.isDemo()) return this.demoSpots.filter(s => !room || s.room === room);
     const headers = await this.getAuthHeaders();
     let url = `${this.apiUrl}/spots`;
     if (room) url += `?room=${encodeURIComponent(room)}`;
@@ -78,6 +102,11 @@ export class FacilityBookingService {
   }
 
   async getAllocation(year: number, month: number, room?: string): Promise<AllocationResponse> {
+    if (this.isDemo()) {
+      const spots = this.demoSpots.filter(s => !room || s.room === room);
+      const allocation = spots.map(spot => ({ spot, booking: this.demoBookings.find(b => b.spot_id === spot.id && b.start_date <= `${year}-${String(month).padStart(2, '0')}-31` && b.end_date >= `${year}-${String(month).padStart(2, '0')}-01`) || null, booking_count: this.demoBookings.filter(b => b.spot_id === spot.id).length }));
+      return { year, month, allocation, rooms: [...new Set(this.demoSpots.map(s => s.room))], summary: { total_spots: spots.length, booked: allocation.filter(a => a.booking).length, available: allocation.filter(a => !a.booking).length } };
+    }
     const headers = await this.getAuthHeaders();
     let url = `${this.apiUrl}/allocation?year=${year}&month=${month}`;
     if (room) url += `&room=${encodeURIComponent(room)}`;
@@ -85,6 +114,10 @@ export class FacilityBookingService {
   }
 
   async getYearlySummary(year: number, room?: string): Promise<YearlySummaryResponse> {
+    if (this.isDemo()) {
+      const spots = this.demoSpots.filter(s => !room || s.room === room);
+      return { year, rooms: [...new Set(this.demoSpots.map(s => s.room))], summary: spots.map(spot => ({ spot: { id: spot.id, name: spot.name, room: spot.room }, months: Array.from({ length: 12 }, (_, i) => { const b = this.demoBookings.find(x => x.spot_id === spot.id && x.start_date <= `${year}-${String(i + 1).padStart(2, '0')}-31` && x.end_date >= `${year}-${String(i + 1).padStart(2, '0')}-01`); return { month: i + 1, booked: !!b, user_name: b?.user_name || null }; }) })) };
+    }
     const headers = await this.getAuthHeaders();
     let url = `${this.apiUrl}/yearly-summary?year=${year}`;
     if (room) url += `&room=${encodeURIComponent(room)}`;
@@ -92,6 +125,7 @@ export class FacilityBookingService {
   }
 
   async getBookings(year?: number, month?: number, spotId?: string): Promise<FacilityBooking[]> {
+    if (this.isDemo()) return this.demoBookings.filter(b => (!spotId || b.spot_id === spotId) && (!year || b.start_date.startsWith(String(year)) || b.end_date.startsWith(String(year))) && (!month || (b.start_date <= `${year}-${String(month).padStart(2, '0')}-31` && b.end_date >= `${year}-${String(month).padStart(2, '0')}-01`))).map(b => ({ ...b, spot_name: this.demoSpots.find(s => s.id === b.spot_id)?.name, spot_room: this.demoSpots.find(s => s.id === b.spot_id)?.room }));
     const headers = await this.getAuthHeaders();
     let url = `${this.apiUrl}/bookings?`;
     if (year) url += `year=${year}&`;

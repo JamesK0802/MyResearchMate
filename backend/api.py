@@ -518,7 +518,11 @@ api_router.include_router(auth_router)
 
 # Include results router
 from routers.results import router as results_router
+from routers.protocol_trees import router as protocol_trees_router
+from routers.tool_directory import router as tool_directory_router
 api_router.include_router(results_router)
+api_router.include_router(protocol_trees_router)
+api_router.include_router(tool_directory_router)
 
 # Include labs router
 print("[DEBUG] Including labs_router from routers.labs")

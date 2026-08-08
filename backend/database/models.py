@@ -18,6 +18,22 @@ class User(Base):
     bio = Column(Text)
     profile_completed = Column(Boolean, default=False)
 
+class ToolLink(Base):
+    __tablename__ = "tool_links"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    description = Column(Text, default="")
+    thumbnail_url = Column(Text, nullable=True)
+    created_by = Column(BigInteger, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ToolLinkHeart(Base):
+    __tablename__ = "tool_link_hearts"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tool_link_id = Column(UUID(as_uuid=True), ForeignKey("tool_links.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
 class Lab(Base):
     __tablename__ = "labs"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -85,6 +101,23 @@ class CrisprResultShare(Base):
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class ProtocolTree(Base):
+    __tablename__ = "protocol_trees"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id"))
+    title = Column(String)
+    document_json = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class ProtocolTreeShare(Base):
+    __tablename__ = "protocol_tree_shares"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    protocol_tree_id = Column(UUID(as_uuid=True), ForeignKey("protocol_trees.id", ondelete="CASCADE"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class PcrPreset(Base):
     __tablename__ = "pcr_presets"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -111,6 +144,14 @@ class PcrPresetTransfer(Base):
     sender_user_id = Column(BigInteger, ForeignKey("users.id"))
     receiver_user_id = Column(BigInteger, ForeignKey("users.id"))
     status = Column(String, default="pending") # pending, accepted, rejected
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PcrPresetLabShare(Base):
+    __tablename__ = "pcr_preset_lab_shares"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey("pcr_presets.id", ondelete="CASCADE"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class PcrPresetComponent(Base):
@@ -188,4 +229,3 @@ class WorkflowShare(Base):
     shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-

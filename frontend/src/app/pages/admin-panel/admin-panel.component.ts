@@ -1,6 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LabService, LabRegistrationRequest } from '../../services/lab.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-admin-panel',
@@ -59,10 +60,10 @@ import { LabService, LabRegistrationRequest } from '../../services/lab.service';
             </div>
 
             <div class="req-actions">
-              <button (click)="approve(req)" class="btn-approve" [disabled]="processingId === req.id">
+              <button (click)="approve(req)" class="btn-approve" [disabled]="processingId === req.id || auth.isDemo">
                 {{ processingId === req.id ? '...' : 'Approve' }}
               </button>
-              <button (click)="reject(req)" class="btn-reject" [disabled]="processingId === req.id">
+              <button (click)="reject(req)" class="btn-reject" [disabled]="processingId === req.id || auth.isDemo">
                 Reject
               </button>
             </div>
@@ -154,6 +155,7 @@ export class AdminPanelComponent implements OnInit {
 
   constructor(
     private labService: LabService,
+    public auth: AuthService,
     private cdr: ChangeDetectorRef
   ) {}
 

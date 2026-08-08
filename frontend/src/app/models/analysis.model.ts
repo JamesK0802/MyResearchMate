@@ -208,6 +208,7 @@ export interface BenchmarkClassResult {
   wrong: number;
   ambiguous: number;
   correct_rate: number;
+  filtered: number;
 }
 
 export interface BenchmarkResult {
@@ -218,6 +219,8 @@ export interface BenchmarkResult {
   fail_no_anchor: number;
   fail_quality: number;
   fail_similarity: number;
+  fail_no_coverage: number;
+  fail_no_alignment: number;
   usable_reads: number;
   usable_rate: number;
   // Classification counts (denominator = usable_reads)

@@ -30,6 +30,7 @@ export interface UserProfile {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private supabase: SupabaseClient;
+  private demoSession: Session | null = null;
 
   /** Current Supabase session (null when logged out) */
   private sessionSubject = new BehaviorSubject<Session | null>(null);
@@ -66,7 +67,7 @@ export class AuthService {
 
   /** Quick boolean check */
   get isLoggedIn(): boolean {
-    return this.sessionSubject.value !== null;
+    return this.demoSession !== null || this.sessionSubject.value !== null;
   }
 
   get currentProfile(): UserProfile | null {
@@ -78,7 +79,27 @@ export class AuthService {
   }
 
   get accessToken(): string | null {
-    return this.sessionSubject.value?.access_token ?? null;
+    return this.demoSession?.access_token ?? this.sessionSubject.value?.access_token ?? null;
+  }
+
+  get isDemo(): boolean { return this.demoSession !== null; }
+
+  /** Local-only demo session. It never creates a Supabase or API identity. */
+  async signInDemo(): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    this.demoSession = {
+      access_token: 'local-demo-no-api-access', refresh_token: '', token_type: 'bearer',
+      expires_in: 60 * 60, expires_at: now + 60 * 60,
+      user: { id: 'local-demo-u0000000', aud: 'authenticated', role: 'authenticated', email: 'u0000000@anu.edu.au', app_metadata: {}, user_metadata: {} }
+    } as Session;
+    this.setSession(this.demoSession);
+    this.setProfile({
+      id: -1, uid: 'u0000000', supabase_auth_id: 'local-demo-u0000000',
+      email: 'u0000000@anu.edu.au', name: 'Demo Manager', role: 'manager',
+      bio: 'Local demonstration session', profile_completed: true,
+      created_at: new Date().toISOString(), last_login: null,
+    });
+    this.setLoading(false);
   }
 
   constructor(
@@ -92,6 +113,7 @@ export class AuthService {
 
     // Listen for auth state changes (login, logout, token refresh)
     this.supabase.auth.onAuthStateChange((event, session) => {
+      if (this.demoSession) return;
       this.setSession(session);
 
       if (session) {
@@ -112,7 +134,9 @@ export class AuthService {
    */
   private async initSession(): Promise<void> {
     try {
+      if (this.demoSession) return;
       const { data } = await this.supabase.auth.getSession();
+      if (this.demoSession) return;
       this.setSession(data.session);
       if (data.session) {
         await this.fetchProfile();
@@ -401,6 +425,12 @@ export class AuthService {
    * Sign out and clear all state.
    */
   async signOut(): Promise<void> {
+    if (this.demoSession) {
+      this.demoSession = null;
+      this.setSession(null);
+      this.setProfile(null);
+      return;
+    }
     await this.supabase.auth.signOut();
     this.setSession(null);
     this.setProfile(null);
@@ -410,6 +440,7 @@ export class AuthService {
    * Get the current active session.
    */
   async getSession() {
+    if (this.demoSession) return this.demoSession;
     const { data: { session }, error } = await this.supabase.auth.getSession();
     if (error) {
       console.error('[AuthService] Error getting session:', error);

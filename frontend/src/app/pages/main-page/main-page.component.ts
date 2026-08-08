@@ -51,12 +51,28 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
-            <div class="tool-card placeholder">
+            <a routerLink="/tools/sequence-viewer" class="tool-card">
               <div class="card-body">
-                <h3>More Coming Soon</h3>
-                <p>Additional research tools will be added to the platform as they are developed.</p>
+                <h3>Sequence Viewer</h3>
+                <p>Inspect sequences and FASTQ read groups, annotate features, and export sequence records directly from your browser.</p>
+                <div class="tag-row">
+                  <span>FASTA / GenBank</span>
+                  <span>FASTQ Groups</span>
+                  <span>Annotations</span>
+                </div>
               </div>
-            </div>
+            </a>
+            <a routerLink="/tools/protocol-builder" class="tool-card">
+              <div class="card-body">
+                <h3>Protocol Builder</h3>
+                <p>Build visual experiment workflows, connect protocol stages, and keep step-specific notes in a local-first workspace.</p>
+                <div class="tag-row">
+                  <span>Visual Workflow</span>
+                  <span>Step Notes</span>
+                  <span>Local Files</span>
+                </div>
+              </div>
+            </a>
           </div>
         </section>
 

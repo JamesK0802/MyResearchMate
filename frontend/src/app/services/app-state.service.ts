@@ -1,20 +1,16 @@
 import { Injectable, NgZone } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
-import { BehaviorSubject, Subject, timer } from 'rxjs';
-import { takeUntil, switchMap } from 'rxjs/operators';
-import { AnalysisService, TaskStatus } from './analysis.service';
-import { ExcelExportService, ExportParams, ScopeData } from './excel-export.service';
+import { BehaviorSubject, Subject, Subscription } from 'rxjs';
+import { ExcelExportService, ExportParams } from './excel-export.service';
 import { CurationService } from './curation.service';
+import { LocalAnalysisService, LocalAnalysisEvent } from './local-analysis.service';
+import { SequenceWorkspaceService } from './sequence-workspace.service';
+import { parseFastqText } from '../utils/parsers.utils';
+import { extractWindow, findGrnaCutSite } from '../workers/core/classifier';
 import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult, SplitPreview } from '../models/analysis.model';
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
-
-interface ProgressInfo {
-  fileIndex: number; fileTotal: number;
-  geneIndex: number; geneTotal: number;
-  targetIndex: number; targetTotal: number;
-  message: string;
-}
 
 /** Independent result data container */
 export interface ResultSlot {
@@ -55,18 +51,38 @@ function emptySlot(): ResultSlot {
   };
 }
 
+export interface AnalysisTab {
+  id: string;
+  name: string;
+  formValue: any;
+  selectedFiles: File[];
+  slot: ResultSlot;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AppStateService {
   analysisForm!: FormGroup;
   selectedFiles: File[] = [];
   isDragging = false;
 
-  // ── Separate result slots ──────────────────────────────────────────────────
+  // ── Multi-Tab Analysis State ──
+  tabs: AnalysisTab[] = [];
+  activeTabId: string = '';
+
+  get currentTab(): AnalysisTab | null {
+    return this.tabs.find(t => t.id === this.activeTabId) || null;
+  }
+
+  // ── Local Mode (Always active in standalone) ──
+  isLocalMode = true;
+  private localAnalysisSub: Subscription | null = null;
+
+  // ── Separate result slots ──
   analysisSlot: ResultSlot = emptySlot();
   viewerSlot: ResultSlot = emptySlot();
   activeMode: 'analysis' | 'viewer' = 'analysis';
 
-  // ── Curation state ─────────────────────────────────────────────────────────
+  // ── Curation state ──
   isCuratedView = false;
   curationConfig: CurationConfig | null = null;
   originalSlotSnapshot: ResultSlot | null = null;
@@ -76,53 +92,50 @@ export class AppStateService {
     return this.activeMode === 'analysis' ? this.analysisSlot : this.viewerSlot;
   }
 
-  // ── Progress (Reactive) ────────────────────────────────────────────────────
+  // ── Progress (Reactive) ──
   progress$ = new BehaviorSubject<number>(0);
   progressDisplay$ = new BehaviorSubject<number>(0);
   progressStage$ = new BehaviorSubject<string>('');
 
-  progressInfo: ProgressInfo | null = null;
   private progressAnimId: any = null;
   debugLogs: string[] = [];
-  private destroy$ = new Subject<void>();
   private charts: Chart[] = [];
+  resultsUpdated$ = new Subject<void>();
 
-  // ── Benchmark State ───────────────────────────────────────────────────────
-  benchPhred = 10; benchWindow = 90; benchMargin = 3;
-  benchRows: BenchmarkRow[] = [{ file: null, geneName: '', targetName: '', referenceSequence: '', grnaSequence: '' }];
-  benchIsLoading = false;
-  
-  public currentTaskId: string | null = null;
   fileProgress: { [filename: string]: number } = {};
   get fileProgressKeys(): string[] {
     return Object.keys(this.fileProgress || {});
   }
 
-  benchProgress$ = new BehaviorSubject<number>(0);
-  benchProgressDisplay$ = new BehaviorSubject<number>(0);
-  benchStage$ = new BehaviorSubject<string>('');
-  benchError: string | null = null;
-  splitPreview: SplitPreview | null = null;
-  trainResult: BenchmarkResult | null = null;
-  testResult: BenchmarkResult | null = null;
-  private benchDestroy$ = new Subject<void>();
-  private benchProgressAnimId: any = null;
-  resultsUpdated$ = new Subject<void>();
+  // ── Main Shell Tab Switching ──
+  activeMainTab$ = new BehaviorSubject<'analysis' | 'viewer' | 'benchmark' | 'workspace'>('analysis');
+
+  switchMainTab(tab: 'analysis' | 'viewer' | 'benchmark' | 'workspace') {
+    this.activeMainTab$.next(tab);
+    if (tab === 'workspace') {
+      void this.router.navigateByUrl('/tools/sequence-viewer');
+    }
+  }
 
   constructor(
     private fb: FormBuilder,
-    private analysisService: AnalysisService,
     private excelExportService: ExcelExportService,
     private curationService: CurationService,
+    private localAnalysisService: LocalAnalysisService,
+    private sequenceWorkspaceService: SequenceWorkspaceService,
+    private router: Router,
     public ngZone: NgZone
-  ) { this.initForm(); }
+  ) {
+    this.initForm();
+    this.initDefaultTab();
+  }
 
-  // ── Slot activation ────────────────────────────────────────────────────────
+  // ── Slot activation ──
   activateSlot(mode: 'analysis' | 'viewer') {
     this.activeMode = mode;
   }
 
-  // ── Convenience getters (read from active slot) ────────────────────────────
+  // ── Convenience getters (read from active slot) ──
   get genes() { return this.slot.genes; }
   set genes(v) { this.slot.genes = v; }
   get mergedGenes() { return this.slot.mergedGenes; }
@@ -175,7 +188,145 @@ export class AppStateService {
   get rescuedGenes(): GeneResult[] { return this.genes.filter(g => g.is_rescued_derived); }
   get ambiguousGenes(): GeneResult[] { return this.genes.filter(g => g.is_ambiguous_derived); }
 
-  // ── Form ───────────────────────────────────────────────────────────────────
+  // ── Tab Management ──
+  private initDefaultTab() {
+    const tab1: AnalysisTab = {
+      id: 'tab_' + Date.now() + '_1',
+      name: 'Analysis 1',
+      formValue: this.analysisForm ? this.analysisForm.getRawValue() : null,
+      selectedFiles: [],
+      slot: emptySlot()
+    };
+    this.tabs = [tab1];
+    this.activeTabId = tab1.id;
+    this.analysisSlot = tab1.slot;
+  }
+
+  saveCurrentTabState() {
+    const tab = this.currentTab;
+    if (tab) {
+      if (this.analysisForm) {
+        tab.formValue = this.analysisForm.getRawValue();
+      }
+      tab.selectedFiles = [...this.selectedFiles];
+      tab.slot = this.analysisSlot;
+    }
+  }
+
+  addTab(name?: string) {
+    this.saveCurrentTabState();
+    const newTabNumber = this.tabs.length + 1;
+    const tabName = name || `Analysis ${newTabNumber}`;
+    const currentFormVal = this.analysisForm ? this.analysisForm.getRawValue() : null;
+    const currentFiles = [...this.selectedFiles];
+
+    const newTab: AnalysisTab = {
+      id: 'tab_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      name: tabName,
+      formValue: currentFormVal,
+      selectedFiles: currentFiles,
+      slot: emptySlot()
+    };
+
+    this.tabs.push(newTab);
+    this.selectTab(newTab.id);
+  }
+
+  selectTab(tabId: string) {
+    if (this.activeTabId === tabId) return;
+    this.saveCurrentTabState();
+
+    const targetTab = this.tabs.find(t => t.id === tabId);
+    if (!targetTab) return;
+
+    this.activeTabId = tabId;
+    this.analysisSlot = targetTab.slot;
+    this.selectedFiles = [...targetTab.selectedFiles];
+
+    if (targetTab.formValue && this.analysisForm) {
+      this.restoreFormValue(targetTab.formValue);
+    }
+
+    this.resultsUpdated$.next();
+  }
+
+  closeTab(tabId: string) {
+    if (this.tabs.length <= 1) {
+      this.analysisSlot = emptySlot();
+      this.selectedFiles = [];
+      if (this.tabs[0]) {
+        this.tabs[0].slot = this.analysisSlot;
+        this.tabs[0].selectedFiles = [];
+      }
+      this.resultsUpdated$.next();
+      return;
+    }
+
+    const idx = this.tabs.findIndex(t => t.id === tabId);
+    if (idx === -1) return;
+
+    const isActive = (this.activeTabId === tabId);
+    this.tabs.splice(idx, 1);
+
+    if (isActive) {
+      const nextTabIdx = Math.min(idx, this.tabs.length - 1);
+      const nextTab = this.tabs[nextTabIdx];
+      this.activeTabId = '';
+      this.selectTab(nextTab.id);
+    }
+  }
+
+  renameTab(tabId: string, newName: string) {
+    const target = this.tabs.find(t => t.id === tabId);
+    if (target && newName.trim()) {
+      target.name = newName.trim();
+    }
+  }
+
+  private restoreFormValue(val: any) {
+    if (!val || !this.analysisForm) return;
+    this.analysisForm.patchValue({
+      interestRegion: val.interestRegion ?? 90,
+      phredThreshold: val.phredThreshold ?? 20,
+      rescueThreshold: val.rescueThreshold ?? 20,
+      marginPercent: val.marginPercent ?? 10,
+      indelPercent: val.indelPercent ?? 2,
+      cutSiteDistanceWeight: val.cutSiteDistanceWeight ?? 0,
+      cutSiteExclusionFlank: val.cutSiteExclusionFlank ?? 0,
+      analyzeAmbiguous: val.analyzeAmbiguous ?? false,
+      rescueAmbiguous: val.rescueAmbiguous ?? false
+    }, { emitEvent: false });
+
+    if (Array.isArray(val.genes)) {
+      while (this.geneBlocks.length > 0) {
+        this.geneBlocks.removeAt(0);
+      }
+      val.genes.forEach((g: any) => {
+        const gGroup = this.createGeneGroup();
+        gGroup.patchValue({ gene_name: g.gene_name, gene_reference: g.gene_reference }, { emitEvent: false });
+
+        const tArray = gGroup.get('geneTargets') as FormArray;
+        while (tArray.length > 0) tArray.removeAt(0);
+
+        if (Array.isArray(g.geneTargets)) {
+          g.geneTargets.forEach((t: any) => {
+            const tGroup = this.createGeneTargetGroup();
+            tGroup.patchValue({ target_id: t.target_id, gRNA: t.gRNA }, { emitEvent: false });
+            tArray.push(tGroup);
+          });
+        } else {
+          tArray.push(this.createGeneTargetGroup());
+        }
+        this.geneBlocks.push(gGroup);
+      });
+
+      if (this.geneBlocks.length === 0) {
+        this.addGene();
+      }
+    }
+  }
+
+  // ── Form ──
   private initForm() {
     this.analysisForm = this.fb.group({
       interestRegion: [90, [Validators.required, Validators.min(10), Validators.max(500)]],
@@ -183,6 +334,8 @@ export class AppStateService {
       rescueThreshold: [20, [Validators.required, Validators.min(1), Validators.max(1000)]],
       marginPercent: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
       indelPercent: [2, [Validators.required, Validators.min(0), Validators.max(100)]],
+      cutSiteDistanceWeight: [0, [Validators.required, Validators.min(0), Validators.max(10)]],
+      cutSiteExclusionFlank: [0, [Validators.required, Validators.min(0), Validators.max(10)]],
       analyzeAmbiguous: [false], rescueAmbiguous: [false],
       genes: this.fb.array([this.createGeneGroup()])
     });
@@ -238,14 +391,14 @@ export class AppStateService {
     });
   }
 
-  // ── Logging ────────────────────────────────────────────────────────────────
+  // ── Logging ──
   addLog(msg: string) {
     const ts = new Date().toLocaleTimeString();
     this.debugLogs.unshift(`[${ts}] ${msg}`);
     if (this.debugLogs.length > 25) this.debugLogs.pop();
   }
 
-  // ── Progress ───────────────────────────────────────────────────────────────
+  // ── Progress ──
   setProgress(target: number, stage: string) {
     this.ngZone.run(() => {
       this.progress$.next(target);
@@ -257,139 +410,80 @@ export class AppStateService {
         this.ngZone.run(() => {
           const current = this.progressDisplay$.value;
           const goal = this.progress$.value;
-          const diff = goal - current;
-
-          if (Math.abs(diff) < 0.5) {
+          if (current < goal) {
+            this.progressDisplay$.next(Math.min(goal, current + 2));
+          } else if (current > goal) {
             this.progressDisplay$.next(goal);
-            if (this.progressAnimId) { clearInterval(this.progressAnimId); this.progressAnimId = null; }
-          } else {
-            this.progressDisplay$.next(current + diff * 0.2);
+          } else if (current === 100 && goal === 100) {
+            clearInterval(this.progressAnimId);
+            this.progressAnimId = null;
           }
         });
-      }, 60);
+      }, 15);
     });
   }
 
-  setBenchProgress(target: number, stage: string) {
-    this.ngZone.run(() => {
-      this.benchProgress$.next(target);
-      this.benchStage$.next(stage);
-
-      if (this.benchProgressAnimId) { clearInterval(this.benchProgressAnimId); this.benchProgressAnimId = null; }
-
-      this.benchProgressAnimId = setInterval(() => {
-        this.ngZone.run(() => {
-          const current = this.benchProgressDisplay$.value;
-          const goal = this.benchProgress$.value;
-          const diff = goal - current;
-
-          if (Math.abs(diff) < 0.3) {
-            this.benchProgressDisplay$.next(goal);
-            if (this.benchProgressAnimId) { clearInterval(this.benchProgressAnimId); this.benchProgressAnimId = null; }
-          } else {
-            this.benchProgressDisplay$.next(current + diff * 0.25);
-          }
-        });
-      }, 64);
-    });
-  }
-
-  // ── Analysis execution ─────────────────────────────────────────────────────
-  runAnalysis(formData: FormData) {
+  // ── Local Mode Analysis ──
+  runLocalAnalysis(files: File[], genesPayload: any[], params: any) {
+    this.saveCurrentTabState();
     this.activateSlot('analysis');
     this.isLoading = true;
     this.fileProgress = {};
-    this.setProgress(0, 'Preparing upload…');
-    this.destroy$ = new Subject<void>();
-    
-    this.analysisService.runAnalysisWithProgress(formData).subscribe({
-      next: (event: any) => {
+    this.setProgress(0, 'Preparing local analysis…');
+
+    const analysisParams = {
+      phredThreshold: params.phredThreshold,
+      indelThreshold: params.indelThreshold,
+      marginThreshold: params.marginThreshold,
+      windowSize: params.windowSize,
+      analyzeAmbiguous: params.analyzeAmbiguous,
+      rescueAmbiguous: params.rescueAmbiguous,
+      rescueThreshold: params.rescueThreshold,
+      cutSiteDistanceWeight: params.cutSiteDistanceWeight ?? 0,
+      cutSiteExclusionFlank: params.cutSiteExclusionFlank ?? 0,
+    };
+
+    this.localAnalysisSub = this.localAnalysisService.startAnalysis(
+      files, genesPayload, analysisParams
+    ).subscribe({
+      next: (event: LocalAnalysisEvent) => {
         this.ngZone.run(() => {
-          if (event.type === 1) { // HttpEventType.UploadProgress
-            if (event.total) {
-              const pct = Math.round((event.loaded / event.total) * 100);
-              if (pct === 100) {
-                this.setProgress(100, 'Upload finished! Initializing analysis on server…');
-              } else {
-                this.setProgress(pct, `Uploading FASTQ files: ${pct}%`);
-              }
-            }
-          } else if (event.type === 4) { // HttpEventType.Response
-            const res = event.body;
-            this.addLog(`Upload complete response received: ${JSON.stringify(res)}`);
-            if (res && res.task_id) {
-              this.currentTaskId = res.task_id;
-              this.setProgress(100, 'Upload complete! Queueing task…');
-              this.startPolling(res.task_id);
-            } else {
-              this.error = 'Invalid server response: task ID is missing.';
-              this.isLoading = false;
-            }
+          if (event.type === 'progress') {
+            this.setProgress(event.percent, event.stage);
+            this.fileProgress = event.fileProgress || {};
+          } else if (event.type === 'result') {
+            this.handleAnalysisComplete(event.payload, () => {
+              this.setProgress(100, 'Local Analysis Complete ✓');
+              setTimeout(() => {
+                this.ngZone.run(() => { this.isLoading = false; });
+              }, 800);
+            });
+          } else if (event.type === 'error') {
+            this.error = event.message;
+            this.isLoading = false;
           }
         });
       },
       error: (err) => {
         this.ngZone.run(() => {
-          this.error = err?.error?.detail || err?.message || 'Failed to start analysis.';
+          this.error = err?.message || 'Local analysis failed.';
           this.isLoading = false;
         });
-      }
-    });
-  }
-
-  private startPolling(taskId: string) {
-    timer(0, 1200).pipe(takeUntil(this.destroy$), switchMap(() => this.analysisService.getTaskStatus(taskId))).subscribe({
-      next: (status: TaskStatus) => {
-        this.ngZone.run(() => {
-          this.parseProgressStage(status.stage || '', status.progress || 0);
-          this.fileProgress = status.file_progress || {};
-          if (status.status === 'failed') { this.error = status.error || 'Backend analysis failed.'; this.isLoading = false; this.destroy$.next(); }
-          else if (status.progress === 100 && status.result) {
-            this.handleAnalysisComplete(status.result, () => { this.setProgress(100, 'Analysis Complete ✓'); setTimeout(() => { this.ngZone.run(() => { this.isLoading = false; }); }, 800); });
-            this.destroy$.next();
-          }
-        });
       },
-      error: () => { this.ngZone.run(() => { this.error = 'Lost connection to status endpoint.'; this.isLoading = false; this.destroy$.next(); }); }
     });
-  }
-
-  private parseProgressStage(stage: string, percent: number) {
-    const info: ProgressInfo = { fileIndex: 0, fileTotal: 0, geneIndex: 0, geneTotal: 0, targetIndex: 0, targetTotal: 0, message: stage };
-    const m = stage.match(/sample\s+(\d+)\s+of\s+(\d+)/i);
-    if (m) { info.fileIndex = parseInt(m[1]); info.fileTotal = parseInt(m[2]); }
-    this.progressInfo = info; this.setProgress(percent, stage);
   }
 
   cancelAnalysis() {
-    if (this.currentTaskId) {
-      this.analysisService.cancelTask(this.currentTaskId).subscribe({
-        next: () => {
-          this.ngZone.run(() => {
-            this.isLoading = false;
-            this.destroy$.next();
-            this.setProgress(0, '');
-            this.currentTaskId = null;
-            this.error = 'Analysis was canceled by the user.';
-          });
-        },
-        error: (err) => {
-          console.error('Failed to cancel task:', err);
-        }
-      });
-    } else {
-      // If still uploading or task hasn't started polling
-      this.ngZone.run(() => {
-        this.isLoading = false;
-        this.destroy$.next();
-        this.setProgress(0, '');
-        this.currentTaskId = null;
-        this.error = 'Analysis upload was canceled.';
-      });
+    if (this.localAnalysisSub) {
+      this.localAnalysisSub.unsubscribe();
+      this.localAnalysisSub = null;
     }
+    this.localAnalysisService.cancelAnalysis();
+    this.isLoading = false;
+    this.setProgress(0, 'Analysis cancelled.');
   }
 
-  // ── Handle completed response ──────────────────────────────────────────────
+  // ── Handle completed response ──
   handleAnalysisComplete(res: any, callback?: () => void) {
     const allResults: any[] = res?.results ?? [];
     this.isMultiReference = true; this.result = null; this.multiFileCount = allResults.length;
@@ -467,10 +561,6 @@ export class AppStateService {
     this.selectedRowIndex = 0;
   }
 
-  /**
-   * Unified loader to restore state from a package containing params and scopes.
-   * Used by both Excel Import and My Data Load.
-   */
   loadResultData(data: { params: any, scopes: any[] }) {
     this.ngZone.run(() => {
       this.lastRunParams = data.params;
@@ -533,14 +623,6 @@ export class AppStateService {
     if (this.progressAnimId) { clearInterval(this.progressAnimId); this.progressAnimId = null; }
   }
 
-  clearBenchProgress() {
-    this.benchProgress$.next(0);
-    this.benchProgressDisplay$.next(0);
-    this.benchStage$.next('');
-    if (this.benchProgressAnimId) { clearInterval(this.benchProgressAnimId); this.benchProgressAnimId = null; }
-  }
-
-  /** Reset analysis slot completely — used by "New Analysis" button */
   newAnalysis() {
     this.activateSlot('analysis');
     this.analysisSlot = emptySlot();
@@ -550,7 +632,6 @@ export class AppStateService {
     this.selectedFiles = [];
   }
 
-  /** Reset viewer slot completely — used by "New Viewer" button */
   newViewer() {
     this.exitCuratedView();
     this.activateSlot('viewer');
@@ -559,49 +640,47 @@ export class AppStateService {
     this.clearProgress();
   }
 
-  // ── Curation Methods ────────────────────────────────────────────────────────
-
-  enterCuratedView() {
+  // ── Curation / Filter ──
+  enterCuratedView(name?: string) {
     if (this.isCuratedView) return;
-    // Snapshot the current viewer slot
     this.originalSlotSnapshot = JSON.parse(JSON.stringify(this.slot));
     this.curationConfig = emptyCurationConfig();
     this.curationConfig.sourceResultTitle = this.lastRunParams?.dataType || 'Analysis';
-    this.curationConfig.curatedViewName = `Curated — ${new Date().toLocaleDateString()}`;
+    this.curationConfig.curatedViewName = name || `Curated — ${new Date().toLocaleDateString()}`;
     this.isCuratedView = true;
     this.recalculateCuratedView();
   }
 
-  /** Exit curated view: restore original state */
   exitCuratedView() {
-    if (!this.isCuratedView) return;
-    if (this.originalSlotSnapshot) {
-      // Restore all result data from the snapshot
-      const snap = this.originalSlotSnapshot;
-      this.genes = snap.genes;
-      this.mergedGenes = snap.mergedGenes;
-      this.ambiguousReadCount = snap.ambiguousReadCount;
-      this.totalMergedAmbiguous = snap.totalMergedAmbiguous;
-      this.totalRawReads = snap.totalRawReads;
-      this.totalMergedRawReads = snap.totalMergedRawReads;
-      this.totalPhredPassed = snap.totalPhredPassed;
-      this.totalMergedPhredPassed = snap.totalMergedPhredPassed;
-      this.totalAnchorMatched = snap.totalAnchorMatched;
-      this.totalMergedAnchorMatched = snap.totalMergedAnchorMatched;
-      this.allFileResults = snap.allFileResults;
-      this.multiFileCount = snap.multiFileCount;
-      this.selectedScopeIndex = snap.selectedScopeIndex;
-      this.selectedGeneIndex = snap.selectedGeneIndex;
-      this.selectedRowIndex = 0;
-    }
-    this.isCuratedView = false;
+    if (!this.isCuratedView || !this.originalSlotSnapshot) return;
+    const snap = this.originalSlotSnapshot;
+    this.genes = snap.genes;
+    this.mergedGenes = snap.mergedGenes;
+    this.ambiguousReadCount = snap.ambiguousReadCount;
+    this.totalMergedAmbiguous = snap.totalMergedAmbiguous;
+    this.totalRawReads = snap.totalRawReads;
+    this.totalMergedRawReads = snap.totalMergedRawReads;
+    this.totalPhredPassed = snap.totalPhredPassed;
+    this.totalMergedPhredPassed = snap.totalMergedPhredPassed;
+    this.totalAnchorMatched = snap.totalAnchorMatched;
+    this.totalMergedAnchorMatched = snap.totalMergedAnchorMatched;
+    this.allFileResults = snap.allFileResults;
     this.curationConfig = null;
     this.originalSlotSnapshot = null;
+    this.isCuratedView = false;
     this.updateVisibleGenes();
     this.resultsUpdated$.next();
   }
 
-  /** Toggle file exclusion by file name */
+  resetAnalysis() {
+    this.genes = [];
+    this.isMultiReference = false;
+    this.destroyCharts();
+    this.clearProgress();
+    this.isLoading = false;
+    this.error = null;
+  }
+
   toggleFileExclusion(fileName: string) {
     if (!this.curationConfig) return;
     const idx = this.curationConfig.excludedFiles.indexOf(fileName);
@@ -610,7 +689,6 @@ export class AppStateService {
     this.recalculateCuratedView();
   }
 
-  /** Toggle gene exclusion by gene name */
   toggleGeneExclusion(geneName: string) {
     if (!this.curationConfig) return;
     const idx = this.curationConfig.excludedGenes.indexOf(geneName);
@@ -619,7 +697,6 @@ export class AppStateService {
     this.recalculateCuratedView();
   }
 
-  /** Toggle target exclusion by gene::target_id key */
   toggleTargetExclusion(geneName: string, tgtId: string) {
     if (!this.curationConfig) return;
     const key = targetKey(geneName, tgtId);
@@ -629,7 +706,6 @@ export class AppStateService {
     this.recalculateCuratedView();
   }
 
-  /** Toggle annotation group exclusion by gene::target::read_inner key */
   toggleGroupExclusion(geneName: string, tgtId: string, readInner: string) {
     if (!this.curationConfig) return;
     const key = groupKey(geneName, tgtId, readInner);
@@ -639,7 +715,6 @@ export class AppStateService {
     this.recalculateCuratedView();
   }
 
-  /** Recompute curated results from snapshot + config */
   recalculateCuratedView() {
     if (!this.originalSlotSnapshot || !this.curationConfig) return;
     const snap = this.originalSlotSnapshot;
@@ -652,7 +727,6 @@ export class AppStateService {
       snap.totalMergedAnchorMatched,
       this.curationConfig
     );
-    // Apply curated output to active slot
     this.mergedGenes = out.mergedGenes;
     this.totalMergedAmbiguous = out.totalMergedAmbiguous;
     this.totalMergedRawReads = out.totalMergedRawReads;
@@ -665,33 +739,91 @@ export class AppStateService {
     this.resultsUpdated$.next();
   }
 
-  /** Check if a file is excluded */
   isFileExcluded(fileName: string): boolean {
     return this.curationConfig?.excludedFiles.includes(fileName) ?? false;
   }
 
-  /** Check if a gene is excluded */
   isGeneExcluded(geneName: string): boolean {
     return this.curationConfig?.excludedGenes.includes(geneName) ?? false;
   }
 
-  /** Check if a target is excluded */
   isTargetExcluded(geneName: string, tgtId: string): boolean {
     return this.curationConfig?.excludedTargets.includes(targetKey(geneName, tgtId)) ?? false;
   }
 
-  /** Check if an annotation group is excluded */
   isGroupExcluded(geneName: string, tgtId: string, readInner: string): boolean {
     return this.curationConfig?.excludedGroups.includes(groupKey(geneName, tgtId, readInner)) ?? false;
   }
 
-  /** Get export data from the original (un-curated) slot */
+  // ── Excel Export Functions ──
+  getExportData() {
+    if (!this.lastRunParams || this.mergedGenes.length === 0) return null;
+
+    const scopes: any[] = [];
+    const totalAssigned = this.mergedGenes
+      .filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived)
+      .reduce((s, g) => s + g.assigned_read_count, 0);
+
+    const cleanMergedGenes = JSON.parse(JSON.stringify(this.mergedGenes));
+    if (this.isCuratedView && this.curationConfig) {
+      this.stripExcludedGroups(cleanMergedGenes);
+    }
+
+    scopes.push({
+      sheetName: 'Merged',
+      readFlow: {
+        rawReads: this.totalMergedRawReads,
+        phredPassed: this.totalMergedPhredPassed,
+        anchorMatched: this.totalMergedAnchorMatched,
+        usableForAssignment: this.totalMergedAnchorMatched,
+        assignedReads: totalAssigned,
+        ambiguousReads: this.totalMergedAmbiguous
+      },
+      genes: cleanMergedGenes
+    });
+
+    for (let i = 0; i < this.allFileResults.length; i++) {
+      const fr = this.allFileResults[i];
+      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
+      
+      if (this.isCuratedView && this.curationConfig && this.curationConfig.excludedFiles.includes(fn)) {
+        continue;
+      }
+
+      const mrd = fr?.multi_reference_result;
+      if (!mrd) continue;
+      
+      const fg = JSON.parse(JSON.stringify(mrd.genes || []));
+      if (this.isCuratedView && this.curationConfig) {
+        this.stripExcludedGroups(fg);
+      }
+
+      const fa = fg.filter((g: any) => !g.is_ambiguous_derived && !g.is_rescued_derived)
+                   .reduce((s: number, g: any) => s + g.assigned_read_count, 0);
+
+      scopes.push({
+        sheetName: fn,
+        readFlow: {
+          rawReads: mrd.debug?.total_reads_parsed ?? 0,
+          phredPassed: mrd.debug?.phred_passed_count ?? 0,
+          anchorMatched: mrd.debug?.anchor_matched_count ?? 0,
+          usableForAssignment: mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0,
+          assignedReads: fa,
+          ambiguousReads: mrd.ambiguous_read_count ?? 0
+        },
+        genes: fg
+      });
+    }
+
+    return { params: this.lastRunParams, scopes };
+  }
+
   getOriginalExportData() {
     if (!this.originalSlotSnapshot) return null;
     const snap = this.originalSlotSnapshot;
     if (!snap.lastRunParams || snap.mergedGenes.length === 0) return null;
 
-    const scopes: ScopeData[] = [];
+    const scopes: any[] = [];
     const totalAssigned = snap.mergedGenes
       .filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived)
       .reduce((s, g) => s + g.assigned_read_count, 0);
@@ -711,12 +843,12 @@ export class AppStateService {
 
     for (let i = 0; i < snap.allFileResults.length; i++) {
       const fr = snap.allFileResults[i];
-      const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined;
+      const mrd = fr?.multi_reference_result;
       if (!mrd) continue;
       const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
       const fg = mrd.genes || [];
-      const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived)
-                   .reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
+      const fa = fg.filter((g: any) => !g.is_ambiguous_derived && !g.is_rescued_derived)
+                   .reduce((s: number, g: any) => s + g.assigned_read_count, 0);
       scopes.push({
         sheetName: fn,
         readFlow: {
@@ -733,178 +865,6 @@ export class AppStateService {
     return { params: snap.lastRunParams, scopes };
   }
 
-  /** Export the original (un-curated) result to Excel */
-  async exportOriginalToExcel() {
-    const data = this.getOriginalExportData();
-    if (!data) {
-      // Fallback: if not in curated mode, just export normally
-      return this.exportToExcel();
-    }
-    try {
-      this.addLog('Generating original result export...');
-      const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(data.params, data.scopes, images);
-      this.addLog('Original result Excel exported.');
-    } catch (e: any) {
-      console.error('Original export failed:', e);
-      this.addLog(`Original export failed: ${e.message}`);
-    }
-  }
-
-  /** Export the curated result to Excel (with curation metadata) */
-  async exportCuratedToExcel() {
-    const data = this.getExportData();
-    if (!data) return;
-    try {
-      this.addLog('Generating curated result export...');
-      const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(
-        data.params, data.scopes, images, this.curationConfig ?? undefined
-      );
-      this.addLog('Curated result Excel exported.');
-    } catch (e: any) {
-      console.error('Curated export failed:', e);
-      this.addLog(`Curated export failed: ${e.message}`);
-    }
-  }
-
-  resetAnalysis() {
-    this.genes = [];
-    this.isMultiReference = false;
-    this.destroyCharts();
-    this.clearProgress();
-    this.isLoading = false;
-    this.error = null;
-  }
-
-  // ── Benchmark ──────────────────────────────────────────────────────────────
-  addBenchRow() { this.benchRows.push({ file: null, geneName: '', targetName: '', referenceSequence: '', grnaSequence: '' }); }
-  removeBenchRow(i: number) { if (this.benchRows.length > 1) this.benchRows.splice(i, 1); }
-
-  runBenchmark(fd: FormData, subset: 'train' | 'test') {
-    this.benchIsLoading = true; this.clearBenchProgress(); this.benchDestroy$.next();
-    this.benchDestroy$ = new Subject<void>();
-    this.setBenchProgress(0, `Preparing ${subset} upload…`);
-    
-    this.analysisService.runBenchmarkWithProgress(fd).subscribe({
-      next: (event: any) => {
-        this.ngZone.run(() => {
-          if (event.type === 1) { // HttpEventType.UploadProgress
-            if (event.total) {
-              const pct = Math.round((event.loaded / event.total) * 100);
-              if (pct === 100) {
-                this.setBenchProgress(100, 'Upload finished! Initializing benchmark on server…');
-              } else {
-                this.setBenchProgress(pct, `Uploading benchmark files: ${pct}%`);
-              }
-            }
-          } else if (event.type === 4) { // HttpEventType.Response
-            const res = event.body;
-            if (res && res.task_id) {
-              this.setBenchProgress(100, 'Upload complete! Queued — polling…');
-              this.startBenchPolling(res.task_id, subset);
-            } else {
-              this.benchError = 'Invalid server response: task ID is missing.';
-              this.benchIsLoading = false;
-              this.clearBenchProgress();
-            }
-          }
-        });
-      },
-      error: (err) => {
-        this.ngZone.run(() => {
-          this.benchError = err?.error?.detail || err?.message || 'Failed to run benchmark.';
-          this.benchIsLoading = false;
-          this.clearBenchProgress();
-        });
-      }
-    });
-  }
-
-  private startBenchPolling(taskId: string, subset: 'train' | 'test') {
-    timer(0, 1200).pipe(takeUntil(this.benchDestroy$), switchMap(() => this.analysisService.getTaskStatus(taskId))).subscribe({
-      next: (status) => this.ngZone.run(() => {
-        this.setBenchProgress(status.progress || 0, status.stage || '');
-        if (status.status === 'failed') { this.benchError = status.error || 'Benchmark failed.'; this.benchIsLoading = false; this.clearBenchProgress(); this.benchDestroy$.next(); }
-        else if (status.progress === 100 && status.result) {
-          if (subset === 'train') this.trainResult = status.result; else this.testResult = status.result;
-          this.benchIsLoading = false; this.benchProgressDisplay$.next(100); this.benchDestroy$.next();
-        }
-      }),
-      error: () => this.ngZone.run(() => { this.benchError = 'Lost connection.'; this.benchIsLoading = false; this.clearBenchProgress(); this.benchDestroy$.next(); })
-    });
-  }
-
-  /**
-   * Helper to build the same data structure used by Excel export.
-   * This includes both params and processed scopes (Merged + Per-file).
-   */
-  getExportData() {
-    if (!this.lastRunParams || this.mergedGenes.length === 0) return null;
-
-    const scopes: ScopeData[] = [];
-    const totalAssigned = this.mergedGenes
-      .filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived)
-      .reduce((s, g) => s + g.assigned_read_count, 0);
-
-    // 1. Merged scope
-    // We deep clone the genes so we can safely remove excluded groups for the export
-    const cleanMergedGenes = JSON.parse(JSON.stringify(this.mergedGenes));
-    if (this.isCuratedView && this.curationConfig) {
-      this.stripExcludedGroups(cleanMergedGenes);
-    }
-
-    scopes.push({
-      sheetName: 'Merged',
-      readFlow: {
-        rawReads: this.totalMergedRawReads,
-        phredPassed: this.totalMergedPhredPassed,
-        anchorMatched: this.totalMergedAnchorMatched,
-        usableForAssignment: this.totalMergedAnchorMatched,
-        assignedReads: totalAssigned,
-        ambiguousReads: this.totalMergedAmbiguous
-      },
-      genes: cleanMergedGenes
-    });
-
-    // 2. Individual file scopes
-    for (let i = 0; i < this.allFileResults.length; i++) {
-      const fr = this.allFileResults[i];
-      const fn = (fr.fastq_file as string || '').split('/').pop() || `File${i + 1}`;
-      
-      // Skip excluded files if in curated view
-      if (this.isCuratedView && this.curationConfig && this.curationConfig.excludedFiles.includes(fn)) {
-        continue;
-      }
-
-      const mrd = fr?.multi_reference_result as MultiReferenceResponse | undefined;
-      if (!mrd) continue;
-      
-      const fg = JSON.parse(JSON.stringify(mrd.genes || []));
-      if (this.isCuratedView && this.curationConfig) {
-        this.stripExcludedGroups(fg);
-      }
-
-      const fa = fg.filter((g: GeneResult) => !g.is_ambiguous_derived && !g.is_rescued_derived)
-                   .reduce((s: number, g: GeneResult) => s + g.assigned_read_count, 0);
-
-      scopes.push({
-        sheetName: fn,
-        readFlow: {
-          rawReads: mrd.debug?.total_reads_parsed ?? 0,
-          phredPassed: mrd.debug?.phred_passed_count ?? 0,
-          anchorMatched: mrd.debug?.anchor_matched_count ?? 0,
-          usableForAssignment: mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0,
-          assignedReads: fa,
-          ambiguousReads: mrd.ambiguous_read_count ?? 0
-        },
-        genes: fg
-      });
-    }
-
-    return { params: this.lastRunParams, scopes };
-  }
-
   private stripExcludedGroups(genes: GeneResult[]) {
     if (!this.curationConfig) return;
     for (const g of genes) {
@@ -919,7 +879,7 @@ export class AppStateService {
     }
   }
 
-  private async generateChartImagesForExport(scopes: ScopeData[]): Promise<{ [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }> {
+  private async generateChartImagesForExport(scopes: any[]): Promise<{ [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }> {
     const allImages: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } } = {};
     const canvas = document.createElement('canvas');
     canvas.width = 600;
@@ -931,11 +891,11 @@ export class AppStateService {
       allImages[scope.sheetName] = {};
       
       // 1. Generate Summary Bar Chart
-      const barLabels = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => `${g.gene} (${t.target_id})`) || []);
-      const barDataNoIndel = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.no_indel_pct ?? 0) || []);
-      const barDataSub = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.substitution_pct ?? 0) || []);
-      const barDataIn = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.in_frame_pct ?? 0) || []);
-      const barDataOut = scope.genes.flatMap(g => g.analysis_result?.targets?.map(t => t.summary?.out_of_frame_pct ?? 0) || []);
+      const barLabels = scope.genes.flatMap((g: any) => g.analysis_result?.targets?.map((t: any) => `${g.gene} (${t.target_id})`) || []);
+      const barDataNoIndel = scope.genes.flatMap((g: any) => g.analysis_result?.targets?.map((t: any) => t.summary?.no_indel_pct ?? 0) || []);
+      const barDataSub = scope.genes.flatMap((g: any) => g.analysis_result?.targets?.map((t: any) => t.summary?.substitution_pct ?? 0) || []);
+      const barDataIn = scope.genes.flatMap((g: any) => g.analysis_result?.targets?.map((t: any) => t.summary?.in_frame_pct ?? 0) || []);
+      const barDataOut = scope.genes.flatMap((g: any) => g.analysis_result?.targets?.map((t: any) => t.summary?.out_of_frame_pct ?? 0) || []);
 
       const barChart = new Chart(ctx, {
         type: 'bar',
@@ -949,7 +909,7 @@ export class AppStateService {
           ]
         },
         options: { animation: false, responsive: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
-      });
+      } as any);
       allImages[scope.sheetName]['SUMMARY'] = { 'bar': canvas.toDataURL('image/png') };
       barChart.destroy();
 
@@ -971,13 +931,13 @@ export class AppStateService {
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Mutation Distribution (${gene.gene} - ${target.target_id})` } } }
-          });
+          } as any);
           const chartKey = `${gene.gene}::${target.target_id}`;
           if (!allImages[scope.sheetName][chartKey]) allImages[scope.sheetName][chartKey] = {};
           allImages[scope.sheetName][chartKey]['pie'] = canvas.toDataURL('image/png');
           pieChart.destroy();
 
-          // Donut Chart: substitutions are a separate category, not silently merged.
+          // Donut Chart
           const edited = (s.out_of_frame_pct ?? 0) + (s.in_frame_pct ?? 0);
           const unedited = s.no_indel_pct ?? Math.max(0, 100 - edited - (s.substitution_pct ?? 0));
           const substitution = s.substitution_pct ?? 0;
@@ -991,7 +951,7 @@ export class AppStateService {
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Indel Editing (${gene.gene} - ${target.target_id})` } } }
-          });
+          } as any);
           allImages[scope.sheetName][chartKey]['donut'] = canvas.toDataURL('image/png');
           donutChart.destroy();
         }
@@ -1007,11 +967,468 @@ export class AppStateService {
     try {
       this.addLog('Generating chart images for export...');
       const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(data.params, data.scopes, images);
+      await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
       this.addLog('Excel exported with all diagrams.');
     } catch (e: any) {
       console.error('Excel export failed:', e);
       this.addLog(`Excel export failed: ${e.message}`);
     }
+  }
+
+  async exportOriginalToExcel() {
+    const data = this.getOriginalExportData();
+    if (!data) {
+      return this.exportToExcel();
+    }
+    try {
+      this.addLog('Generating original result export...');
+      const images = await this.generateChartImagesForExport(data.scopes);
+      await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      this.addLog('Original result Excel exported.');
+    } catch (e: any) {
+      console.error('Original export failed:', e);
+      this.addLog(`Original export failed: ${e.message}`);
+    }
+  }
+
+  async exportCuratedToExcel() {
+    const data = this.getExportData();
+    if (!data) return;
+    try {
+      this.addLog('Generating curated result export...');
+      const images = await this.generateChartImagesForExport(data.scopes);
+      await this.excelExportService.exportToExcel(
+        data.params as any, data.scopes, images, this.curationConfig ?? undefined
+      );
+      this.addLog('Curated result Excel exported.');
+    } catch (e: any) {
+      console.error('Curated export failed:', e);
+      this.addLog(`Curated export failed: ${e.message}`);
+    }
+  }
+
+  isExportingFastq = false;
+  exportStatus$ = new BehaviorSubject<{ active: boolean; percent: number; stage: string; title: string } | null>(null);
+
+  async downloadGroupFastq(group: any) {
+    if (!this.selectedTarget || !this.selectedFiles.length) return;
+    this.isExportingFastq = true;
+    this.exportStatus$.next({ active: true, percent: 10, stage: 'Reading FASTQ file...', title: `Exporting Group ${group.group_rank} FASTQ` });
+
+    try {
+      let filesToProcess: File[] = [];
+      if (this.selectedScopeIndex === -1) {
+        filesToProcess = this.selectedFiles;
+      } else {
+        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
+      }
+
+      const blobs: Blob[] = [];
+      const target = this.selectedTarget;
+      const readInner = group.read_inner;
+      const params = this.lastRunParams || { phredThreshold: 10 };
+
+      for (const file of filesToProcess) {
+        if (!file) continue;
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          this.localAnalysisService.exportGroupFastq(file, target, readInner, params).subscribe({
+            next: (event: any) => {
+              if (event.type === 'progress') {
+                this.exportStatus$.next({ active: true, percent: event.percent, stage: event.stage, title: `Exporting Group ${group.group_rank} FASTQ` });
+              } else if (event.type === 'export-group-fastq-result') {
+                resolve(event.payload);
+              } else if (event.type === 'error') {
+                reject(new Error(event.message));
+              }
+            },
+            error: (err: any) => reject(err)
+          });
+        });
+        blobs.push(blob);
+      }
+
+      if (blobs.length > 0) {
+        const combinedBlob = new Blob(blobs, { type: 'text/plain' });
+        const url = window.URL.createObjectURL(combinedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${target.target_id}_group_${group.group_rank}_reads.fastq`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.addLog(`Successfully exported FASTQ for group ${group.group_rank}.`);
+      } else {
+        this.addLog('No FASTQ data generated.');
+      }
+    } catch (e: any) {
+       console.error("Export failed:", e);
+       this.addLog("Failed to export FASTQ: " + e.message);
+       alert("Failed to export FASTQ: " + e.message);
+    } finally {
+       this.isExportingFastq = false;
+       this.exportStatus$.next(null);
+    }
+  }
+
+  async downloadAllTargetFastq(target: any) {
+    if (!target || !this.selectedFiles.length) return;
+    this.isExportingFastq = true;
+    this.exportStatus$.next({ active: true, percent: 10, stage: 'Reading FASTQ file...', title: `Exporting All Reads (${target.target_id})` });
+
+    try {
+      let filesToProcess: File[] = [];
+      if (this.selectedScopeIndex === -1) {
+        filesToProcess = this.selectedFiles;
+      } else {
+        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
+      }
+
+      const blobs: Blob[] = [];
+      const params = this.lastRunParams || { phredThreshold: 10 };
+
+      for (const file of filesToProcess) {
+        if (!file) continue;
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          this.localAnalysisService.exportGroupFastq(file, target, '', params).subscribe({
+            next: (event: any) => {
+              if (event.type === 'progress') {
+                this.exportStatus$.next({ active: true, percent: event.percent, stage: event.stage, title: `Exporting All Reads (${target.target_id})` });
+              } else if (event.type === 'export-group-fastq-result') {
+                resolve(event.payload);
+              } else if (event.type === 'error') {
+                reject(new Error(event.message));
+              }
+            },
+            error: (err: any) => reject(err)
+          });
+        });
+        blobs.push(blob);
+      }
+
+      if (blobs.length > 0) {
+        const combinedBlob = new Blob(blobs, { type: 'text/plain' });
+        const url = window.URL.createObjectURL(combinedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${target.target_id}_all_reads.fastq`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.addLog(`Successfully exported all FASTQ reads for target ${target.target_id}.`);
+      }
+    } catch (e: any) {
+      console.error('All target FASTQ export failed:', e);
+      alert('Failed to export target FASTQ: ' + e.message);
+    } finally {
+      this.isExportingFastq = false;
+      this.exportStatus$.next(null);
+    }
+  }
+
+  async openGroupInSequenceWorkspace(group: any, target: any) {
+    if (!target || !group || !this.selectedFiles.length) return;
+    this.isExportingFastq = true;
+    this.exportStatus$.next({ active: true, percent: 10, stage: 'Preparing Sequence Workspace...', title: `Opening Group ${group.group_rank} in Workspace` });
+    this.switchMainTab('workspace');
+
+    try {
+      let filesToProcess: File[] = [];
+      if (this.selectedScopeIndex === -1) {
+        filesToProcess = this.selectedFiles;
+      } else {
+        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
+      }
+
+      const blobs: Blob[] = [];
+      const readInner = group.read_inner;
+      const params = this.lastRunParams || { phredThreshold: 10 };
+
+      for (const file of filesToProcess) {
+        if (!file) continue;
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          this.localAnalysisService.exportGroupFastq(file, target, readInner, params).subscribe({
+            next: (event: any) => {
+              if (event.type === 'progress') {
+                this.exportStatus$.next({ active: true, percent: event.percent, stage: event.stage, title: `Opening Group ${group.group_rank} in Workspace` });
+              } else if (event.type === 'export-group-fastq-result') {
+                resolve(event.payload);
+              } else if (event.type === 'error') {
+                reject(new Error(event.message));
+              }
+            },
+            error: (err: any) => reject(err)
+          });
+        });
+        blobs.push(blob);
+      }
+
+      if (blobs.length > 0) {
+        const text = await new Blob(blobs, { type: 'text/plain' }).text();
+        const filename = `${target.target_id}_Group_${group.group_rank}.fastq`;
+        const fastqDoc = parseFastqText(text, filename);
+
+        const refSeq = target.ref_sequence || target.reference_seq || '';
+        const grnaSeq = target.sgrna_seq || '';
+        const winSize = target.window_size || 90;
+        let windowSeq = target.ref_window || '';
+        if (!windowSeq && refSeq) {
+          const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
+          windowSeq = extractWindow(refSeq, cutInfo.cut_site, winSize);
+        }
+
+        const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
+        fastqDoc.autoAlign = autoAlign;
+
+        await this.sequenceWorkspaceService.saveItem(fastqDoc);
+        this.sequenceWorkspaceService.selectItem(fastqDoc.id);
+        this.sequenceWorkspaceService.setPendingAutoAlign(autoAlign);
+      }
+    } catch (e: any) {
+      console.error('Open group in workspace failed:', e);
+      alert('Failed to open group in workspace: ' + e.message);
+    } finally {
+      this.isExportingFastq = false;
+      this.exportStatus$.next(null);
+    }
+  }
+
+  async openAllTargetInSequenceWorkspace(target: any) {
+    if (!target || !this.selectedFiles.length) return;
+    this.isExportingFastq = true;
+    this.exportStatus$.next({ active: true, percent: 10, stage: 'Preparing Sequence Workspace...', title: `Opening All Reads (${target.target_id}) in Workspace` });
+    this.switchMainTab('workspace');
+
+    try {
+      let filesToProcess: File[] = [];
+      if (this.selectedScopeIndex === -1) {
+        filesToProcess = this.selectedFiles;
+      } else {
+        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
+      }
+
+      const blobs: Blob[] = [];
+      const params = this.lastRunParams || { phredThreshold: 10 };
+
+      for (const file of filesToProcess) {
+        if (!file) continue;
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          this.localAnalysisService.exportGroupFastq(file, target, '', params).subscribe({
+            next: (event: any) => {
+              if (event.type === 'progress') {
+                this.exportStatus$.next({ active: true, percent: event.percent, stage: event.stage, title: `Opening All Reads (${target.target_id}) in Workspace` });
+              } else if (event.type === 'export-group-fastq-result') {
+                resolve(event.payload);
+              } else if (event.type === 'error') {
+                reject(new Error(event.message));
+              }
+            },
+            error: (err: any) => reject(err)
+          });
+        });
+        blobs.push(blob);
+      }
+
+      if (blobs.length > 0) {
+        const text = await new Blob(blobs, { type: 'text/plain' }).text();
+        const filename = `${target.target_id}_All_Reads.fastq`;
+        const fastqDoc = parseFastqText(text, filename);
+
+        const refSeq = target.ref_sequence || target.reference_seq || '';
+        const grnaSeq = target.sgrna_seq || '';
+        const winSize = target.window_size || 90;
+        let windowSeq = target.ref_window || '';
+        if (!windowSeq && refSeq) {
+          const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
+          windowSeq = extractWindow(refSeq, cutInfo.cut_site, winSize);
+        }
+
+        const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
+        fastqDoc.autoAlign = autoAlign;
+
+        await this.sequenceWorkspaceService.saveItem(fastqDoc);
+        this.sequenceWorkspaceService.selectItem(fastqDoc.id);
+        this.sequenceWorkspaceService.setPendingAutoAlign(autoAlign);
+      }
+    } catch (e: any) {
+      console.error('Open all target in workspace failed:', e);
+      alert('Failed to open target in workspace: ' + e.message);
+    } finally {
+      this.isExportingFastq = false;
+      this.exportStatus$.next(null);
+    }
+  }
+
+  // ── Benchmark ──────────────────────────────────────────────────────────────
+  benchPhred = 10;
+  benchWindow = 90;
+  benchMargin = 3;
+  benchRows: BenchmarkRow[] = [{ file: null, geneName: '', targetName: '', referenceSequence: '', grnaSequence: '' }];
+  benchIsLoading = false;
+  benchProgress$ = new BehaviorSubject<number>(0);
+  benchProgressDisplay$ = new BehaviorSubject<number>(0);
+  benchStage$ = new BehaviorSubject<string>('');
+  benchError: string | null = null;
+  splitPreview: SplitPreview | null = null;
+  trainResult: BenchmarkResult | null = null;
+  testResult: BenchmarkResult | null = null;
+  private benchDestroy$ = new Subject<void>();
+  private benchProgressAnimId: any = null;
+  private localBenchSub: Subscription | null = null;
+
+  addBenchRow() {
+    this.benchRows.push({ file: null, geneName: '', targetName: '', referenceSequence: '', grnaSequence: '' });
+  }
+
+  removeBenchRow(i: number) {
+    if (this.benchRows.length > 1) this.benchRows.splice(i, 1);
+  }
+
+  clearBenchProgress() {
+    this.benchProgress$.next(0);
+    this.benchProgressDisplay$.next(0);
+    this.benchStage$.next('');
+    if (this.benchProgressAnimId) {
+      clearInterval(this.benchProgressAnimId);
+      this.benchProgressAnimId = null;
+    }
+  }
+
+  setBenchProgress(target: number, stage: string) {
+    this.ngZone.run(() => {
+      this.benchProgress$.next(target);
+      this.benchStage$.next(stage);
+
+      if (this.benchProgressAnimId) {
+        clearInterval(this.benchProgressAnimId);
+        this.benchProgressAnimId = null;
+      }
+
+      this.benchProgressAnimId = setInterval(() => {
+        this.ngZone.run(() => {
+          const current = this.benchProgressDisplay$.value;
+          const goal = this.benchProgress$.value;
+          const diff = goal - current;
+          if (Math.abs(diff) < 0.5) {
+            this.benchProgressDisplay$.next(goal);
+            if (this.benchProgressAnimId) {
+              clearInterval(this.benchProgressAnimId);
+              this.benchProgressAnimId = null;
+            }
+          } else {
+            this.benchProgressDisplay$.next(current + diff * 0.25);
+          }
+        });
+      }, 15);
+    });
+  }
+
+  buildSplitPreviewLocal() {
+    this.benchIsLoading = true;
+    this.splitPreview = null;
+    this.benchError = null;
+    this.clearBenchProgress();
+    this.setBenchProgress(10, 'Preparing split preview dataset…');
+
+    const dataset = this.benchRows.map((r, idx) => ({
+      file: r.file!,
+      gene: r.geneName?.trim() || `G${idx + 1}`,
+      target: r.targetName?.trim() || `T${idx + 1}`,
+      reference: r.referenceSequence,
+      grna: r.grnaSequence
+    }));
+
+    if (this.localBenchSub) {
+      this.localBenchSub.unsubscribe();
+    }
+
+    this.localBenchSub = this.localAnalysisService.startBenchmarkSplit(dataset).subscribe({
+      next: (event: any) => {
+        this.ngZone.run(() => {
+          if (event.type === 'benchmark-split-result') {
+            this.splitPreview = event.payload;
+            this.setBenchProgress(100, 'Split preview ready ✓');
+            setTimeout(() => {
+              this.ngZone.run(() => { this.benchIsLoading = false; });
+            }, 800);
+          } else if (event.type === 'error') {
+            this.benchError = event.message;
+            this.benchIsLoading = false;
+            this.clearBenchProgress();
+          }
+        });
+      },
+      error: (err) => {
+        this.ngZone.run(() => {
+          this.benchError = err?.message || 'Split preview calculation failed.';
+          this.benchIsLoading = false;
+          this.clearBenchProgress();
+        });
+      }
+    });
+  }
+
+  runBenchmarkLocal(subset: 'train' | 'test') {
+    this.benchIsLoading = true;
+    this.benchError = null;
+    this.clearBenchProgress();
+    this.setBenchProgress(0, `Starting ${subset} benchmark…`);
+
+    const dataset = this.benchRows.map((r, idx) => ({
+      file: r.file!,
+      gene: r.geneName?.trim() || `G${idx + 1}`,
+      target: r.targetName?.trim() || `T${idx + 1}`,
+      reference: r.referenceSequence,
+      grna: r.grnaSequence
+    }));
+
+    const params = {
+      phredThreshold: this.benchPhred,
+      windowSize: this.benchWindow,
+      marginThreshold: this.benchMargin / 100
+    };
+
+    if (this.localBenchSub) {
+      this.localBenchSub.unsubscribe();
+    }
+
+    this.localBenchSub = this.localAnalysisService.startBenchmarkRun(dataset, params, subset).subscribe({
+      next: (event: any) => {
+        this.ngZone.run(() => {
+          if (event.type === 'progress') {
+            this.setBenchProgress(event.percent, event.stage);
+          } else if (event.type === 'benchmark-result') {
+            if (subset === 'train') {
+              this.trainResult = event.payload;
+            } else {
+              this.testResult = event.payload;
+            }
+            this.setBenchProgress(100, `${subset.toUpperCase()} Benchmark Complete ✓`);
+            setTimeout(() => {
+              this.ngZone.run(() => { this.benchIsLoading = false; });
+            }, 800);
+          } else if (event.type === 'error') {
+            this.benchError = event.message;
+            this.benchIsLoading = false;
+            this.clearBenchProgress();
+          }
+        });
+      },
+      error: (err) => {
+        this.ngZone.run(() => {
+          this.benchError = err?.message || `${subset} benchmark calculation failed.`;
+          this.benchIsLoading = false;
+          this.clearBenchProgress();
+        });
+      }
+    });
+  }
+
+  cancelBenchmark() {
+    if (this.localBenchSub) {
+      this.localBenchSub.unsubscribe();
+      this.localBenchSub = null;
+    }
+    this.localAnalysisService.cancelAnalysis();
+    this.benchIsLoading = false;
+    this.clearBenchProgress();
+    this.setBenchProgress(0, 'Benchmark cancelled.');
   }
 }

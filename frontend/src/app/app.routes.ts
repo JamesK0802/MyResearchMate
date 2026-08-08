@@ -33,14 +33,32 @@ export const routes: Routes = [
       {
         path: 'my-data',
         loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
-        canActivate: [authGuard]
+        canActivate: [authGuard],
+        data: { resource: 'crispr' }
       }
     ]
   },
   {
     path: 'my-data',
+    redirectTo: 'data/crispr-results',
+    pathMatch: 'full'
+  },
+  {
+    path: 'data/crispr-results',
     redirectTo: 'crispr/my-data',
     pathMatch: 'full'
+  },
+  {
+    path: 'data/protocol-trees',
+    loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
+    canActivate: [authGuard],
+    data: { resource: 'protocol' }
+  },
+  {
+    path: 'data/pcr-protocols',
+    loadComponent: () => import('./pages/my-data/my-data.component').then(m => m.MyDataComponent),
+    canActivate: [authGuard],
+    data: { resource: 'pcr' }
   },
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
@@ -59,6 +77,14 @@ export const routes: Routes = [
   { 
     path: 'tools/pcr', 
     loadComponent: () => import('./tools/pcr-calculator/pcr-calculator').then(m => m.PcrCalculator) 
+  },
+  {
+    path: 'tools/sequence-viewer',
+    loadComponent: () => import('./pages/sequence-workspace-page/sequence-workspace-page.component').then(m => m.SequenceWorkspacePageComponent)
+  },
+  {
+    path: 'tools/protocol-builder',
+    loadComponent: () => import('./pages/protocol-builder-page/protocol-builder-page.component').then(m => m.NamuPageComponent)
   },
   {
     path: 'auth/callback',
@@ -93,6 +119,7 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/facility-booking-page/facility-booking-page.component').then(m => m.FacilityBookingPageComponent),
     canActivate: [authGuard]
   },
+  { path: 'tools/directory', loadComponent: () => import('./pages/tool-directory-page/tool-directory-page.component').then(m => m.ToolDirectoryPageComponent), canActivate: [authGuard] },
   { 
     path: 'contact',
     loadComponent: () => import('./pages/contact-page/contact-page.component').then(m => m.ContactPageComponent)

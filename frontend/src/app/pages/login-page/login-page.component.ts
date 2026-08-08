@@ -172,6 +172,17 @@ export class LoginPageComponent {
     this.isProcessing = true;
     this.message = '';
     const email = this.fullEmail;
+
+    // Demo uses an in-browser session only: no OTP, API identity, or server
+    // write is ever created.
+    if (email === 'u0000000@anu.edu.au') {
+      await this.auth.signInDemo();
+      this.isSuccess = true;
+      this.message = '✅ Demo mode started. All changes are temporary.';
+      this.cdr.detectChanges();
+      setTimeout(() => this.router.navigate(['/']), 500);
+      return;
+    }
     
     console.log('[Login] Requesting OTP code for:', email);
     this.cdr.detectChanges();

@@ -68,7 +68,10 @@ export class PcrCalculator implements OnInit {
       this.allPresets = data.presets;
       this.incomingTransfers = data.transfers;
       
-      if (this.allPresets.length > 0 && !this.selectedPreset) {
+      const pendingPresetId = this.presetService.consumePendingOpenPresetId();
+      if (pendingPresetId && this.allPresets.some(preset => preset.id === pendingPresetId)) {
+        this.selectPreset(pendingPresetId);
+      } else if (this.allPresets.length > 0 && !this.selectedPreset) {
         this.selectPreset(this.allPresets[0].id!);
       }
       this.cdr.detectChanges();

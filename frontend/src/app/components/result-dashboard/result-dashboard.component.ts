@@ -4,9 +4,9 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AppStateService } from '../../services/app-state.service';
 import { Chart } from 'chart.js/auto';
-
 import { AuthService } from '../../services/auth.service';
 import { ResultsService } from '../../services/results.service';
+
 import { MutationGroup } from '../../models/analysis.model';
 import { groupKey } from '../../models/curation.model';
 
@@ -22,6 +22,34 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   mobileGeneInfoOpen = false;
   mobileChartsOpen = false;
 
+  isDraggingScroll = false;
+  startX = 0;
+  scrollLeft = 0;
+
+  startDragScroll(e: MouseEvent, element: HTMLElement) {
+    const targetEl = e.target as HTMLElement;
+    if (targetEl.tagName === 'BUTTON' || targetEl.tagName === 'INPUT' || targetEl.closest('.exclude-btn-group') || targetEl.closest('button')) {
+      return;
+    }
+    this.isDraggingScroll = true;
+    element.classList.add('dragging-scroll');
+    this.startX = e.pageX - element.offsetLeft;
+    this.scrollLeft = element.scrollLeft;
+  }
+
+  stopDragScroll(element: HTMLElement) {
+    this.isDraggingScroll = false;
+    element.classList.remove('dragging-scroll');
+  }
+
+  onDragScroll(e: MouseEvent, element: HTMLElement) {
+    if (!this.isDraggingScroll) return;
+    e.preventDefault();
+    const x = e.pageX - element.offsetLeft;
+    const walk = (x - this.startX) * 1.5;
+    element.scrollLeft = this.scrollLeft - walk;
+  }
+
   constructor(
     public state: AppStateService,
     private cdr: ChangeDetectorRef,
@@ -29,7 +57,6 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     private auth: AuthService,
     private resultsService: ResultsService
   ) {}
-
 
   async saveResult() {
     const session = await this.auth.getSession();
@@ -46,11 +73,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
 
     this.isSaving = true;
     try {
-      await this.resultsService.saveResult(
-        title,
-        {}, // We'll put everything inside result_json for simplicity
-        exportData
-      );
+      await this.resultsService.saveResult(title, {}, exportData);
       alert('Result saved successfully to "My Data"!');
     } catch (err) {
       console.error('Failed to save result:', err);
@@ -60,6 +83,34 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     }
   }
+
+  async saveCuratedView() {
+    const session = await this.auth.getSession();
+    if (!session) {
+      alert('Please sign in to save curated views.');
+      return;
+    }
+
+    const title = prompt('Name this curated view:', this.state.curationConfig?.curatedViewName || 'Curated View');
+    if (!title) return;
+    if (this.state.curationConfig) this.state.curationConfig.curatedViewName = title;
+
+    const exportData = this.state.getExportData();
+    if (!exportData) return;
+
+    this.isSaving = true;
+    try {
+      await this.resultsService.saveResult(title, { curated_config: this.state.curationConfig }, exportData);
+      alert('Curated view saved successfully to "My Data"!');
+    } catch (err) {
+      console.error('Failed to save curated view:', err);
+      alert('Failed to save curated view. Please try again.');
+    } finally {
+      this.isSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
+
 
   ngOnInit() {
     this.state.resultsUpdated$.pipe(takeUntil(this.destroy$)).subscribe(() => {
@@ -351,41 +402,5 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     const target = this.state.selectedTarget?.target_id;
     if (!gene || !target) return false;
     return this.state.isGroupExcluded(gene, target, group.read_inner);
-  }
-
-  // ── Save curated view ──
-  async saveCuratedView() {
-    const session = await this.auth.getSession();
-    if (!session) {
-      alert('Please sign in to save curated views.');
-      return;
-    }
-
-    const defaultName = this.state.curationConfig?.curatedViewName || 'Curated View';
-    const title = prompt('Name this curated view:', defaultName);
-    if (!title) return;
-
-    if (this.state.curationConfig) {
-      this.state.curationConfig.curatedViewName = title;
-    }
-
-    const exportData = this.state.getExportData();
-    if (!exportData) return;
-
-    this.isSaving = true;
-    try {
-      await this.resultsService.saveResult(
-        title,
-        { curated_config: this.state.curationConfig },
-        exportData
-      );
-      alert('Curated view saved successfully to "My Data"!');
-    } catch (err) {
-      console.error('Failed to save curated view:', err);
-      alert('Failed to save curated view. Please try again.');
-    } finally {
-      this.isSaving = false;
-      this.cdr.detectChanges();
-    }
   }
 }

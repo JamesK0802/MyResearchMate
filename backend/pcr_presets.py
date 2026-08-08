@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from auth.dependencies import get_current_user
 from database.db import get_db
-from database.models import PcrPreset, User, PcrPresetTransfer
+from database.models import PcrPreset, User, PcrPresetTransfer, PcrPresetLabShare, Lab, LabMember
 from pydantic import BaseModel
 import uuid
 
@@ -66,6 +66,86 @@ DEFAULT_PRESETS = [
         ]
     }
 ]
+
+def ensure_system_presets(db: Session):
+    if db.query(PcrPreset).filter(PcrPreset.is_system == True).first():
+        return
+    for dp in DEFAULT_PRESETS:
+        db.add(PcrPreset(
+            name=dp["name"], category=dp["category"], is_system=True,
+            components_json=dp["components"], owner_user_id=None
+        ))
+    db.commit()
+
+def preset_data(preset: PcrPreset, db: Session, current_user: dict):
+    shares = db.query(PcrPresetLabShare, Lab).join(Lab, PcrPresetLabShare.lab_id == Lab.id).filter(
+        PcrPresetLabShare.preset_id == preset.id
+    ).all()
+    return {
+        "id": str(preset.id), "owner_user_id": preset.owner_user_id,
+        "title": preset.name, "name": preset.name, "category": preset.category,
+        "is_system": preset.is_system, "isSystem": preset.is_system,
+        "components": preset.components_json or [], "defaultReactionVolume": 20,
+        "created_at": preset.created_at, "updated_at": preset.updated_at,
+        "is_shared": bool(shares), "shared_with_labs": [share.Lab.lab_name for share in shares]
+    }
+
+def data_scope_presets(scope: str, db: Session, current_user: dict):
+    ensure_system_presets(db)
+    owner_id = current_user["id"]
+    if scope == "shared":
+        lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
+        if not lab_ids:
+            return []
+        presets = db.query(PcrPreset).join(PcrPresetLabShare).filter(
+            PcrPresetLabShare.lab_id.in_(lab_ids), PcrPreset.owner_user_id != owner_id
+        ).all()
+    else:
+        owned = db.query(PcrPreset).filter((PcrPreset.owner_user_id == owner_id) | (PcrPreset.is_system == True)).all()
+        if scope == "my":
+            presets = owned
+        else:
+            lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
+            shared = db.query(PcrPreset).join(PcrPresetLabShare).filter(
+                PcrPresetLabShare.lab_id.in_(lab_ids), PcrPreset.owner_user_id != owner_id
+            ).all() if lab_ids else []
+            presets = owned + shared
+    seen = set()
+    result = []
+    for preset in sorted(presets, key=lambda item: (not item.is_system, item.created_at or 0)):
+        if preset.id in seen:
+            continue
+        seen.add(preset.id)
+        row = preset_data(preset, db, current_user)
+        if preset.owner_user_id and preset.owner_user_id != owner_id:
+            owner = db.query(User).filter(User.id == preset.owner_user_id).first()
+            row["shared_by_name"] = owner.name if owner else None
+        result.append(row)
+    return result
+
+@router.get("/data/{scope}")
+async def list_data_presets(scope: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    if scope not in ("all", "my", "shared"):
+        raise HTTPException(status_code=404, detail="Unknown data scope")
+    return data_scope_presets(scope, db, current_user)
+
+@router.get("/data/{preset_id}/shares")
+async def get_data_preset_shares(preset_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    return [str(row.lab_id) for row in db.query(PcrPresetLabShare).filter(PcrPresetLabShare.preset_id == preset_id).all()]
+
+@router.put("/data/{preset_id}/shares")
+async def update_data_preset_shares(preset_id: str, payload: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    preset = db.query(PcrPreset).filter(PcrPreset.id == preset_id, PcrPreset.owner_user_id == current_user["id"], PcrPreset.is_system == False).first()
+    if not preset:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    db.query(PcrPresetLabShare).filter(PcrPresetLabShare.preset_id == preset.id).delete()
+    for lab_id in payload.get("lab_ids", []):
+        try:
+            db.add(PcrPresetLabShare(preset_id=preset.id, lab_id=uuid.UUID(lab_id), shared_by_user_id=current_user["id"]))
+        except (ValueError, TypeError):
+            continue
+    db.commit()
+    return {"message": "Shares updated successfully"}
 
 @router.post("", response_model=dict)
 async def create_preset(
