@@ -21,6 +21,14 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
   ],
   template: `
     <div class="namu-page-shell">
+      <!-- Works on HTTP deployments where the File System Access API is unavailable. -->
+      <input
+        #fileInput
+        class="file-input-hidden"
+        type="file"
+        accept=".json,.namu.json,application/json,text/plain"
+        (change)="importJsonFile($event)"
+      />
       
       <!-- ── VSCODE-STYLE WELCOME LANDING SCREEN (When no file is open) ── -->
       <div class="vscode-welcome-screen" *ngIf="!isFileLoaded">
@@ -344,14 +352,18 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   }
 
   async openFile() {
+    // localhost/HTTPS can use a writable native handle. The deployed server is
+    // currently HTTP, where browsers intentionally hide that API; use the
+    // normal file input there so Open still works.
+    if (!this.namuStorageService.supportsNativeFilePicker) {
+      this.fileInput?.nativeElement.click();
+      return;
+    }
+
     const success = await this.namuStorageService.openNativeFile();
-    this.zone.run(() => {
-      if (success) {
-        this.cdr.detectChanges();
-      } else if (this.fileInput) {
-        this.fileInput.nativeElement.click();
-      }
-    });
+    if (success) {
+      this.zone.run(() => this.cdr.detectChanges());
+    }
   }
 
   async saveAsFile() {

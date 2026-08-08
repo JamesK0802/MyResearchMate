@@ -37,6 +37,12 @@ export class NamuStorageService {
     return !!this.activeFileHandle && typeof this.activeFileHandle.createWritable === 'function';
   }
 
+  // Chromium exposes File System Access only in secure contexts (HTTPS and
+  // localhost). A normal HTML file input remains available on HTTP.
+  get supportsNativeFilePicker(): boolean {
+    return typeof window !== 'undefined' && 'showOpenFilePicker' in window;
+  }
+
   get hasMyDataRecord(): boolean { return !!this.myDataRecordId; }
   get currentMyDataRecordId(): string | null { return this.myDataRecordId; }
 
