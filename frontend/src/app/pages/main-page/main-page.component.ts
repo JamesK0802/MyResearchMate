@@ -257,7 +257,6 @@ import { AuthService } from '../../services/auth.service';
 
       <footer class="main-footer">
         <p>Australian National University · Research School of Biology</p>
-        <p class="v-tag">System Version {{ version }}</p>
       </footer>
     </div>
   `,
@@ -359,7 +358,6 @@ import { AuthService } from '../../services/auth.service';
 
     /* Footer */
     .main-footer { text-align: center; padding: 80px 0; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 0.85rem; }
-    .v-tag { font-family: monospace; color: #cbd5e1; margin-top: 8px; }
 
     @media (max-width: 950px) {
       .cards-grid, .dual-cards, .steps-grid, .crispr-feature-grid { grid-template-columns: 1fr; }
@@ -385,6 +383,5 @@ import { AuthService } from '../../services/auth.service';
   `]
 })
 export class MainPageComponent {
-  version = '2.3.0';
   constructor(public auth: AuthService) { }
 }
