@@ -78,11 +78,11 @@ export class FacilityBookingService {
   private makeDemoBookings(): FacilityBooking[] {
     const year = new Date().getFullYear();
     return [
-      ['demo-booking-1', 'acacia-1', 'Nicole', 2, 5, 'Arabidopsis growth trial'],
-      ['demo-booking-2', 'acacia-4', 'Ayesha', 4, 7, 'Tissue culture experiment'],
-      ['demo-booking-3', 'speed-1', 'James', 1, 3, 'CRISPR genotyping'],
-      ['demo-booking-4', 'speed-3', 'Nicole', 8, 10, 'PCR validation series'],
-      ['demo-booking-5', 'acacia-10', 'James', 11, 12, 'Seed propagation'],
+      ['demo-booking-1', 'acacia-1', 'Demo User 1', 2, 5, 'This is a demo booking for Sample 1-1'],
+      ['demo-booking-2', 'acacia-4', 'Demo User 2', 4, 7, 'This is a demo booking for Sample 2-1'],
+      ['demo-booking-3', 'speed-1', 'Demo User 3', 1, 3, 'This is a demo booking for Sample 3-1'],
+      ['demo-booking-4', 'speed-3', 'Demo User 1', 8, 10, 'This is a demo booking for Demo Experiment 2'],
+      ['demo-booking-5', 'acacia-10', 'Demo User 3', 11, 12, 'This is a demo booking for Demo Experiment 3'],
     ].map(([id, spot_id, user_name, start, end, comment]) => ({
       id: id as string, spot_id: spot_id as string, user_name: user_name as string,
       start_date: `${year}-${String(start).padStart(2, '0')}-01`,

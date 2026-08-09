@@ -211,7 +211,7 @@
 
         <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
         <div class="workflow-container">
-          <div class="workflow-scroll-area">
+          <div #workflowScroll class="workflow-scroll-area" [attr.data-experiment-id]="exp.id" (scroll)="syncWorkflowScrollbar(exp.id, workflowScroll)">
             
             <!-- Start Adder Connector -->
             <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
@@ -267,6 +267,10 @@
 
             </ng-container>
 
+          </div>
+          <div class="workflow-scrollbar" *ngIf="workflowScrollMaxes[exp.id] > 0">
+            <input type="range" min="0" [max]="workflowScrollMaxes[exp.id]" [value]="workflowScrollPositions[exp.id] || 0"
+              (input)="scrollWorkflow(exp.id, workflowScroll, $event)" [attr.aria-label]="'Scroll ' + exp.title + ' workflow horizontally'" />
           </div>
         </div>
 
@@ -376,7 +380,7 @@
 
         <!-- COMPACT HORIZONTAL SEQUENCE SCROLLER -->
         <div class="workflow-container">
-          <div class="workflow-scroll-area">
+          <div #workflowScroll class="workflow-scroll-area" [attr.data-experiment-id]="exp.id" (scroll)="syncWorkflowScrollbar(exp.id, workflowScroll)">
             
             <!-- Start Adder Connector -->
             <div class="insert-step-divider" (click)="insertStepAt(exp, 0)" title="Insert Step at the beginning">
@@ -432,6 +436,10 @@
 
             </ng-container>
 
+          </div>
+          <div class="workflow-scrollbar" *ngIf="workflowScrollMaxes[exp.id] > 0">
+            <input type="range" min="0" [max]="workflowScrollMaxes[exp.id]" [value]="workflowScrollPositions[exp.id] || 0"
+              (input)="scrollWorkflow(exp.id, workflowScroll, $event)" [attr.aria-label]="'Scroll ' + exp.title + ' workflow horizontally'" />
           </div>
         </div>
 

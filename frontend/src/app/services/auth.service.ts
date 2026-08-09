@@ -84,6 +84,11 @@ export class AuthService {
 
   get isDemo(): boolean { return this.demoSession !== null; }
 
+  /** Explain why a state-changing control is unavailable in the local demo. */
+  notifyDemoUnavailable(action: string = 'This action'): void {
+    window.alert(`${action} is not available in Demo mode. Demo data is reset when you sign in again and cannot change shared or saved records.`);
+  }
+
   /** Local-only demo session. It never creates a Supabase or API identity. */
   async signInDemo(): Promise<void> {
     const now = Math.floor(Date.now() / 1000);

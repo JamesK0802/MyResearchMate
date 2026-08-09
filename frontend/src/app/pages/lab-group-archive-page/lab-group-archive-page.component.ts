@@ -2073,6 +2073,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   }
 
   getDownloadUrl(relPath: string) {
+    if (relPath?.startsWith('/')) return relPath;
     const token = this.archiveService.getCurrentToken() || '';
     return `/api/lab-archive/${this.labId}/fs/download?path=${encodeURIComponent(relPath)}&token=${encodeURIComponent(token)}`;
   }

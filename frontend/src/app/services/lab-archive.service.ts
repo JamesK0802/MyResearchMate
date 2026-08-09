@@ -6,6 +6,43 @@ import { firstValueFrom } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class LabArchiveService {
   private apiUrl = '/api/lab-archive';
+  private readonly demoRecords = [
+    {
+      id: 'demo-archive-record-1', title: 'Demo Archive Record 1', summary: 'This is a demo archive record.',
+      description: 'Sample 1-1 and Sample 1-2 demonstrate saved records, external links, image attachments, and discussion entries.',
+      links: ['https://jamesk0802.github.io/myLabMate_Local/', 'https://jamesk0802.github.io/namu/'],
+      files: [{ filename: 'Demo landing page.png', path: '/demo-labmate-landing.png' }, { filename: 'Demo logo.png', path: '/demo-labmate-logo.png' }],
+      comments: [{ id: 'demo-comment-1', user_name: 'Demo User 1', text: 'This is a demo archive comment.', created_at: '2026-08-07T09:00:00Z' }],
+      created_by: 'Demo User 1', created_at: '2026-08-07T09:00:00Z'
+    },
+    {
+      id: 'demo-archive-record-2', title: 'Demo Archive Record 2', summary: 'This is another demo archive record.',
+      description: 'Sample 2-1 shows how multiple records can keep their links and image attachments together.',
+      links: ['https://jamesk0802.github.io/namu/'],
+      files: [{ filename: 'Demo logo.png', path: '/demo-labmate-logo.png' }],
+      comments: [{ id: 'demo-comment-2', user_name: 'Demo User 2', text: 'This is a second demo archive comment.', created_at: '2026-08-05T13:30:00Z' }],
+      created_by: 'Demo User 2', created_at: '2026-08-05T13:00:00Z'
+    },
+    {
+      id: 'demo-archive-record-3', title: 'Demo Archive Record 3', summary: 'A completed demo workflow record.',
+      description: 'Sample 3-1 is included only to demonstrate archive search, record links, and attached visuals.',
+      links: ['https://jamesk0802.github.io/myLabMate_Local/'],
+      files: [{ filename: 'Demo landing page.png', path: '/demo-labmate-landing.png' }], comments: [],
+      created_by: 'Demo User 3', created_at: '2026-08-03T11:00:00Z'
+    }
+  ];
+  private readonly demoSamples = Array.from({ length: 6 }, (_, index) => {
+    const group = Math.floor(index / 2) + 1;
+    const number = (index % 2) + 1;
+    return {
+      id: `demo-archive-sample-${index + 1}`, storage_location: `Demo Box ${group} / Slot ${number}`,
+      barcode: `DEMO-${group}${number}`, sample_name: `Sample ${group}-${number}`, person: `Demo User ${group}`,
+      project: `Demo Experiment ${group}`, lab: `Demo Lab ${group}`,
+      files: [{ filename: index % 2 === 0 ? 'Demo landing page.png' : 'Demo logo.png', path: index % 2 === 0 ? '/demo-labmate-landing.png' : '/demo-labmate-logo.png' }],
+      links: [index % 2 === 0 ? 'https://jamesk0802.github.io/myLabMate_Local/' : 'https://jamesk0802.github.io/namu/'],
+      linked_record_id: `demo-archive-record-${group}`
+    };
+  });
 
   constructor(private http: HttpClient, private auth: AuthService) {}
 
@@ -18,6 +55,7 @@ export class LabArchiveService {
 
   // --- Records ---
   async getRecords(labId: string): Promise<any[]> {
+    if (this.auth.isDemo) return this.demoRecords.map(record => ({ ...record, files: record.files.map(file => ({ ...file })), comments: record.comments.map(comment => ({ ...comment })) }));
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
       this.http.get<any[]>(`${this.apiUrl}/${labId}/records`, { headers })
@@ -63,6 +101,13 @@ export class LabArchiveService {
 
   // --- File System ---
   async getFsList(labId: string, path: string = ""): Promise<any[]> {
+    if (this.auth.isDemo) {
+      if (path) return [];
+      return [
+        { name: 'Demo landing page.png', rel_path: '/demo-labmate-landing.png', is_dir: false, is_linked: true, size: 209056, modified_at: '2026-08-09T00:00:00Z' },
+        { name: 'Demo logo.png', rel_path: '/demo-labmate-logo.png', is_dir: false, is_linked: true, size: 15985, modified_at: '2026-08-09T00:00:00Z' }
+      ];
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
       this.http.get<any[]>(`${this.apiUrl}/${labId}/fs?path=${encodeURIComponent(path)}`, { headers })
@@ -134,6 +179,7 @@ export class LabArchiveService {
 
   // --- Samples ---
   async getSamples(labId: string): Promise<any[]> {
+    if (this.auth.isDemo) return this.demoSamples.map(sample => ({ ...sample, files: sample.files.map(file => ({ ...file })), links: [...sample.links] }));
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
       this.http.get<any[]>(`${this.apiUrl}/${labId}/samples`, { headers })

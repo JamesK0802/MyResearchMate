@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LabNotebookService } from '../../services/lab-notebook.service';
@@ -12,7 +12,7 @@ import { debounceTime } from 'rxjs/operators';
   templateUrl: './lab-notes-page.component.html',
   styleUrl: './lab-notes-page.component.css'
 })
-export class LabNotesPageComponent implements OnInit, OnDestroy {
+export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('richEditor') richEditor!: ElementRef<HTMLDivElement>;
 
   notes: any[] = [];
@@ -60,6 +60,10 @@ export class LabNotesPageComponent implements OnInit, OnDestroy {
     ).subscribe(() => {
       this.triggerAutoSave();
     });
+  }
+
+  ngAfterViewInit() {
+    this.renderSelectedNoteBody();
   }
 
   ngOnDestroy() {
@@ -120,14 +124,19 @@ export class LabNotesPageComponent implements OnInit, OnDestroy {
       this.noteForm.title = res.meta.title || 'Untitled Note';
       this.noteForm.bodyHtml = res.body || '';
       
-      // Update contenteditable div
-      if (this.richEditor) {
-        this.richEditor.nativeElement.innerHTML = this.noteForm.bodyHtml;
-      }
       this.syncState = 'saved';
       this.cdr.detectChanges();
+      // The editor may not exist on the first load because it is behind
+      // *ngIf. Render after Angular has created that view.
+      setTimeout(() => this.renderSelectedNoteBody());
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  private renderSelectedNoteBody() {
+    if (this.richEditor && this.selectedNote) {
+      this.richEditor.nativeElement.innerHTML = this.noteForm.bodyHtml || '';
     }
   }
 
@@ -216,6 +225,15 @@ export class LabNotesPageComponent implements OnInit, OnDestroy {
           await this.uploadAndInsertImage(files[i]);
         }
       }
+    }
+  }
+
+  async onImageSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file?.type.startsWith('image/')) {
+      await this.uploadAndInsertImage(file);
     }
   }
 

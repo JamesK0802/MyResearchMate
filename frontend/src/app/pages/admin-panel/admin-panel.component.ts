@@ -60,10 +60,10 @@ import { AuthService } from '../../services/auth.service';
             </div>
 
             <div class="req-actions">
-              <button (click)="approve(req)" class="btn-approve" [disabled]="processingId === req.id || auth.isDemo">
+              <button (click)="approve(req)" class="btn-approve" [disabled]="processingId === req.id">
                 {{ processingId === req.id ? '...' : 'Approve' }}
               </button>
-              <button (click)="reject(req)" class="btn-reject" [disabled]="processingId === req.id || auth.isDemo">
+              <button (click)="reject(req)" class="btn-reject" [disabled]="processingId === req.id">
                 Reject
               </button>
             </div>

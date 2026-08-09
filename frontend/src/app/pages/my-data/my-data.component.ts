@@ -319,18 +319,21 @@ export class MyDataComponent implements OnInit {
   }
 
   isSystemPreset(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean { return !!(res as any).is_system || !!(res as any).isSystem; }
-  canManage(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean { return !this.auth.isDemo && !this.isSystemPreset(res) && (!((res as any).is_shared) || this.isOwner(res)); }
+  canManage(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean {
+    if (this.auth.isDemo) return !this.isSystemPreset(res);
+    return !this.isSystemPreset(res) && (!((res as any).is_shared) || this.isOwner(res));
+  }
 
   private getDemoItems(): Array<CrisprResult | ProtocolTreeRecord | PCRPreset> {
     const now = new Date().toISOString();
     if (this.resource === 'protocol') return [
-      { title: 'Arabidopsis transformation', steps: [['Sterilise seeds', 'Stratify seeds for 2 days'], ['Prepare Agrobacterium culture', 'Infiltrate flowering plants'], ['Collect T1 seed', 'Select transformants']] },
-      { title: 'Genotyping workflow', steps: [['Collect leaf tissue', 'Extract genomic DNA'], ['PCR amplification', 'Run agarose gel'], ['Sanger validation', 'Record genotype']] },
-      { title: 'Tissue culture checklist', steps: [['Prepare MS media', 'Sterilise explants'], ['Callus induction', 'Monitor contamination'], ['Shoot regeneration', 'Transfer plantlets']] },
+      { title: 'Demo Protocol Tree 1', steps: [['Step 1 — this is a demo step', 'Step 2 — prepare Sample 1-1'], ['Step 3 — this is a demo step', 'Step 4 — review Sample 1-2'], ['Step 5 — record the demo result']] },
+      { title: 'Demo Protocol Tree 2', steps: [['Step 1 — this is a demo step', 'Step 2 — prepare Sample 2-1'], ['Step 3 — this is a demo step', 'Step 4 — review Sample 2-2'], ['Step 5 — record the demo result']] },
+      { title: 'Demo Protocol Tree 3', steps: [['Step 1 — this is a demo step', 'Step 2 — prepare Sample 3-1'], ['Step 3 — this is a demo step', 'Step 4 — review Sample 3-2'], ['Step 5 — record the demo result']] },
     ].map((entry, index) => ({ id: `demo-tree-${index}`, owner_user_id: -1, title: entry.title, created_at: now, updated_at: now,
       document_json: { version: '1.0', title: entry.title, activeTreeId: `tree-${index}`, trees: [{ id: `tree-${index}`, name: entry.title, description: 'Demo workflow with realistic experimental stages.', rootNodeId: 'stage-0', createdAt: Date.now(), updatedAt: Date.now(), nodes: entry.steps.map((steps, nodeIndex) => ({ id: `stage-${nodeIndex}`, title: ['Preparation', 'Execution', 'Validation'][nodeIndex], steps, nextNodes: nodeIndex < 2 ? [`stage-${nodeIndex + 1}`] : [], x: 120 + nodeIndex * 370, y: 160, status: nodeIndex === 0 ? 'completed' : nodeIndex === 1 ? 'in_progress' : 'planned', leaves: [] })) }] } } as ProtocolTreeRecord));
     if (this.resource === 'pcr') return this.pcrPresetService.getDemoDataPresets();
-    return [['PDS knockout — batch 04', ['PDS'], 72.4], ['CPC / TRY multiplex screen', ['CPC', 'TRY'], 61.8], ['T1 validation cohort', ['FT', 'FLC', 'AP1'], 48.6]].map(([title, genes, efficiency], index) => ({
+    return [['Demo Analysis Result 1', ['Sample 1-1'], 72.4], ['Demo Analysis Result 2', ['Sample 2-1', 'Sample 2-2'], 61.8], ['Demo Analysis Result 3', ['Sample 3-1', 'Sample 3-2', 'Sample 3-3'], 48.6]].map(([title, genes, efficiency], index) => ({
       id: `demo-result-${index}`, owner_user_id: -1, title, created_at: now, updated_at: now,
       metadata_json: { phred_threshold: 30, indel_threshold: 0.5 }, result_json: { params: { phred_threshold: 30 }, scopes: [{ sheetName: 'Merged', readFlow: { rawReads: 5000, phredPassed: 4700, anchorMatched: 4300, usableForAssignment: 4200, assignedReads: 3900, ambiguousReads: 80 }, genes: (genes as string[]).map(gene => ({ gene, assigned_read_count: 1200, ambiguous_excluded: false, analysis_result: { targets: [{ target_id: `${gene}-1`, ref_sequence: 'ATGCGTACGTTACCGGATCGATGCCATGGA', sgrna_seq: 'GTTACCGGATCGATGCCATG', cut_site_index: 18, summary: { total_reads: 1500, matched_reads: 1320, aligned_reads: 1280, unmodified: 360, modified: 920, editing_efficiency: efficiency, out_of_frame_pct: 42, in_frame_pct: 18, no_indel_pct: 28, substitution_pct: 12 }, breakdown: { no_indel: 360, substitution: 154, in_frame: 230, out_of_frame: 536 }, read_details: [], top_groups: [{ group_rank: 1, read_inner: 'ATGCGTACGTTACC---ATCGATGCCATGGA', read_count: 312, read_pct: 23.6, classification: 'out_of_frame', net_indel: -3, tokens: [{ type: 'equal', val: 'ATGCGTACGTTACC' }, { type: 'delete', val: 'GGA' }, { type: 'equal', val: 'ATCGATGCCATGGA' }] }, { group_rank: 2, read_inner: 'ATGCGTACGTTACCGGATCGAATGCCATGGA', read_count: 188, read_pct: 14.2, classification: 'in_frame', net_indel: 3, tokens: [{ type: 'equal', val: 'ATGCGTACGTTACCGGATCGA' }, { type: 'insert', val: 'AAT' }, { type: 'equal', val: 'GCCATGGA' }] }] }] } })) }] }
     } as CrisprResult));
@@ -399,6 +402,10 @@ export class MyDataComponent implements OnInit {
   }
 
   async deleteItem(id: string) {
+    if (this.auth.isDemo) {
+      this.auth.notifyDemoUnavailable('Deleting saved My Data');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this result?')) return;
     try {
       if (this.resource === 'protocol') await this.protocolTreeService.deleteTree(id);
@@ -417,6 +424,10 @@ export class MyDataComponent implements OnInit {
   // --- Sharing Logic ---
 
   async openShareModal(result: CrisprResult | ProtocolTreeRecord | PCRPreset) {
+    if (this.auth.isDemo) {
+      this.auth.notifyDemoUnavailable('Sharing saved My Data');
+      return;
+    }
     this.sharingResult = result;
     this.selectedLabIds = [];
     try {
@@ -457,6 +468,10 @@ export class MyDataComponent implements OnInit {
 
   async saveSharing() {
     if (!this.sharingResult) return;
+    if (this.auth.isDemo) {
+      this.auth.notifyDemoUnavailable('Updating sharing settings');
+      return;
+    }
     
     // Final safety check: remove any non-string values
     const cleanLabIds = this.selectedLabIds.filter(id => typeof id === 'string' && id.length > 0);

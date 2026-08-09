@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -19,7 +19,7 @@ import { AuthService } from '../../services/auth.service';
         </p>
         <div class="hero-cta">
           <a *ngIf="!auth.isLoggedIn" routerLink="/login" class="cta-fill">Get Started</a>
-          <a *ngIf="auth.isLoggedIn" routerLink="/my-data" class="cta-fill">My Data</a>
+          <button *ngIf="auth.isLoggedIn" type="button" (click)="goToMyData()" class="cta-fill">My Data</button>
           <a routerLink="/contact" class="cta-ghost">Get Support</a>
         </div>
       </section>
@@ -271,7 +271,7 @@ import { AuthService } from '../../services/auth.service';
     .highlight { color: #3b82f6; }
     .hero-sub { font-size: 1.15rem; color: #64748b; line-height: 1.6; margin-bottom: 48px; }
     .hero-cta { display: flex; gap: 12px; justify-content: center; }
-    .cta-fill { padding: 14px 32px; background: #0f172a; color: white; border-radius: 12px; font-weight: 700; text-decoration: none; transition: all 0.2s; cursor: pointer; }
+    .cta-fill { padding: 14px 32px; background: #0f172a; color: white; border: none; border-radius: 12px; font: inherit; font-weight: 700; text-decoration: none; transition: all 0.2s; cursor: pointer; }
     .cta-fill:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -5px rgba(15, 23, 42, 0.2); }
     .cta-ghost { padding: 14px 32px; border: 1px solid #e2e8f0; color: #64748b; border-radius: 12px; font-weight: 700; text-decoration: none; transition: all 0.2s; cursor: pointer; }
     .cta-ghost:hover { background: #f1f5f9; border-color: #cbd5e1; }
@@ -383,5 +383,10 @@ import { AuthService } from '../../services/auth.service';
   `]
 })
 export class MainPageComponent {
-  constructor(public auth: AuthService) { }
+  constructor(public auth: AuthService, private router: Router) { }
+
+  goToMyData() {
+    // Use the concrete route instead of the redirect chain from /my-data.
+    void this.router.navigateByUrl('/crispr/my-data');
+  }
 }

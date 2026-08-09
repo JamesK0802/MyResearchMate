@@ -38,7 +38,11 @@
                  [(ngModel)]="noteForm.title" 
                  (input)="onContentChange()" 
                  placeholder="Title of your entry..." />
-          <button class="app-btn app-btn-danger-outline delete-btn" (click)="deleteNote(selectedNote.id)">Delete Note</button>
+          <div class="editor-actions">
+            <input #imagePicker class="image-picker-input" type="file" accept="image/*" (change)="onImageSelected($event)" />
+            <button type="button" class="app-btn app-btn-outline" (click)="imagePicker.click()">Add Image</button>
+            <button class="app-btn app-btn-danger-outline delete-btn" (click)="deleteNote(selectedNote.id)">Delete Note</button>
+          </div>
         </div>
 
         <!-- Rich editable canvas -->

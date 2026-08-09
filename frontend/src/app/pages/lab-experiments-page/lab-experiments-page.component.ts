@@ -82,6 +82,8 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   draggedExpId: string | null = null;
   
   editingPresetId: string | null = null;
+  workflowScrollPositions: Record<string, number> = {};
+  workflowScrollMaxes: Record<string, number> = {};
 
   constructor(
     private labService: LabNotebookService,
@@ -117,6 +119,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
         exp.samples_raw = (exp.samples || []).join(', ');
       }
       this.cdr.detectChanges();
+      this.refreshWorkflowScrollbars();
       return;
     }
     try {
@@ -194,6 +197,30 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     }
 
     this.cdr.detectChanges();
+    this.refreshWorkflowScrollbars();
+  }
+
+  private refreshWorkflowScrollbars() {
+    setTimeout(() => {
+      document.querySelectorAll<HTMLElement>('.workflow-scroll-area[data-experiment-id]').forEach(area => {
+        const id = area.dataset['experimentId'];
+        if (!id) return;
+        this.workflowScrollMaxes[id] = Math.max(0, area.scrollWidth - area.clientWidth);
+        this.workflowScrollPositions[id] = area.scrollLeft;
+      });
+      this.cdr.detectChanges();
+    });
+  }
+
+  syncWorkflowScrollbar(experimentId: string, area: HTMLElement) {
+    this.workflowScrollMaxes[experimentId] = Math.max(0, area.scrollWidth - area.clientWidth);
+    this.workflowScrollPositions[experimentId] = area.scrollLeft;
+  }
+
+  scrollWorkflow(experimentId: string, area: HTMLElement, event: Event) {
+    const position = Number((event.target as HTMLInputElement).value);
+    area.scrollLeft = position;
+    this.workflowScrollPositions[experimentId] = position;
   }
 
   getSharedNames(exp: any): string[] {

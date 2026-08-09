@@ -183,6 +183,17 @@
   padding-bottom: 20px;
 }
 
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.image-picker-input {
+  display: none;
+}
+
 .toggle-sidebar-btn {
   position: absolute;
   left: -14px;

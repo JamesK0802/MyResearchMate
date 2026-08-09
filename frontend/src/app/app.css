@@ -1620,14 +1620,15 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 }
 
 .unified-table {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  min-width: min-content;
+  min-width: 1120px;
   width: 100%;
 }
 
 .unified-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(200px, 18%) minmax(500px, 42%) minmax(360px, 40%);
   align-items: stretch;
   position: relative;
 }
@@ -1638,7 +1639,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   background: white;
   z-index: 20;
   padding: 15px;
-  width: 150px;
+  width: auto;
   box-sizing: border-box;
   flex-shrink: 0;
   border-right: 1px solid #eee;
@@ -1654,6 +1655,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   z-index: 10;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .grna-track {
@@ -1670,7 +1672,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   background: white;
   z-index: 20;
   padding: 15px;
-  width: 300px;
+  width: auto;
   box-sizing: border-box;
   flex-shrink: 0;
   border-left: 1px solid #eee;

@@ -730,12 +730,12 @@ export class NamuStorageService {
     const demoNodes: NamuNode[] = [
       {
         id: rootId,
-        title: '1. Target Sequence Selection',
-        description: 'Identify exon target region for BnYCO gene editing',
+        title: 'Demo Stage 1',
+        description: 'This is a demo stage for Demo Protocol Tree 1',
         steps: [
-          'Download FASTA reference for BnYCO-A & BnYCO-C',
-          'Locate active PAM sites (NGG) near exon 2',
-          'Verify off-target scores < 15%'
+          'Step 1 — this is a demo step',
+          'Step 2 — prepare Sample 1-1',
+          'Step 3 — review the demo result'
         ],
         nextNodes: [n2Id],
         x: 11200,
@@ -745,18 +745,18 @@ export class NamuStorageService {
           {
             id: 'l1',
             nodeId: rootId,
-            title: 'PAM Site Note',
-            content: 'PAM position +432 selected due to highest specificity.',
-            tags: ['Genomics', 'PAM'],
+            title: 'Demo Note 1',
+            content: 'This is a demo note for Demo Stage 1.',
+            tags: ['demo', 'sample-1-1'],
             createdAt: Date.now() - 86400000 * 3,
             color: '#10b981'
           },
           {
             id: 'l2',
             nodeId: rootId,
-            title: 'Reference Genome',
-            content: 'Ensemble release 54 used for locus validation.',
-            tags: ['FASTA', 'Database'],
+            title: 'Demo Reference',
+            content: 'This is a demo reference attachment.',
+            tags: ['demo', 'reference'],
             createdAt: Date.now() - 86400000 * 2,
             color: '#3b82f6'
           }
@@ -764,12 +764,12 @@ export class NamuStorageService {
       },
       {
         id: n2Id,
-        title: '2. gRNA Synthesis & Oligo Annealing',
-        description: 'Synthesize forward and reverse gRNA oligos with sticky ends',
+        title: 'Demo Stage 2',
+        description: 'This is a demo stage for Demo Protocol Tree 1',
         steps: [
-          'Mix 100µM Forward & Reverse oligos in T4 Ligation Buffer',
-          'Heat at 95°C for 5 min, then ramp down 1°C/min to 25°C',
-          'Ligate into BsaI-digested pSpCas9 vector'
+          'Step 1 — this is a demo step',
+          'Step 2 — prepare Sample 1-2',
+          'Step 3 — add a demo observation'
         ],
         nextNodes: [n3Id],
         x: 11640,
@@ -779,9 +779,9 @@ export class NamuStorageService {
           {
             id: 'l3',
             nodeId: n2Id,
-            title: 'Annealing Protocol Warning',
-            content: 'Use slow ramp down rate to maximize duplex formation efficiency.',
-            tags: ['Oligo', 'Protocol'],
+            title: 'Demo Note 2',
+            content: 'This is a demo note for Demo Stage 2.',
+            tags: ['demo', 'step-2'],
             createdAt: Date.now() - 86400000 * 2,
             color: '#f59e0b'
           }
@@ -789,12 +789,12 @@ export class NamuStorageService {
       },
       {
         id: n3Id,
-        title: '3. Target Amplicon PCR & Purification',
-        description: 'Amplify target genomic window (280bp - 350bp)',
+        title: 'Demo Stage 3',
+        description: 'This is a demo stage for Demo Protocol Tree 1',
         steps: [
-          'Set up 50µL PCR reaction using Q5 High-Fidelity DNA Polymerase',
-          'Thermocycle: 98°C 30s → 30x (98°C 10s, 62°C 20s, 72°C 30s) → 72°C 2 min',
-          'Perform 1.2% Agarose gel electrophoresis & column purification'
+          'Step 1 — this is a demo step',
+          'Step 2 — compare Sample 1-1 and Sample 1-2',
+          'Step 3 — save the demo result'
         ],
         nextNodes: [n4aId, n4bId],
         x: 12080,
@@ -804,9 +804,9 @@ export class NamuStorageService {
           {
             id: 'l4',
             nodeId: n3Id,
-            title: 'Gel Extraction Yield',
-            content: 'Purified band concentration: 48.5 ng/µL, A260/280 = 1.88.',
-            tags: ['PCR', 'Purification'],
+            title: 'Demo Note 3',
+            content: 'This is a demo note for Demo Stage 3.',
+            tags: ['demo', 'step-3'],
             createdAt: Date.now() - 86400000 * 1,
             color: '#8b5cf6'
           }
@@ -814,12 +814,12 @@ export class NamuStorageService {
       },
       {
         id: n4aId,
-        title: '4a. Targeted Deep FASTQ Sequencing',
-        description: 'Illumina MiSeq 2x250bp paired-end sequencing',
+        title: 'Demo Stage 4',
+        description: 'This is a demo stage for Demo Protocol Tree 1',
         steps: [
-          'Index amplicons with dual barcode adapters',
-          'Pool libraries at 4nM concentration',
-          'Analyze FASTQ output in MyLabMate Local pipeline'
+          'Step 1 — this is a demo step',
+          'Step 2 — inspect demo output',
+          'Step 3 — complete the demo workflow'
         ],
         nextNodes: [],
         x: 12520,
@@ -829,9 +829,9 @@ export class NamuStorageService {
           {
             id: 'l5',
             nodeId: n4aId,
-            title: 'NGS Coverage Target',
-            content: 'Target minimum 10,000 reads per sample for indel frequency.',
-            tags: ['NGS', 'MiSeq'],
+            title: 'Demo Note 4',
+            content: 'This is a demo note for Demo Stage 4.',
+            tags: ['demo', 'step-4'],
             createdAt: Date.now() - 43200000,
             color: '#ec4899'
           }
@@ -839,12 +839,12 @@ export class NamuStorageService {
       },
       {
         id: n4bId,
-        title: '4b. In Vitro Cas9 Cleavage Assay',
-        description: 'Validate Cas9-gRNA ribonucleoprotein (RNP) activity',
+        title: 'Demo Stage 5',
+        description: 'This is a demo stage for Demo Protocol Tree 1',
         steps: [
-          'Incubate 100ng amplicon + 100nM Cas9 + 100nM gRNA at 37°C for 1 hour',
-          'Add Proteinase K (1µL) and incubate at 56°C for 10 min to stop reaction',
-          'Analyze cleavage bands on Agilent TapeStation'
+          'Step 1 — this is a demo step',
+          'Step 2 — add a demo note',
+          'Step 3 — finish Demo Protocol Tree 1'
         ],
         nextNodes: [],
         x: 12520,
@@ -854,9 +854,9 @@ export class NamuStorageService {
           {
             id: 'l6',
             nodeId: n4bId,
-            title: 'Control Sample',
-            content: 'Include mock RNP reaction (no gRNA) as negative control.',
-            tags: ['Assay', 'Cas9'],
+            title: 'Demo Note 5',
+            content: 'This is a demo note for Demo Stage 5.',
+            tags: ['demo', 'step-5'],
             createdAt: Date.now() - 21600000,
             color: '#3b82f6'
           }
@@ -866,8 +866,8 @@ export class NamuStorageService {
 
     const demoTree: NamuTree = {
       id: 'tree_crispr_demo',
-      name: '🌱 CRISPR Editing Workflow',
-      description: 'Complete protocol & knowledge tree for BnYCO gene editing experiment',
+      name: 'Demo Protocol Tree 1',
+      description: 'This is a demo protocol tree with clearly labelled sample steps.',
       rootNodeId: rootId,
       nodes: demoNodes,
       createdAt: Date.now() - 86400000 * 5,
@@ -876,7 +876,7 @@ export class NamuStorageService {
 
     return {
       version: '1.0',
-      title: 'Lab Notebook Forest',
+      title: 'Demo Protocol Tree Workspace',
       trees: [demoTree],
       activeTreeId: demoTree.id
     };

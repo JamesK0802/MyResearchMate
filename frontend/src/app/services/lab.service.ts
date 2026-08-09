@@ -27,17 +27,17 @@ export interface LabRegistrationRequest {
 export class LabService {
   private apiUrl = '/api';
   private readonly demoLabs = [
-    { id: 'demo-lab-genome', lab_name: 'Genome Engineering Lab', lab_tagline: 'Precision editing for plant science', lab_description: 'CRISPR design, genotyping, and trait validation workflows.', is_leader: true, my_role: 'leader', created_at: '2026-02-12T09:00:00Z' },
-    { id: 'demo-lab-phenomics', lab_name: 'Plant Phenomics Group', lab_tagline: 'From genotype to phenotype', lab_description: 'Collaborative imaging and growth-condition experiments.', is_leader: false, my_role: 'member', created_at: '2026-03-05T09:00:00Z' },
-    { id: 'demo-lab-synthetic', lab_name: 'Synthetic Biology Hub', lab_tagline: 'Build, test, learn', lab_description: 'Shared molecular biology protocols and DNA assembly resources.', is_leader: false, my_role: 'member', created_at: '2026-04-18T09:00:00Z' },
-    { id: 'demo-lab-rna', lab_name: 'RNA Biology Laboratory', lab_tagline: 'Gene regulation and expression', lab_description: 'RNA-seq, expression profiling, and transcript discovery.', created_at: '2026-05-10T09:00:00Z' },
-    { id: 'demo-lab-imaging', lab_name: 'Cell Imaging Core', lab_tagline: 'Visualising living systems', lab_description: 'Microscopy support and quantitative image analysis.', created_at: '2026-06-01T09:00:00Z' },
-    { id: 'demo-lab-bioinformatics', lab_name: 'Computational Genomics Unit', lab_tagline: 'Data-driven biology', lab_description: 'Reproducible genomics pipelines and statistical analysis.', created_at: '2026-06-22T09:00:00Z' },
+    { id: 'demo-lab-genome', lab_name: 'Demo Lab 1', lab_tagline: 'This is a demo lab', lab_description: 'Demo workspace for Sample 1-1 and demo workflow examples.', is_leader: true, my_role: 'leader', created_at: '2026-02-12T09:00:00Z' },
+    { id: 'demo-lab-phenomics', lab_name: 'Demo Lab 2', lab_tagline: 'This is a demo lab', lab_description: 'Demo workspace for Sample 2-1 and demo workflow examples.', is_leader: false, my_role: 'member', created_at: '2026-03-05T09:00:00Z' },
+    { id: 'demo-lab-synthetic', lab_name: 'Demo Lab 3', lab_tagline: 'This is a demo lab', lab_description: 'Demo workspace for Sample 3-1 and demo workflow examples.', is_leader: false, my_role: 'member', created_at: '2026-04-18T09:00:00Z' },
+    { id: 'demo-lab-rna', lab_name: 'Demo Lab 4', lab_tagline: 'This is a demo lab', lab_description: 'A searchable demo lab with no real research records.', created_at: '2026-05-10T09:00:00Z' },
+    { id: 'demo-lab-imaging', lab_name: 'Demo Lab 5', lab_tagline: 'This is a demo lab', lab_description: 'A searchable demo lab with no real research records.', created_at: '2026-06-01T09:00:00Z' },
+    { id: 'demo-lab-bioinformatics', lab_name: 'Demo Lab 6', lab_tagline: 'This is a demo lab', lab_description: 'A searchable demo lab with no real research records.', created_at: '2026-06-22T09:00:00Z' },
   ];
   private readonly demoMembers: Record<string, any[]> = {
-    'demo-lab-genome': [{ uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'leader' }, { uid: 'u7654321', name: 'Nicole', email: 'nicole@example.edu', role_in_lab: 'member' }, { uid: 'u7654322', name: 'James', email: 'james@example.edu', role_in_lab: 'member' }],
-    'demo-lab-phenomics': [{ uid: 'u5432109', name: 'Ayesha', email: 'ayesha@example.edu', role_in_lab: 'leader' }, { uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'member' }],
-    'demo-lab-synthetic': [{ uid: 'u5678901', name: 'Mina Chen', email: 'mina@example.edu', role_in_lab: 'leader' }, { uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'member' }],
+    'demo-lab-genome': [{ uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'leader' }, { uid: 'u7654321', name: 'Demo Member 1', email: 'demo.member1@example.edu', role_in_lab: 'member' }, { uid: 'u7654322', name: 'Demo Member 2', email: 'demo.member2@example.edu', role_in_lab: 'member' }],
+    'demo-lab-phenomics': [{ uid: 'u5432109', name: 'Demo Leader 2', email: 'demo.leader2@example.edu', role_in_lab: 'leader' }, { uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'member' }],
+    'demo-lab-synthetic': [{ uid: 'u5678901', name: 'Demo Leader 3', email: 'demo.leader3@example.edu', role_in_lab: 'leader' }, { uid: 'u0000000', name: 'Demo Manager', email: 'u0000000@anu.edu.au', role_in_lab: 'member' }],
   };
 
   constructor(private http: HttpClient, private auth: AuthService) {}
@@ -136,7 +136,7 @@ export class LabService {
   }
 
   async getMyJoinRequests(): Promise<any[]> {
-    if (this.auth.isDemo) return [{ id: 'demo-join-request', lab_id: 'demo-lab-rna', lab_name: 'RNA Biology Laboratory', status: 'pending', message: 'Interested in RNA editing projects.', created_at: new Date().toISOString() }];
+    if (this.auth.isDemo) return [{ id: 'demo-join-request', lab_id: 'demo-lab-rna', lab_name: 'Demo Lab 4', status: 'pending', message: 'This is a demo join request.', created_at: new Date().toISOString() }];
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
       this.http.get<any[]>(`${this.apiUrl}/labs/join-requests/my`, { headers })
