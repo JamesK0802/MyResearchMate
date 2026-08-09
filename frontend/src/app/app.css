@@ -1609,7 +1609,7 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
   padding-bottom: 10px;
 }
 
-/* ── Unified annotation container (sticky columns) ── */
+/* ── Unified annotation container ── */
 .unified-anno-container {
   overflow-x: auto;
   white-space: nowrap;
@@ -1620,29 +1620,32 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 }
 
 .unified-table {
-  display: flex;
-  flex-direction: column;
-  min-width: 1120px;
-  width: 100%;
+  /* One grid for every row: sequence columns scroll together. */
+  display: grid;
+  grid-template-columns: 150px max-content 280px;
+  align-items: stretch;
+  min-width: 100%;
+  width: max-content;
 }
 
 .unified-row {
-  display: grid;
-  grid-template-columns: minmax(200px, 18%) minmax(500px, 42%) minmax(360px, 40%);
-  align-items: stretch;
-  position: relative;
+  /* Children participate in the common table grid instead of owning a scroll each. */
+  display: contents;
 }
 
 .sticky-left {
+  grid-column: 1;
   position: sticky;
   left: 0;
   background: white;
   z-index: 20;
-  padding: 15px;
-  width: auto;
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  padding: 12px;
   box-sizing: border-box;
-  flex-shrink: 0;
   border-right: 1px solid #eee;
+  border-bottom: 1px dotted #e0e0e0;
   display: flex;
   align-items: center;
   font-weight: 700;
@@ -1650,12 +1653,14 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 }
 
 .seq-center {
+  grid-column: 2;
   padding: 10px 15px 5px 15px;
   position: relative;
   z-index: 10;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  width: max-content;
+  border-bottom: 1px dotted #e0e0e0;
 }
 
 .grna-track {
@@ -1667,15 +1672,18 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 }
 
 .sticky-right {
+  grid-column: 3;
   position: sticky;
   right: 0;
   background: white;
   z-index: 20;
-  padding: 15px;
-  width: auto;
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  padding: 12px;
   box-sizing: border-box;
-  flex-shrink: 0;
   border-left: 1px solid #eee;
+  border-bottom: 1px dotted #e0e0e0;
 }
 
 /* ══════════════════════════════════════════════════════════════════
