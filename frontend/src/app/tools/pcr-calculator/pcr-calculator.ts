@@ -123,7 +123,7 @@ export class PcrCalculator implements OnInit {
         name: [comp.name],
         calculationMode: [comp.calculationMode],
         isOptional: [comp.isOptional],
-        enabled: [true],
+        enabled: [!comp.isOptional],
         userInputVolume: [comp.fixedVolume || 0],
         stockConcentration: [comp.stockConcentration || 10],
         stockUnit: [comp.stockUnit || 'µM'],

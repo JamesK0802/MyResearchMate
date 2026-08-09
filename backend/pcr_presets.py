@@ -39,15 +39,13 @@ DEFAULT_PRESETS = [
         "name": "Standard Taq Protocol",
         "category": "System",
         "isSystem": True,
-        "defaultReactionVolume": 20,
+        "defaultReactionVolume": 25,
         "components": [
-            {"name": "10X Taq Buffer", "calculationMode": "fixed_ratio", "ratioDenominator": 10, "includeInMasterMix": True},
-            {"name": "dNTPs (10mM)", "calculationMode": "fixed_volume", "fixedVolume": 0.4, "includeInMasterMix": True},
-            {"name": "Forward Primer (10uM)", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True},
-            {"name": "Reverse Primer (10uM)", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True},
-            {"name": "Taq Polymerase", "calculationMode": "fixed_volume", "fixedVolume": 0.2, "includeInMasterMix": True},
-            {"name": "Template DNA", "calculationMode": "fixed_volume", "fixedVolume": 1.0, "includeInMasterMix": False},
-            {"name": "Nuclease-Free Water", "calculationMode": "fill_to_reaction_volume", "includeInMasterMix": True}
+            {"name": "10 μM Forward Primer", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.2, "includeInMasterMix": True, "displayOrder": 1},
+            {"name": "10 μM Reverse Primer", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.2, "includeInMasterMix": True, "displayOrder": 2},
+            {"name": "Template DNA", "calculationMode": "fixed_volume", "fixedVolume": 1.0, "includeInMasterMix": False, "displayOrder": 3},
+            {"name": "OneTaq 2X Master Mix with Standard Buffer", "calculationMode": "fixed_ratio", "ratioDenominator": 2, "includeInMasterMix": True, "displayOrder": 4},
+            {"name": "Nuclease-Free Water", "calculationMode": "fill_to_reaction_volume", "includeInMasterMix": True, "displayOrder": 5}
         ]
     },
     {
@@ -56,26 +54,43 @@ DEFAULT_PRESETS = [
         "isSystem": True,
         "defaultReactionVolume": 25,
         "components": [
-            {"name": "5X Q5 Buffer", "calculationMode": "fixed_ratio", "ratioDenominator": 5, "includeInMasterMix": True},
-            {"name": "dNTPs (10mM)", "calculationMode": "fixed_volume", "fixedVolume": 0.5, "includeInMasterMix": True},
-            {"name": "Forward Primer (10uM)", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True},
-            {"name": "Reverse Primer (10uM)", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True},
-            {"name": "Q5 Polymerase", "calculationMode": "fixed_volume", "fixedVolume": 0.25, "includeInMasterMix": True},
-            {"name": "Template DNA", "calculationMode": "fixed_volume", "fixedVolume": 1.0, "includeInMasterMix": False},
-            {"name": "Nuclease-Free Water", "calculationMode": "fill_to_reaction_volume", "includeInMasterMix": True}
+            {"name": "5X Q5 Reaction Buffer", "calculationMode": "fixed_ratio", "ratioDenominator": 5, "includeInMasterMix": True, "displayOrder": 1},
+            {"name": "10 mM dNTPs", "calculationMode": "fixed_volume", "fixedVolume": 0.5, "includeInMasterMix": True, "displayOrder": 2},
+            {"name": "10 μM Forward Primer", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True, "displayOrder": 3},
+            {"name": "10 μM Reverse Primer", "calculationMode": "primer_concentration", "stockConcentration": 10, "finalConcentration": 0.5, "includeInMasterMix": True, "displayOrder": 4},
+            {"name": "Template DNA", "calculationMode": "fixed_volume", "fixedVolume": 1.0, "includeInMasterMix": False, "displayOrder": 5},
+            {"name": "Q5 High-Fidelity DNA Polymerase", "calculationMode": "fixed_volume", "fixedVolume": 0.25, "includeInMasterMix": True, "displayOrder": 6},
+            {"name": "5X Q5 High GC Enhancer (optional)", "calculationMode": "fixed_ratio", "ratioDenominator": 5, "isOptional": True, "includeInMasterMix": True, "displayOrder": 7},
+            {"name": "Nuclease-Free Water", "calculationMode": "fill_to_reaction_volume", "includeInMasterMix": True, "displayOrder": 8}
         ]
     }
 ]
 
 def ensure_system_presets(db: Session):
-    if db.query(PcrPreset).filter(PcrPreset.is_system == True).first():
-        return
+    changed = False
     for dp in DEFAULT_PRESETS:
-        db.add(PcrPreset(
-            name=dp["name"], category=dp["category"], is_system=True,
-            components_json=dp["components"], owner_user_id=None
-        ))
-    db.commit()
+        preset = db.query(PcrPreset).filter(
+            PcrPreset.is_system == True,
+            PcrPreset.name == dp["name"]
+        ).first()
+        if preset is None:
+            db.add(PcrPreset(
+                name=dp["name"], category=dp["category"], is_system=True,
+                components_json=dp["components"], owner_user_id=None
+            ))
+            changed = True
+        elif preset.category != dp["category"] or preset.components_json != dp["components"]:
+            preset.category = dp["category"]
+            preset.components_json = dp["components"]
+            changed = True
+    if changed:
+        db.commit()
+
+def preset_default_reaction_volume(preset: PcrPreset) -> int:
+    for default in DEFAULT_PRESETS:
+        if preset.is_system and preset.name == default["name"]:
+            return default["defaultReactionVolume"]
+    return 20
 
 def preset_data(preset: PcrPreset, db: Session, current_user: dict):
     shares = db.query(PcrPresetLabShare, Lab).join(Lab, PcrPresetLabShare.lab_id == Lab.id).filter(
@@ -85,7 +100,7 @@ def preset_data(preset: PcrPreset, db: Session, current_user: dict):
         "id": str(preset.id), "owner_user_id": preset.owner_user_id,
         "title": preset.name, "name": preset.name, "category": preset.category,
         "is_system": preset.is_system, "isSystem": preset.is_system,
-        "components": preset.components_json or [], "defaultReactionVolume": 20,
+        "components": preset.components_json or [], "defaultReactionVolume": preset_default_reaction_volume(preset),
         "created_at": preset.created_at, "updated_at": preset.updated_at,
         "is_shared": bool(shares), "shared_with_labs": [share.Lab.lab_name for share in shares]
     }
@@ -176,8 +191,7 @@ async def list_presets(
     current_user: dict = Depends(get_current_user)
 ):
     """Lists my presets, system presets, and incoming shared ones."""
-    # DEBUG
-    print(f"[DEBUG] PcrPreset attributes: {dir(PcrPreset)}")
+    ensure_system_presets(db)
     # 1. Fetch system & user presets
     presets = db.query(PcrPreset).filter(
         (PcrPreset.owner_user_id == current_user["id"]) | 
@@ -185,25 +199,7 @@ async def list_presets(
         (PcrPreset.is_public == True)
     ).order_by(PcrPreset.is_system.desc(), PcrPreset.created_at.desc()).all()
     
-    # 2. If no system presets exist, inject defaults for this session (or better, save them)
-    if not any(p.is_system for p in presets):
-        for dp in DEFAULT_PRESETS:
-            db_dp = PcrPreset(
-                name=dp["name"],
-                category=dp["category"],
-                is_system=True,
-                components_json=dp["components"],
-                owner_user_id=None # System owned
-            )
-            db.add(db_dp)
-        db.commit()
-        # Re-fetch
-        presets = db.query(PcrPreset).filter(
-            (PcrPreset.owner_user_id == current_user["id"]) | 
-            (PcrPreset.is_system == True)
-        ).all()
-
-    # 3. Fetch incoming transfers
+    # 2. Fetch incoming transfers
     transfers = db.query(PcrPresetTransfer).filter(
         PcrPresetTransfer.receiver_user_id == current_user["id"],
         PcrPresetTransfer.status == "pending"
@@ -228,7 +224,7 @@ async def list_presets(
                 "name": p.name,
                 "category": p.category,
                 "isSystem": p.is_system,
-                "defaultReactionVolume": 20, 
+                "defaultReactionVolume": preset_default_reaction_volume(p),
                 "components": p.components_json,
                 "ownerUserId": p.owner_user_id,
                 "isOwner": p.owner_user_id == current_user["id"]

@@ -51,25 +51,42 @@ export class PcrPresetService {
 
   /** Mirrors the application's two built-in PCR defaults for local demo use. */
   getDemoDataPresets(): PCRPreset[] {
-    const base = (name: string, buffer: string, polymerase: string, volume: number, ratio: number): PCRPreset => ({
-      id: `demo-system-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name, title: name, category: 'System',
-      defaultReactionVolume: volume, allowedReactionVolumes: [20, 25, 50], isSystem: true,
-      components: [
-        { name: buffer, componentType: '', calculationMode: 'fixed_ratio', ratioDenominator: ratio, includeInMasterMix: true, isOptional: false, displayOrder: 1 },
-        { name: 'dNTPs (10 mM)', componentType: '', calculationMode: 'fixed_volume', fixedVolume: volume === 25 ? 0.5 : 0.4, includeInMasterMix: true, isOptional: false, displayOrder: 2 },
-        { name: 'Forward Primer (10 μM)', componentType: '', calculationMode: 'primer_concentration', stockConcentration: 10, finalConcentration: 0.5, includeInMasterMix: true, isOptional: false, displayOrder: 3 },
-        { name: 'Reverse Primer (10 μM)', componentType: '', calculationMode: 'primer_concentration', stockConcentration: 10, finalConcentration: 0.5, includeInMasterMix: true, isOptional: false, displayOrder: 4 },
-        { name: polymerase, componentType: '', calculationMode: 'fixed_volume', fixedVolume: volume === 25 ? 0.25 : 0.2, includeInMasterMix: true, isOptional: false, displayOrder: 5 },
-        { name: 'Template DNA', componentType: '', calculationMode: 'fixed_volume', fixedVolume: 1, includeInMasterMix: false, isOptional: false, displayOrder: 6 },
-        { name: 'Nuclease-Free Water', componentType: '', calculationMode: 'fill_to_reaction_volume', includeInMasterMix: true, isOptional: false, displayOrder: 7 },
-      ]
+    const component = (name: string, calculationMode: string, displayOrder: number, extra: Partial<PCRComponent> = {}): PCRComponent => ({
+      name, componentType: '', calculationMode, includeInMasterMix: true, isOptional: false, displayOrder, ...extra
     });
+    const systemPresets: PCRPreset[] = [
+      {
+        id: 'demo-system-standard-taq-protocol', name: 'Standard Taq Protocol', title: 'Standard Taq Protocol', category: 'System',
+        defaultReactionVolume: 25, allowedReactionVolumes: [20, 25, 50], isSystem: true,
+        components: [
+          component('10 μM Forward Primer', 'primer_concentration', 1, { stockConcentration: 10, finalConcentration: 0.2 }),
+          component('10 μM Reverse Primer', 'primer_concentration', 2, { stockConcentration: 10, finalConcentration: 0.2 }),
+          component('Template DNA', 'fixed_volume', 3, { fixedVolume: 1, includeInMasterMix: false }),
+          component('OneTaq 2X Master Mix with Standard Buffer', 'fixed_ratio', 4, { ratioDenominator: 2 }),
+          component('Nuclease-Free Water', 'fill_to_reaction_volume', 5),
+        ]
+      },
+      {
+        id: 'demo-system-q5-high-fidelity-protocol', name: 'Q5 High-Fidelity Protocol', title: 'Q5 High-Fidelity Protocol', category: 'System',
+        defaultReactionVolume: 25, allowedReactionVolumes: [20, 25, 50], isSystem: true,
+        components: [
+          component('5X Q5 Reaction Buffer', 'fixed_ratio', 1, { ratioDenominator: 5 }),
+          component('10 mM dNTPs', 'fixed_volume', 2, { fixedVolume: 0.5 }),
+          component('10 μM Forward Primer', 'primer_concentration', 3, { stockConcentration: 10, finalConcentration: 0.5 }),
+          component('10 μM Reverse Primer', 'primer_concentration', 4, { stockConcentration: 10, finalConcentration: 0.5 }),
+          component('Template DNA', 'fixed_volume', 5, { fixedVolume: 1, includeInMasterMix: false }),
+          component('Q5 High-Fidelity DNA Polymerase', 'fixed_volume', 6, { fixedVolume: 0.25 }),
+          component('5X Q5 High GC Enhancer (optional)', 'fixed_ratio', 7, { ratioDenominator: 5, isOptional: true }),
+          component('Nuclease-Free Water', 'fill_to_reaction_volume', 8),
+        ]
+      }
+    ];
     const now = new Date().toISOString();
     return [
-      base('Standard Taq Protocol', '10X Taq Buffer', 'Taq Polymerase', 20, 10),
-      base('Q5 High-Fidelity Protocol', '5X Q5 Buffer', 'Q5 Polymerase', 25, 5),
+      ...systemPresets,
       ...['Genotyping PCR', 'Colony PCR', 'qPCR Mix'].map((name, index) => ({
-        ...base(`Demo ${name}`, '10X PCR Buffer', 'Taq Polymerase', 20, 10), id: `demo-pcr-${index}`, isSystem: false, category: 'Demo', created_at: now,
+        ...systemPresets[0], id: `demo-pcr-${index}`, name: `Demo ${name}`, title: `Demo ${name}`, isSystem: false, category: 'Demo', created_at: now,
+        components: systemPresets[0].components.map(component => ({ ...component }))
       }))
     ];
   }
