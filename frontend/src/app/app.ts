@@ -1,6 +1,6 @@
 import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from './services/auth.service';
 import { environment } from '../environments/environment';
@@ -26,7 +26,8 @@ export class App implements OnInit {
     public auth: AuthService,
     public analysisState: AppStateService,
     private http: HttpClient,
-    private labService: LabService
+    private labService: LabService,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -50,5 +51,6 @@ export class App implements OnInit {
   async logout() {
     this.isMobileMenuOpen = false;
     await this.auth.signOut();
+    await this.router.navigateByUrl('/');
   }
 }
