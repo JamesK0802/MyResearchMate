@@ -18,14 +18,22 @@ export interface ConnectionPath {
   template: `
     <div class="namu-flow-container" #container
       [class.connection-edit-mode]="connectionEditMode"
+      [class.is-panning]="isPanningCanvas"
+      tabindex="0"
+      aria-label="Protocol canvas. Use the arrow keys to pan, Shift plus mouse wheel to move horizontally, Control or Command plus mouse wheel to zoom, or middle mouse drag to pan."
       (wheel)="onWheel($event)"
-      (mousedown)="onCanvasMouseDown($event)">
+      (mousedown)="onCanvasMouseDown($event)"
+      (keydown)="onCanvasKeydown($event)">
 
       <div class="connection-edit-frame" *ngIf="connectionEditMode" aria-hidden="true"></div>
 
       <div class="connection-edit-hint" *ngIf="connectionEditMode">
         <span>Drag one node onto another to create a link. Click an existing link to remove it.</span>
         <button type="button" (click)="clearConnectionSelection()">Cancel selection</button>
+      </div>
+
+      <div class="canvas-navigation-hint" aria-hidden="true">
+        Middle-drag to pan · Shift + wheel for horizontal scroll · Ctrl/Cmd + wheel to zoom
       </div>
 
       <!-- Scalable Massive 10x Canvas Content Wrapper (25,000px x 20,000px) -->
@@ -63,10 +71,10 @@ export interface ConnectionPath {
             <path
               [attr.d]="conn.d"
               stroke="transparent"
-              stroke-width="48"
+              [attr.stroke-width]="connectionHitStrokeWidth"
               fill="none"
               class="connection-hit-area"
-              (click)="disconnectPath(conn.sourceId, conn.targetId); $event.stopPropagation()" />
+              (mousedown)="disconnectPath(conn.sourceId, conn.targetId); $event.preventDefault(); $event.stopPropagation()" />
           </g>
 
           <!-- Active Drag-to-Connect Preview Path -->
@@ -237,7 +245,20 @@ export interface ConnectionPath {
       width: 100%; height: 100%; background: #f8fafc;
       background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
       background-size: 28px 28px; position: relative; overflow: auto;
-      user-select: none; cursor: default;
+      user-select: none; cursor: default; scrollbar-gutter: stable both-edges;
+      scrollbar-width: auto; scrollbar-color: #94a3b8 #e2e8f0;
+    }
+    .namu-flow-container:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.45); outline-offset: -3px; }
+    .namu-flow-container.is-panning { cursor: grabbing; }
+    .namu-flow-container::-webkit-scrollbar { width: 14px; height: 14px; }
+    .namu-flow-container::-webkit-scrollbar-track { background: #e2e8f0; }
+    .namu-flow-container::-webkit-scrollbar-thumb { background: #94a3b8; border: 3px solid #e2e8f0; border-radius: 999px; }
+    .namu-flow-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    .canvas-navigation-hint {
+      position: fixed; left: 28px; bottom: 22px; z-index: 30; width: max-content; padding: 7px 10px;
+      border: 1px solid #cbd5e1; border-radius: 9px; background: rgba(255, 255, 255, 0.94);
+      color: #475569; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.10); font-size: 0.76rem; font-weight: 600;
+      pointer-events: none;
     }
     .connection-edit-frame {
       /* Fixed to the screen, not the 25,000px scrollable canvas. */
@@ -313,7 +334,7 @@ export interface ConnectionPath {
       background: #ffffff; border: 2px solid #cbd5e1; border-radius: 14px;
       box-shadow: 0 6px 12px -2px rgba(0,0,0,0.1);
       padding: 18px; display: flex; flex-direction: column; gap: 12px;
-      cursor: pointer; position: relative; width: 360px;
+      cursor: pointer; position: relative; width: 360px; box-sizing: border-box;
       transition: transform 0.25s ease, box-shadow 0.25s, border-color 0.25s, opacity 0.25s;
     }
     .node-card:hover { transform: scale(1.03); border-color: #2563eb; box-shadow: 0 14px 24px -4px rgba(0,0,0,0.15); }
@@ -433,6 +454,11 @@ export class NamuFlowViewComponent implements AfterViewInit {
   Math = Math;
   zoomScale: number = 1.0;
 
+  /** Keep the invisible delete target comfortably clickable after zoom-to-fit. */
+  get connectionHitStrokeWidth(): number {
+    return Math.max(64, 30 / Math.max(this.zoomScale, 0.1));
+  }
+
   focusedNodeId: string | null = null;
   connectionSourceNodeId: string | null = null;
 
@@ -451,6 +477,13 @@ export class NamuFlowViewComponent implements AfterViewInit {
   treeDragStartY = 0;
   hasMovedTree = false;
   treeDragNodePositions = new Map<string, { x: number; y: number }>();
+
+  // Canvas panning state for conventional mouse users.
+  isPanningCanvas = false;
+  private canvasPanStartClientX = 0;
+  private canvasPanStartClientY = 0;
+  private canvasPanStartScrollLeft = 0;
+  private canvasPanStartScrollTop = 0;
 
   // Connection Dragging state (Drag-to-Connect)
   isConnectingDrag = false;
@@ -529,11 +562,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
             source.nextNodes.forEach(targetId => {
               const target = nodeMap.get(targetId);
               if (target) {
-                const x1 = (source.x || 100) + 360;
-                const y1 = (source.y || 200) + 30;
-                const x2 = target.x || 100;
-                const y2 = (target.y || 200) + 30;
-                const d = this.orthogonalConnectionPath(x1, y1, x2, y2);
+                const d = this.connectionPathForNodes(source, target);
 
                 res.push({
                   id: `${source.id}_${target.id}`,
@@ -554,33 +583,167 @@ export class NamuFlowViewComponent implements AfterViewInit {
   get tempConnectionPath(): string {
     if (!this.connectSourceNode) return '';
     const x1 = (this.connectSourceNode.x || 100) + 360;
-    const y1 = (this.connectSourceNode.y || 200) + 30;
+    const y1 = this.nodeConnectionY(this.connectSourceNode);
     const x2 = this.tempMouseX;
     const y2 = this.tempMouseY;
 
-    return this.orthogonalConnectionPath(x1, y1, x2, y2);
+    return this.roundedOrthogonalConnectionPath(x1, y1, x2, y2, x1 + Math.max(48, (x2 - x1) / 2));
   }
 
-  /** Keep connections readable: short horizontal exits/entries with one vertical turn. */
-  private orthogonalConnectionPath(x1: number, y1: number, x2: number, y2: number): string {
+  private connectionPathForNodes(source: NamuNode, target: NamuNode): string {
+    const x1 = (source.x || 100) + 360;
+    const y1 = this.nodeConnectionY(source);
+    const x2 = target.x || 100;
+    const y2 = this.nodeConnectionY(target);
+    const routeX = this.findDirectRouteX(source, target, x1, y1, x2, y2);
+    return routeX === null
+      ? this.detourAroundNodes(source, target, x1, y1, x2, y2)
+      : this.roundedOrthogonalConnectionPath(x1, y1, x2, y2, routeX);
+  }
+
+  private nodeConnectionY(node: NamuNode): number {
+    // Nodes are aligned by their top edge. Anchor every connection at the same
+    // header-level Y position so cards with longer step lists do not create a
+    // misleading vertical bend in an otherwise straight workflow.
+    return (node.y || 200) + 30;
+  }
+
+  /**
+   * Select a vertical routing lane that does not pass through another card.
+   * Connections still leave from the right and enter from the left, but a
+   * back-link detours just outside both cards instead of disappearing behind
+   * a card below it.
+   */
+  private findDirectRouteX(source: NamuNode, target: NamuNode, x1: number, y1: number, x2: number, y2: number): number | null {
+    const clearance = 28;
+    const lowY = Math.min(y1, y2);
+    const highY = Math.max(y1, y2);
+    const blockers = this.allTrees
+      .flatMap(tree => tree.nodes || [])
+      .filter(node => node.id !== source.id && node.id !== target.id)
+      .filter(node => {
+        const top = node.y || 200;
+        const bottom = top + estimateNamuNodeHeight(node);
+        return bottom + clearance >= lowY && top - clearance <= highY;
+      });
+
+    const isClear = (routeX: number) => blockers.every(node => {
+      const left = node.x || 100;
+      return routeX < left - clearance || routeX > left + 360 + clearance;
+    });
+
+    // Direct lanes are only safe when the target sits entirely to the right
+    // of the source exit. Otherwise a line would travel through a card.
+    if (x2 <= x1 + clearance * 2) return null;
+
+    const minLane = x1 + clearance;
+    const maxLane = x2 - clearance;
+    const preferred = (x1 + x2) / 2;
+    const candidates = [
+      preferred,
+      minLane,
+      maxLane,
+      ...blockers.flatMap(node => [(node.x || 100) - clearance, (node.x || 100) + 360 + clearance])
+    ].filter(candidate => candidate >= minLane && candidate <= maxLane && isClear(candidate));
+
+    if (candidates.length > 0) {
+      return candidates.reduce((best, candidate) =>
+        Math.abs(candidate - preferred) < Math.abs(best - preferred) ? candidate : best
+      );
+    }
+    return null;
+  }
+
+  /** Route crowded/backward links outside card edges, then back into the target's left port. */
+  private detourAroundNodes(source: NamuNode, target: NamuNode, x1: number, y1: number, x2: number, y2: number): string {
+    const clearance = 42;
+    const sourceTop = source.y || 200;
+    const targetTop = target.y || 200;
+    const sourceBottom = sourceTop + estimateNamuNodeHeight(source);
+    const targetBottom = targetTop + estimateNamuNodeHeight(target);
+    const horizontalStart = Math.min(x1, x2 - clearance);
+    const horizontalEnd = Math.max(x1 + clearance, x2);
+    const allNodes = this.allTrees.flatMap(tree => tree.nodes || []);
+    const laneIsClear = (laneY: number) => allNodes.every(node => {
+      const left = node.x || 100;
+      const right = left + 360;
+      const top = node.y || 200;
+      const bottom = top + estimateNamuNodeHeight(node);
+      const overlapsHorizontal = right >= horizontalStart && left <= horizontalEnd;
+      return !overlapsHorizontal || laneY < top - clearance || laneY > bottom + clearance;
+    });
+
+    const preferredTop = Math.min(sourceTop, targetTop) - clearance;
+    const preferredBottom = Math.max(sourceBottom, targetBottom) + clearance;
+    const laneCandidates = [
+      preferredTop,
+      preferredBottom,
+      ...allNodes.flatMap(node => [
+        (node.y || 200) - clearance,
+        (node.y || 200) + estimateNamuNodeHeight(node) + clearance
+      ])
+    ].filter(laneIsClear);
+    const midpointY = (y1 + y2) / 2;
+    const routeY = laneCandidates.length > 0
+      ? laneCandidates.reduce((best, candidate) => Math.abs(candidate - midpointY) < Math.abs(best - midpointY) ? candidate : best)
+      : preferredBottom;
+    const sourceLaneX = x1 + clearance;
+    const targetLaneX = x2 - clearance;
+
+    return this.roundedPolyline([
+      { x: x1, y: y1 },
+      { x: sourceLaneX, y: y1 },
+      { x: sourceLaneX, y: routeY },
+      { x: targetLaneX, y: routeY },
+      { x: targetLaneX, y: y2 },
+      { x: x2, y: y2 }
+    ]);
+  }
+
+  /** Keep the readable right-angle structure, with rounded rather than sharp turns. */
+  private roundedOrthogonalConnectionPath(x1: number, y1: number, x2: number, y2: number, routeX: number): string {
     if (Math.abs(y2 - y1) < 2) return `M ${x1} ${y1} H ${x2}`;
+    return this.roundedPolyline([
+      { x: x1, y: y1 },
+      { x: routeX, y: y1 },
+      { x: routeX, y: y2 },
+      { x: x2, y: y2 }
+    ]);
+  }
 
-    // The normal graph direction is left-to-right. Keep a stable central spine
-    // so branch connections do not sweep across the canvas in large arcs.
-    const horizontalGap = x2 - x1;
-    const midX = horizontalGap >= 0
-      ? x1 + Math.max(42, horizontalGap / 2)
-      : x1 + 64;
+  private roundedPolyline(points: Array<{ x: number; y: number }>): string {
+    const radiusLimit = 22;
+    let path = `M ${points[0].x} ${points[0].y}`;
 
-    return `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`;
+    for (let index = 1; index < points.length - 1; index++) {
+      const previous = points[index - 1];
+      const corner = points[index];
+      const next = points[index + 1];
+      const incomingLength = Math.hypot(corner.x - previous.x, corner.y - previous.y);
+      const outgoingLength = Math.hypot(next.x - corner.x, next.y - corner.y);
+      const radius = Math.min(radiusLimit, incomingLength / 2, outgoingLength / 2);
+      const before = {
+        x: corner.x + ((previous.x - corner.x) / incomingLength) * radius,
+        y: corner.y + ((previous.y - corner.y) / incomingLength) * radius
+      };
+      const after = {
+        x: corner.x + ((next.x - corner.x) / outgoingLength) * radius,
+        y: corner.y + ((next.y - corner.y) / outgoingLength) * radius
+      };
+      path += ` L ${before.x} ${before.y} Q ${corner.x} ${corner.y} ${after.x} ${after.y}`;
+    }
+
+    const last = points[points.length - 1];
+    return `${path} L ${last.x} ${last.y}`;
   }
 
   // Mouse Wheel Zoom-to-Cursor
   onWheel(e: WheelEvent) {
+    if (!this.containerRef) return;
+    const el = this.containerRef.nativeElement as HTMLElement;
+
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      if (!this.containerRef) return;
-      const el = this.containerRef.nativeElement as HTMLElement;
       const rect = el.getBoundingClientRect();
 
       const cursorX = e.clientX - rect.left;
@@ -599,7 +762,30 @@ export class NamuFlowViewComponent implements AfterViewInit {
 
       el.scrollLeft = Math.max(0, newScrollLeft);
       el.scrollTop = Math.max(0, newScrollTop);
+      return;
     }
+
+    // Most mouse wheels only emit a vertical delta. Shift gives desktop users
+    // an intentional horizontal-pan gesture without relying on a trackpad.
+    if (e.shiftKey) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY || e.deltaX;
+    }
+  }
+
+  onCanvasKeydown(e: KeyboardEvent) {
+    if (!this.containerRef || e.target !== this.containerRef.nativeElement) return;
+    const step = e.shiftKey ? 420 : 140;
+    const direction: Record<string, { left: number; top: number }> = {
+      ArrowLeft: { left: -step, top: 0 },
+      ArrowRight: { left: step, top: 0 },
+      ArrowUp: { left: 0, top: -step },
+      ArrowDown: { left: 0, top: step }
+    };
+    const movement = direction[e.key];
+    if (!movement) return;
+    e.preventDefault();
+    (this.containerRef.nativeElement as HTMLElement).scrollBy({ ...movement, behavior: 'smooth' });
   }
 
   // Node Click: Focus node
@@ -813,6 +999,13 @@ export class NamuFlowViewComponent implements AfterViewInit {
 
   @HostListener('document:mousemove', ['$event'])
   onCanvasMouseMove(e: MouseEvent) {
+    if (this.isPanningCanvas && this.containerRef) {
+      const el = this.containerRef.nativeElement as HTMLElement;
+      el.scrollLeft = this.canvasPanStartScrollLeft - (e.clientX - this.canvasPanStartClientX);
+      el.scrollTop = this.canvasPanStartScrollTop - (e.clientY - this.canvasPanStartClientY);
+      return;
+    }
+
     if (this.draggingTree) {
       const deltaX = (e.clientX - this.treeDragStartX) / this.zoomScale;
       const deltaY = (e.clientY - this.treeDragStartY) / this.zoomScale;
@@ -853,6 +1046,10 @@ export class NamuFlowViewComponent implements AfterViewInit {
 
   @HostListener('document:mouseup')
   onCanvasMouseUp() {
+    if (this.isPanningCanvas) {
+      this.isPanningCanvas = false;
+      return;
+    }
     if (this.draggingTree) {
       if (this.hasMovedTree) {
         this.namuStorageService.updateTree({ ...this.draggingTree, nodes: [...this.draggingTree.nodes] });
@@ -876,8 +1073,21 @@ export class NamuFlowViewComponent implements AfterViewInit {
 
   // Canvas background click -> un-focus
   onCanvasMouseDown(e: MouseEvent) {
+    if (e.button === 1 && this.containerRef) {
+      e.preventDefault();
+      const el = this.containerRef.nativeElement as HTMLElement;
+      this.isPanningCanvas = true;
+      this.canvasPanStartClientX = e.clientX;
+      this.canvasPanStartClientY = e.clientY;
+      this.canvasPanStartScrollLeft = el.scrollLeft;
+      this.canvasPanStartScrollTop = el.scrollTop;
+      el.focus({ preventScroll: true });
+      return;
+    }
+
     const target = e.target as HTMLElement;
     if (target && (target.classList.contains('namu-flow-container') || target.classList.contains('flow-viewport-content') || target.tagName.toLowerCase() === 'svg')) {
+      (this.containerRef.nativeElement as HTMLElement).focus({ preventScroll: true });
       if (this.focusedNodeId) {
         this.closeFocusNode();
       }

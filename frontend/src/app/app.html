@@ -15,6 +15,7 @@
             <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">CRISPR Tool</a>
             <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
             <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="dropdown-item">Protocol Builder</a>
+            <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="dropdown-item">Photo comparison</a>
             <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
             <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="dropdown-item">Tool Directory</a>
           </div>
@@ -133,6 +134,7 @@
         <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">CRISPR Tool</a>
         <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
         <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Protocol Builder</a>
+        <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo comparison</a>
         <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">PCR Calculator</a>
       </div>
 

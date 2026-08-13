@@ -87,6 +87,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/protocol-builder-page/protocol-builder-page.component').then(m => m.NamuPageComponent)
   },
   {
+    path: 'tools/sample-photo-compare',
+    loadComponent: () => import('./pages/sample-photo-compare-page/sample-photo-compare-page.component').then(m => m.SamplePhotoComparePageComponent)
+  },
+  {
     path: 'auth/callback',
     loadComponent: () => import('./pages/login-callback/login-callback.component').then(m => m.LoginCallbackComponent)
   },

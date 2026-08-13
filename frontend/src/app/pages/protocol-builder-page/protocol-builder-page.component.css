@@ -164,7 +164,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   max-width: calc(100vw - 32px);
   gap: 10px;
   pointer-events: auto;
@@ -174,7 +174,7 @@
 .fab-tree-selector-group {
   display: flex;
   align-items: center;
-  min-width: 0;
+  min-width: min(420px, 42vw);
   gap: 6px;
   background: #ffffff;
   border: 1.5px solid #cbd5e1;
@@ -191,7 +191,8 @@
   color: #1e293b;
   outline: none;
   cursor: pointer;
-  max-width: 240px;
+  width: clamp(300px, 29vw, 520px);
+  max-width: 520px;
   min-width: 0;
 }
 
@@ -299,9 +300,9 @@
 /* The active label is wider than "Edit links". Keep every control visible
    instead of allowing the last button to run beyond the viewport. */
 @media (max-width: 900px) {
-  .floating-canvas-dock { right: 16px; bottom: 16px; max-width: calc(100vw - 24px); }
-  .fab-tree-selector-group { max-width: 100%; }
-  .fab-tree-dropdown { max-width: min(240px, 42vw); }
+  .floating-canvas-dock { right: 16px; bottom: 16px; max-width: calc(100vw - 24px); overflow-x: auto; }
+  .fab-tree-selector-group { min-width: min(360px, 72vw); }
+  .fab-tree-dropdown { width: min(340px, 44vw); }
 }
 
 @media print {

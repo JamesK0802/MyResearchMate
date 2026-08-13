@@ -73,6 +73,17 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
+            <a routerLink="/tools/sample-photo-compare" class="tool-card">
+              <div class="card-body">
+                <h3>Photo comparison</h3>
+                <p>Arrange earlier and current sample photos side by side, reorder them, and export a printable comparison sheet.</p>
+                <div class="tag-row">
+                  <span>Photo Sets</span>
+                  <span>Side-by-side</span>
+                  <span>PDF Export</span>
+                </div>
+              </div>
+            </a>
           </div>
         </section>
 

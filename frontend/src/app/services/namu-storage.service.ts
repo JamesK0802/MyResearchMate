@@ -52,8 +52,8 @@ export class NamuStorageService {
     this.openedFileName$.next(`${title} — not saved`);
     this.isFileLoaded$.next(true);
     this.updateDocument(structuredClone(document));
-    // Every newly opened protocol starts in a clean, readable layout.
-    this.autoLayoutTreeNodes(document.activeTreeId);
+    // Preserve the layout saved with this My Data record. Re-laying out here
+    // changes the connection geometry and makes existing links hard to target.
   }
 
   markSavedToMyData(recordId: string) { this.myDataRecordId = recordId; }
