@@ -51,11 +51,13 @@
         <div class="form-group flex-wide">
           <label>
             Window Size (bp)
+            <span class="custom-window-badge" *ngIf="state.analysisForm.get('customWindowEnabled')?.value">Custom</span>
             <span class="info-icon">?
               <span class="tooltip-text">Total analysis width around cut site.</span>
             </span>
           </label>
-          <input type="number" formControlName="interestRegion" class="form-control" />
+          <input type="number" formControlName="interestRegion" class="form-control"
+            [readonly]="state.analysisForm.get('customWindowEnabled')?.value" />
         </div>
         <div class="form-group flex-wide">
           <label>
@@ -120,11 +122,22 @@
       </div>
 
       <div class="similar-window-settings-panel" *ngIf="showSimilarWindowSettings">
-        <div class="similar-window-header">
-          <h4>Similar Window Setting</h4>
-          <span class="similar-window-subtitle">Advanced parameters to enhance classification accuracy for targets with high sequence similarity.</span>
+        <div class="custom-window-row">
+          <label class="custom-window-toggle">
+            <input type="checkbox" formControlName="customWindowEnabled" />
+            <span>Use custom window</span>
+          </label>
+          <div class="custom-window-inputs" *ngIf="state.analysisForm.get('customWindowEnabled')?.value">
+            <label>Left: <input type="number" min="0" formControlName="customWindowLeft" class="form-control" /> bp</label>
+            <label>Right: <input type="number" min="0" formControlName="customWindowRight" class="form-control" /> bp</label>
+          </div>
         </div>
-        <div class="slider-group-container">
+        <section class="similar-window-card">
+          <div class="similar-window-header">
+            <h4>Similar Window Setting</h4>
+            <span class="similar-window-subtitle">Advanced parameters to enhance classification accuracy for targets with high sequence similarity.</span>
+          </div>
+          <div class="slider-group-container">
           <div class="form-group slider-group">
             <div class="slider-header">
               <label>
@@ -152,7 +165,8 @@
             <input type="range" min="0" max="10" step="1" formControlName="cutSiteExclusionFlank" class="form-range" />
             <p class="slider-description">Excludes indels/mutations starting within cut site ±N bp from similarity calculations to prevent score distortion.</p>
           </div>
-        </div>
+          </div>
+        </section>
       </div>
 
       <hr class="divider" />

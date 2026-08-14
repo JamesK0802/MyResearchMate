@@ -293,6 +293,9 @@ export class AppStateService {
       indelPercent: val.indelPercent ?? 2,
       cutSiteDistanceWeight: val.cutSiteDistanceWeight ?? 0,
       cutSiteExclusionFlank: val.cutSiteExclusionFlank ?? 0,
+      customWindowEnabled: val.customWindowEnabled ?? false,
+      customWindowLeft: val.customWindowLeft ?? 45,
+      customWindowRight: val.customWindowRight ?? 45,
       analyzeAmbiguous: val.analyzeAmbiguous ?? false,
       rescueAmbiguous: val.rescueAmbiguous ?? false
     }, { emitEvent: false });
@@ -336,12 +339,24 @@ export class AppStateService {
       indelPercent: [2, [Validators.required, Validators.min(0), Validators.max(100)]],
       cutSiteDistanceWeight: [0, [Validators.required, Validators.min(0), Validators.max(10)]],
       cutSiteExclusionFlank: [0, [Validators.required, Validators.min(0), Validators.max(10)]],
+      customWindowEnabled: [false],
+      customWindowLeft: [45, [Validators.required, Validators.min(0), Validators.max(500)]],
+      customWindowRight: [45, [Validators.required, Validators.min(0), Validators.max(500)]],
       analyzeAmbiguous: [false], rescueAmbiguous: [false],
       genes: this.fb.array([this.createGeneGroup()])
     });
     this.analysisForm.get('analyzeAmbiguous')?.valueChanges.subscribe(val => {
       if (!val) this.analysisForm.get('rescueAmbiguous')?.setValue(false, { emitEvent: false });
     });
+    const syncCustomWindowSize = () => {
+      if (!this.analysisForm.get('customWindowEnabled')?.value) return;
+      const left = Math.max(0, Number(this.analysisForm.get('customWindowLeft')?.value) || 0);
+      const right = Math.max(0, Number(this.analysisForm.get('customWindowRight')?.value) || 0);
+      this.analysisForm.get('interestRegion')?.setValue(left + right, { emitEvent: false });
+    };
+    ['customWindowEnabled', 'customWindowLeft', 'customWindowRight'].forEach(control =>
+      this.analysisForm.get(control)?.valueChanges.subscribe(syncCustomWindowSize)
+    );
   }
   private createGeneGroup(): FormGroup {
     return this.fb.group({ gene_name: [''], gene_reference: ['', Validators.required], geneTargets: this.fb.array([this.createGeneTargetGroup()]) });

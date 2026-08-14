@@ -120,20 +120,25 @@ export function findGrnaCutSite(reference: string, grna: string): CutSiteInfo {
   return { strand: 'unknown', grna_start: -1, grna_end: -1, cut_site: Math.floor(refLen / 2), pam: 'N/A', pam_found: false };
 }
 
-export function getWindowBounds(reference: string, cutSite: number, windowSize: number): [number, number] {
+export function getWindowBounds(reference: string, cutSite: number, windowSize: number, leftSize?: number, rightSize?: number): [number, number] {
+  if (leftSize !== undefined && rightSize !== undefined) {
+    const start = Math.max(0, cutSite - Math.max(0, leftSize));
+    const end = Math.min(reference.length, cutSite + Math.max(0, rightSize));
+    return [start, end];
+  }
   const half = Math.floor(windowSize / 2);
   const start = Math.max(0, cutSite - half);
   const end = Math.min(reference.length, cutSite + half);
   return [start, end];
 }
 
-export function cutIndexInWindow(reference: string, cutSite: number, windowSize: number): number {
-  const [start] = getWindowBounds(reference, cutSite, windowSize);
+export function cutIndexInWindow(reference: string, cutSite: number, windowSize: number, leftSize?: number, rightSize?: number): number {
+  const [start] = getWindowBounds(reference, cutSite, windowSize, leftSize, rightSize);
   return Math.max(0, cutSite - start);
 }
 
-export function extractWindow(reference: string, cutSite: number, windowSize: number): string {
-  const [start, end] = getWindowBounds(reference, cutSite, windowSize);
+export function extractWindow(reference: string, cutSite: number, windowSize: number, leftSize?: number, rightSize?: number): string {
+  const [start, end] = getWindowBounds(reference, cutSite, windowSize, leftSize, rightSize);
   return reference.substring(start, end);
 }
 

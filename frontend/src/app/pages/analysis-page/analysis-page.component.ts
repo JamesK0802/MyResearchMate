@@ -108,6 +108,7 @@ export class AnalysisPageComponent implements OnInit {
   toggleWindowCheck() {
     this.showWindowCheck = !this.showWindowCheck;
     if (this.showWindowCheck) {
+      this.windowCheckSize = Number(this.state.analysisForm.get('interestRegion')?.value) || 90;
       this.recalculateWindowCheck();
     }
   }
@@ -258,6 +259,10 @@ export class AnalysisPageComponent implements OnInit {
     setTimeout(() => {
       try {
         const genesFormVal = this.state.analysisForm.get('genes')?.value || [];
+        const customWindowEnabled = Boolean(this.state.analysisForm.get('customWindowEnabled')?.value);
+        const customWindowLeft = Math.max(0, Number(this.state.analysisForm.get('customWindowLeft')?.value) || 0);
+        const customWindowRight = Math.max(0, Number(this.state.analysisForm.get('customWindowRight')?.value) || 0);
+        const displayWindowSize = customWindowEnabled ? customWindowLeft + customWindowRight : this.windowCheckSize;
         const extracted: ExtractedWindowItem[] = [];
 
         genesFormVal.forEach((g: any, gi: number) => {
@@ -276,8 +281,12 @@ export class AnalysisPageComponent implements OnInit {
               cutSite = Math.floor(refSeq.length / 2);
             }
 
-            const winSeq = extractWindow(refSeq, cutSite, this.windowCheckSize);
-            const cutWinIdx = cutInfo.grna_start !== -1 ? cutIndexInWindow(refSeq, cutSite, this.windowCheckSize) : -1;
+            const winSeq = extractWindow(refSeq, cutSite, displayWindowSize,
+              customWindowEnabled ? customWindowLeft : undefined,
+              customWindowEnabled ? customWindowRight : undefined);
+            const cutWinIdx = cutInfo.grna_start !== -1 ? cutIndexInWindow(refSeq, cutSite, displayWindowSize,
+              customWindowEnabled ? customWindowLeft : undefined,
+              customWindowEnabled ? customWindowRight : undefined) : -1;
 
             const refLength = refSeq.length;
             const grnaStart = cutInfo.grna_start;
@@ -287,9 +296,10 @@ export class AnalysisPageComponent implements OnInit {
             let winStart = 0;
             let winEnd = 0;
             if (cutSite >= 0) {
-              const halfWin = Math.floor(this.windowCheckSize / 2);
-              winStart = Math.max(0, cutSite - halfWin);
-              winEnd = Math.min(refLength, winStart + this.windowCheckSize);
+              const left = customWindowEnabled ? customWindowLeft : Math.floor(displayWindowSize / 2);
+              const right = customWindowEnabled ? customWindowRight : Math.floor(displayWindowSize / 2);
+              winStart = Math.max(0, cutSite - left);
+              winEnd = Math.min(refLength, cutSite + right);
             }
 
             const winLeftPercent = refLength > 0 ? (winStart / refLength) * 100 : 0;
@@ -462,15 +472,24 @@ export class AnalysisPageComponent implements OnInit {
 
     const distanceWeight = Number(rawValue.cutSiteDistanceWeight ?? 0);
     const exclusionFlank = Number(rawValue.cutSiteExclusionFlank ?? 0);
+    const customWindowEnabled = Boolean(rawValue.customWindowEnabled);
+    const customWindowLeft = Math.max(0, Number(rawValue.customWindowLeft) || 0);
+    const customWindowRight = Math.max(0, Number(rawValue.customWindowRight) || 0);
+    const windowSize = customWindowEnabled
+      ? customWindowLeft + customWindowRight
+      : Number(rawValue.interestRegion ?? 90);
 
     this.state.lastRunParams = {
-      windowSize: rawValue.interestRegion ?? 90,
+      windowSize,
       phredThreshold: phredVal,
       indelThreshold: indelVal,
       assignmentMargin: (rawValue.marginPercent ?? 3),
       rescueThreshold: rescueThreshold,
       cutSiteDistanceWeight: distanceWeight,
       cutSiteExclusionFlank: exclusionFlank,
+      customWindowEnabled,
+      customWindowLeft: customWindowEnabled ? customWindowLeft : undefined,
+      customWindowRight: customWindowEnabled ? customWindowRight : undefined,
       analyzeAmbiguous: rawValue.analyzeAmbiguous || false,
       rescueAmbiguous: rawValue.rescueAmbiguous || false,
       dataType: 'single-end',
@@ -484,7 +503,9 @@ export class AnalysisPageComponent implements OnInit {
         target_id: t.target_id?.trim() || `T${ti + 1}`,
         sgrna_seq: t.gRNA,
         reference_seq: g.gene_reference,
-        window_size: Number(rawValue.interestRegion ?? 90)
+        window_size: windowSize,
+        window_left: customWindowEnabled ? customWindowLeft : undefined,
+        window_right: customWindowEnabled ? customWindowRight : undefined
       }))
     }));
 
@@ -496,7 +517,7 @@ export class AnalysisPageComponent implements OnInit {
         phredThreshold: phredVal,
         indelThreshold: indelVal,
         marginThreshold: marginVal,
-        windowSize: Number(rawValue.interestRegion ?? 90),
+        windowSize,
         analyzeAmbiguous: rawValue.analyzeAmbiguous || false,
         rescueAmbiguous: rawValue.rescueAmbiguous || false,
         rescueThreshold: rescueThreshold,

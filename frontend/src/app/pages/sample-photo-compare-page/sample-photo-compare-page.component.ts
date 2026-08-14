@@ -160,10 +160,10 @@ export class SamplePhotoComparePageComponent {
     files.forEach((file, fileIndex) => {
       const index = indexes[fileIndex];
       if (/\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) {
-        slots[index] = { id: crypto.randomUUID(), name: file.name, error: 'HEIC/HEIF cannot be previewed here. Convert it to JPEG or PNG first.' };
+        slots[index] = { id: this.makeId(), name: file.name, error: 'HEIC/HEIF cannot be previewed here. Convert it to JPEG or PNG first.' };
         this.pendingImages--; this.refresh(); return;
       }
-      const slot: PhotoSlot = { id: crypto.randomUUID(), url: URL.createObjectURL(file), name: file.name };
+      const slot: PhotoSlot = { id: this.makeId(), url: URL.createObjectURL(file), name: file.name };
       slots[index] = slot;
       this.pendingImages--; this.preparePrintImage(slot); this.refresh();
     });
@@ -178,7 +178,11 @@ export class SamplePhotoComparePageComponent {
     windowRef.document.close();
     requestAnimationFrame(() => { windowRef.focus(); windowRef.print(); });
   }
-  private emptySlot(reserved = false): PhotoSlot { return { id: crypto.randomUUID(), reserved }; }
+  private emptySlot(reserved = false): PhotoSlot { return { id: this.makeId(), reserved }; }
+  private makeId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+    return `photo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
   private refresh() { this.cdr.detectChanges(); }
   private preparePrintImage(slot: PhotoSlot) {
     if (!slot.url) return;

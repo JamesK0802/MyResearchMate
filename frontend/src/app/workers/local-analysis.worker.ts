@@ -223,6 +223,8 @@ const fileTextCache = new Map<string, string>();
 
       const sgrnaSeq = target.sgrna_seq || '';
       const windowSize = target.window_size ?? 90;
+      const windowLeft = target.window_left;
+      const windowRight = target.window_right;
       let refWindow = target.ref_window || target.ref_sequence || target.reference_seq || '';
       let cutSiteIndexFixed = target.cut_site_index ?? -1;
 
@@ -230,8 +232,8 @@ const fileTextCache = new Map<string, string>();
       if (refWindow.length > (windowSize + 30)) {
         const cutInfo = findGrnaCutSite(refWindow, sgrnaSeq);
         const refCutSite = cutInfo.cut_site;
-        refWindow = extractWindow(refWindow, refCutSite, windowSize);
-        cutSiteIndexFixed = cutIndexInWindow(target.ref_sequence || target.reference_seq, refCutSite, windowSize);
+        refWindow = extractWindow(refWindow, refCutSite, windowSize, windowLeft, windowRight);
+        cutSiteIndexFixed = cutIndexInWindow(target.ref_sequence || target.reference_seq, refCutSite, windowSize, windowLeft, windowRight);
       }
 
       if (cutSiteIndexFixed < 0) {

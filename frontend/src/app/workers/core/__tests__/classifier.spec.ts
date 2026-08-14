@@ -44,17 +44,21 @@ describe('Classifier Core Utilities', () => {
     expect(getWindowBounds(ref, 50, 40)).toEqual([30, 70]);
     expect(getWindowBounds(ref, 10, 40)).toEqual([0, 30]);
     expect(getWindowBounds(ref, 90, 40)).toEqual([70, 100]);
+    expect(getWindowBounds(ref, 50, 60, 20, 40)).toEqual([30, 90]);
+    expect(getWindowBounds(ref, 10, 60, 20, 40)).toEqual([0, 50]);
   });
 
   it('should get correct cut index in window', () => {
     const ref = 'A'.repeat(100);
     expect(cutIndexInWindow(ref, 50, 40)).toBe(20);
     expect(cutIndexInWindow(ref, 10, 40)).toBe(10);
+    expect(cutIndexInWindow(ref, 50, 60, 20, 40)).toBe(20);
   });
 
   it('should extract correct window subsegment', () => {
     const ref = 'abcdefghijklmnopqrstuvwxyz';
     expect(extractWindow(ref, 10, 10)).toBe('fghijklmno'); // cutSite = 10, windowSize = 10, [10-5, 10+5] = [5, 15] = 'fghijklmno'
+    expect(extractWindow(ref, 10, 6, 2, 4)).toBe('ijklmn');
   });
 
   it('should score read against window using k-mer scoring', () => {
