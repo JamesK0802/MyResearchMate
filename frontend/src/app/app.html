@@ -16,6 +16,7 @@
             <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
             <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="dropdown-item">Protocol Builder</a>
             <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="dropdown-item">Photo comparison</a>
+            <a routerLink="/tools/plot-generator" routerLinkActive="active" class="dropdown-item">Plot Generator</a>
             <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">PCR Setup Calculator</a>
             <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="dropdown-item">Tool Directory</a>
           </div>
@@ -45,6 +46,7 @@
             <a routerLink="/crispr/my-data" routerLinkActive="active" class="dropdown-item">CRISPR Analysis Results</a>
             <a routerLink="/data/protocol-trees" routerLinkActive="active" class="dropdown-item">Protocol Trees</a>
             <a routerLink="/data/pcr-protocols" routerLinkActive="active" class="dropdown-item">PCR Protocols</a>
+            <a routerLink="/data/plot-projects" routerLinkActive="active" class="dropdown-item">Plot Projects</a>
           </div>
         </div>
 
@@ -57,7 +59,7 @@
             <a routerLink="/lab/archive" routerLinkActive="active" class="dropdown-item">Experiment Archive</a>
           </div>
         </div>
-        
+
         <!-- Booking dropdown (logged in only) -->
         <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
           <span class="nav-tab" style="cursor: pointer;">Booking ▾</span>
@@ -126,7 +128,7 @@
       <span class="drawer-brand">Menu</span>
       <span class="version-tag">v{{ appVersion }}</span>
     </div>
-    
+
     <div class="drawer-links">
       <!-- CRISPR Tool -->
       <div class="drawer-section">
@@ -135,6 +137,7 @@
         <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
         <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Protocol Builder</a>
         <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo comparison</a>
+        <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Plot Generator</a>
         <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">PCR Calculator</a>
       </div>
 
@@ -143,6 +146,7 @@
         <a routerLink="/crispr/my-data" class="drawer-link" (click)="isMobileMenuOpen = false">CRISPR Analysis Results</a>
         <a routerLink="/data/protocol-trees" class="drawer-link" (click)="isMobileMenuOpen = false">Protocol Trees</a>
         <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">PCR Protocols</a>
+        <a routerLink="/data/plot-projects" class="drawer-link" (click)="isMobileMenuOpen = false">Plot Projects</a>
       </div>
 
       <!-- Lab Note entries (logged in) -->

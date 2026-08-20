@@ -26,7 +26,7 @@ from sqlalchemy import text
 
 if multiprocessing.current_process().name == 'MainProcess':
     Base.metadata.create_all(bind=engine)
-    
+
     # Self-healing DB check for WorkflowShare updates (supporting individual researcher shares)
     try:
         with engine.connect() as conn:
@@ -72,11 +72,11 @@ async def cancel_task(task_id: str):
     print(f"[DEBUG] Cancel requested for {task_id}")
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     # Set the event to signal workers to abort
     if task_id in cancel_events:
         cancel_events[task_id].set()
-    
+
     update_task(tasks, task_id, status="canceled", stage="Analysis canceled by user")
     return {"status": "canceled"}
 
@@ -136,45 +136,45 @@ def background_analysis(
     try:
         update_task(tasks_proxy, task_id, status="running", stage="Initializing parallel analysis...", file_progress={f: 0 for f in temp_filenames})
         genes_payload = json.loads(targets_json)
-        
+
         global _manager
         if '_manager' in globals():
             ce = _manager.Event()
         else:
             import multiprocessing
             ce = multiprocessing.Manager().Event()
-            
+
         cancel_events[task_id] = ce
-        
+
         all_results = []
         total_files = len(temp_filenames)
-        
+
         # Parallel processing of files using a ProcessPoolExecutor
         max_workers = min(os.cpu_count() or 4, 16)
         print(f"[BACKGROUND] Initializing parallel analysis with {max_workers} worker processes for {total_files} files.")
-        
+
         # Setup cross-process progress queue
         if '_manager' in globals():
             progress_queue = _manager.Queue()
         else:
             import multiprocessing
             progress_queue = multiprocessing.Manager().Queue()
-            
+
         def monitor_progress():
             file_progress = {f: 0 for f in temp_filenames} # dict of filename -> pct
             while True:
                 item = progress_queue.get()
                 if item == "DONE":
                     break
-                
+
                 # Check for cancellation before processing updates
                 if task_id in cancel_events and cancel_events[task_id].is_set():
                     update_task(tasks_proxy, task_id, status="canceled", stage="Canceling...")
                     break
-                    
+
                 fname, p, msg = item
                 file_progress[fname] = p
-                
+
                 # Calculate overall progress across all files
                 if total_files > 0:
                     total_p = sum(file_progress.get(f, 0) for f in temp_filenames)
@@ -182,20 +182,20 @@ def background_analysis(
                 else:
                     overall = 10
                 overall = min(99, max(10, overall))
-                
+
                 update_task(tasks_proxy, task_id, progress=overall, stage=msg, file_progress=dict(file_progress))
 
         import threading
         monitor_thread = threading.Thread(target=monitor_progress)
         monitor_thread.daemon = True
         monitor_thread.start()
-        
+
         futures_to_file = {}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             for i, filename in enumerate(temp_filenames):
                 filepath = os.path.join(job_dir, filename)
                 if not os.path.exists(filepath): continue
-                
+
                 future = executor.submit(
                     process_single_file_worker,
                     filepath,
@@ -210,15 +210,15 @@ def background_analysis(
                     cancel_events[task_id]
                 )
                 futures_to_file[future] = filename
-            
+
             completed_files = 0
             for future in concurrent.futures.as_completed(futures_to_file):
                 filename = futures_to_file[future]
                 completed_files += 1
-                
+
                 # Ensure the file shows as 100% locally if the worker missed the final callback
                 progress_queue.put((filename, 100, f"[{completed_files}/{total_files}] Completed {filename}"))
-                
+
                 try:
                     file_result = future.result()
                     if file_result and "results" in file_result:
@@ -226,16 +226,16 @@ def background_analysis(
                 except Exception as file_err:
                     print(f"[ERROR] Failed to process file {filename}: {str(file_err)}")
                     # Continue to process other files
-                    
+
         # Stop the monitor thread
         progress_queue.put("DONE")
         monitor_thread.join(timeout=2.0)
-                    
+
         # Check if canceled during execution
         if task_id in cancel_events and cancel_events[task_id].is_set():
             update_task(tasks_proxy, task_id, status="canceled", stage="Analysis canceled by user")
             return
-            
+
         # Merge results into the final payload
         final_payload = {
             "metadata": {
@@ -264,9 +264,9 @@ def background_analysis(
             },
             "results": all_results
         }
-        
+
         update_task(tasks_proxy, task_id, status="completed", result=final_payload, progress=100, stage="Done")
-        
+
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
@@ -303,7 +303,7 @@ async def run_analysis_endpoint(
     """
     import uuid
     from starlette.datastructures import UploadFile as StarletteUploadFile
-    
+
     # 1. Initialize Task
     task_id = str(uuid.uuid4())
     tasks[task_id] = {
@@ -313,27 +313,27 @@ async def run_analysis_endpoint(
         "result": None,
         "file_progress": {}
     }
-    
+
     # 2. Create Job Directory
     job_id = str(uuid.uuid4())
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
-    
+
     temp_filenames = []
     total_size = 0
     params = {}
-    
+
     try:
         # 3. Stream Multipart Body
         # We use request.form() which Starlette optimizes to stream large files to disk (SpooledTemporaryFile)
         form = await request.form()
-        
+
         # Validate File Count
         uploaded_files = form.getlist("files")
         if len(uploaded_files) > MAX_FILE_COUNT:
             shutil.rmtree(job_dir)
             raise HTTPException(status_code=400, detail=f"Too many files. Limit is {MAX_FILE_COUNT}.")
-            
+
         # Process Files
         for field_name, value in form.multi_items():
             if isinstance(value, StarletteUploadFile):
@@ -341,27 +341,27 @@ async def run_analysis_endpoint(
                 # Note: Starlette/FastAPI already saved this to a temp file if it's large.
                 # We move it to our specific job directory.
                 filename = os.path.basename(value.filename)
-                
+
                 # Prevent filename collisions from different directories
                 base_name, ext = os.path.splitext(filename)
                 counter = 1
                 while filename in temp_filenames:
                     filename = f"{base_name}_{counter}{ext}"
                     counter += 1
-                    
+
                 save_path = os.path.join(job_dir, filename)
                 # Stream write from spooled file to our job dir using highly-optimized low-level C shutil
                 await value.seek(0)
                 with open(save_path, "wb") as buffer:
                     shutil.copyfileobj(value.file, buffer, length=1024*1024*10)
-                
+
                 # Check Size after copy
                 file_size = os.path.getsize(save_path)
                 total_size += file_size
                 if total_size > MAX_TOTAL_SIZE:
                     shutil.rmtree(job_dir)
                     raise HTTPException(status_code=413, detail=f"Upload too large. Limit is 5GB.")
-                
+
                 temp_filenames.append(filename)
                 await value.close()
             else:
@@ -519,9 +519,11 @@ api_router.include_router(auth_router)
 # Include results router
 from routers.results import router as results_router
 from routers.protocol_trees import router as protocol_trees_router
+from routers.plot_projects import router as plot_projects_router
 from routers.tool_directory import router as tool_directory_router
 api_router.include_router(results_router)
 api_router.include_router(protocol_trees_router)
+api_router.include_router(plot_projects_router)
 api_router.include_router(tool_directory_router)
 
 # Include labs router

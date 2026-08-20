@@ -84,6 +84,17 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
+            <a routerLink="/tools/plot-generator" class="tool-card">
+              <div class="card-body">
+                <h3>Plot Generator</h3>
+                <p>Build publication-ready figures from spreadsheet data, edit the generated R code, and keep each project in My Data.</p>
+                <div class="tag-row">
+                  <span>Excel Data</span>
+                  <span>R Script</span>
+                  <span>Figure Export</span>
+                </div>
+              </div>
+            </a>
           </div>
         </section>
 
@@ -360,7 +371,7 @@ import { AuthService } from '../../services/auth.service';
     .steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     .step-card { padding: 40px; border-radius: 28px; border: 1px solid #f1f5f9; background: #ffffff; }
     .step-card-wide { grid-column: 1 / -1; }
-    
+
     .s-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
     .s-num { font-size: 0.8rem; font-weight: 800; color: #3b82f6; background: #eff6ff; padding: 4px 12px; border-radius: 8px; }
     .step-card h3 { font-size: 1.2rem; font-weight: 800; margin: 0; color: #1e293b; }

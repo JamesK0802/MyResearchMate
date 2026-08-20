@@ -5,9 +5,9 @@ import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   { path: '', component: MainPageComponent },
-  { 
-    path: 'login', 
-    loadComponent: () => import('./pages/login-page/login-page.component').then(m => m.LoginPageComponent) 
+  {
+    path: 'login',
+    loadComponent: () => import('./pages/login-page/login-page.component').then(m => m.LoginPageComponent)
   },
   {
     path: 'register',
@@ -18,17 +18,17 @@ export const routes: Routes = [
     component: CrisprLayoutComponent,
     children: [
       { path: '', redirectTo: 'analysis', pathMatch: 'full' },
-      { 
-        path: 'analysis', 
-        loadComponent: () => import('./pages/analysis-page/analysis-page.component').then(m => m.AnalysisPageComponent) 
+      {
+        path: 'analysis',
+        loadComponent: () => import('./pages/analysis-page/analysis-page.component').then(m => m.AnalysisPageComponent)
       },
-      { 
-        path: 'benchmark', 
-        loadComponent: () => import('./pages/benchmark-page/benchmark-page.component').then(m => m.BenchmarkPageComponent) 
+      {
+        path: 'benchmark',
+        loadComponent: () => import('./pages/benchmark-page/benchmark-page.component').then(m => m.BenchmarkPageComponent)
       },
-      { 
-        path: 'result-viewer', 
-        loadComponent: () => import('./pages/result-viewer-page/result-viewer-page.component').then(m => m.ResultViewerPageComponent) 
+      {
+        path: 'result-viewer',
+        loadComponent: () => import('./pages/result-viewer-page/result-viewer-page.component').then(m => m.ResultViewerPageComponent)
       },
       {
         path: 'my-data',
@@ -60,6 +60,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     data: { resource: 'pcr' }
   },
+  {
+    path: 'data/plot-projects',
+    loadComponent: () => import('./pages/plot-projects-page/plot-projects-page.component').then(m => m.PlotProjectsPageComponent),
+    canActivate: [authGuard]
+  },
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
   { path: 'labs/my', loadComponent: () => import('./pages/my-labs/my-labs.component').then(m => m.MyLabsComponent), canActivate: [authGuard] },
@@ -74,9 +79,9 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/manager-management/manager-management.component').then(m => m.ManagerManagementComponent),
     canActivate: [authGuard]
   },
-  { 
-    path: 'tools/pcr', 
-    loadComponent: () => import('./tools/pcr-calculator/pcr-calculator').then(m => m.PcrCalculator) 
+  {
+    path: 'tools/pcr',
+    loadComponent: () => import('./tools/pcr-calculator/pcr-calculator').then(m => m.PcrCalculator)
   },
   {
     path: 'tools/sequence-viewer',
@@ -89,6 +94,10 @@ export const routes: Routes = [
   {
     path: 'tools/sample-photo-compare',
     loadComponent: () => import('./pages/sample-photo-compare-page/sample-photo-compare-page.component').then(m => m.SamplePhotoComparePageComponent)
+  },
+  {
+    path: 'tools/plot-generator',
+    loadComponent: () => import('./tools/plot-studio/r-plot-studio.component').then(m => m.RPlotStudioComponent)
   },
   {
     path: 'auth/callback',
@@ -124,7 +133,7 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   { path: 'tools/directory', loadComponent: () => import('./pages/tool-directory-page/tool-directory-page.component').then(m => m.ToolDirectoryPageComponent), canActivate: [authGuard] },
-  { 
+  {
     path: 'contact',
     loadComponent: () => import('./pages/contact-page/contact-page.component').then(m => m.ContactPageComponent)
   },
