@@ -42,7 +42,8 @@ export interface ConnectionPath {
         [style.transform]="'scale(' + zoomScale + ')'"
         [style.transformOrigin]="'0 0'">
         
-        <!-- ── ALL TREES VISIBLE BOUNDARY FRAMES (범위 표시 영역들) ── -->
+        <!-- The selected tree owns this workspace. Other trees are opened in
+             their own canvas when selected from the tree switcher. -->
         <div class="tree-boundary-box"
           *ngFor="let tb of allTreeBounds"
           [class.primary-tree-boundary]="tb.isPrimary"
@@ -87,7 +88,7 @@ export interface ConnectionPath {
             class="temp-connection-line" />
         </svg>
 
-        <!-- Nodes Layer: Renders ALL Nodes across ALL Trees in the Document -->
+        <!-- Nodes Layer: renders only the selected tree in this workspace. -->
         <div class="nodes-layer">
           <ng-container *ngFor="let t of allTrees">
             <div class="node-wrapper"
@@ -499,9 +500,6 @@ export class NamuFlowViewComponent implements AfterViewInit {
   }
 
   get allTrees(): NamuTree[] {
-    if (this.doc && Array.isArray(this.doc.trees) && this.doc.trees.length > 0) {
-      return this.doc.trees;
-    }
     return this.tree ? [this.tree] : [];
   }
 

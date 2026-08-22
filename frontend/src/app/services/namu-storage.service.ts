@@ -49,19 +49,32 @@ export class NamuStorageService {
   loadSavedDocument(document: NamuDocument, title: string, recordId: string) {
     this.activeFileHandle = null;
     this.myDataRecordId = recordId;
-    this.openedFileName$.next(`${title} — not saved`);
+    this.openedFileName$.next(title);
     this.isFileLoaded$.next(true);
-    this.updateDocument(structuredClone(document));
+    this.updateDocument(structuredClone(document), false);
+    this.saveStatus$.next('saved');
     // Preserve the layout saved with this My Data record. Re-laying out here
     // changes the connection geometry and makes existing links hard to target.
   }
 
-  markSavedToMyData(recordId: string) { this.myDataRecordId = recordId; }
+  markSavedToMyData(recordId: string, title?: string) {
+    this.myDataRecordId = recordId;
+    const currentTitle = this.openedFileName$.value;
+    const savedTitle = title?.trim() || this.currentDoc.title || currentTitle.replace(/\s+—\s+not saved$/, '');
+    this.openedFileName$.next(savedTitle);
+    this.saveStatus$.next('saved');
+  }
 
-  private saveToLocalStorage(doc: NamuDocument) {
+  private saveToLocalStorage(doc: NamuDocument, markDirty = true) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-      this.saveStatus$.next('unsaved');
+      if (markDirty) {
+        this.saveStatus$.next('unsaved');
+        const currentTitle = this.openedFileName$.value;
+        if (currentTitle && !currentTitle.endsWith(' — not saved')) {
+          this.openedFileName$.next(`${currentTitle} — not saved`);
+        }
+      }
     } catch (e) {
       console.error('Failed to save Namu document', e);
       this.saveStatus$.next('error');
@@ -93,7 +106,8 @@ export class NamuStorageService {
           this.isFileLoaded$.next(true);
           // Keep an independent working copy. The file on disk is untouched
           // until the user explicitly selects Save.
-          this.updateDocument(structuredClone(parsed));
+          this.updateDocument(structuredClone(parsed), false);
+          this.saveStatus$.next('saved');
           return true;
         }
       } catch (e) {
@@ -231,7 +245,8 @@ export class NamuStorageService {
 
   setActiveTree(treeId: string) {
     const doc = { ...this.currentDoc, activeTreeId: treeId };
-    this.updateDocument(doc);
+    // Switching workspaces is navigation, not a content edit.
+    this.updateDocument(doc, false);
   }
 
   renameTree(treeId: string, newName: string) {
@@ -261,34 +276,17 @@ export class NamuStorageService {
     const now = Date.now();
     const rootNodeId = 'node_' + Math.random().toString(36).substring(2, 9);
     
-    // Find bottom-most Y coordinate of all existing tree boundaries
-    let maxBottomY = 10000;
-    let minStartX = 12500;
-
-    if (this.currentDoc.trees && this.currentDoc.trees.length > 0) {
-      this.currentDoc.trees.forEach(t => {
-        if (t.nodes) {
-          t.nodes.forEach(n => {
-            if (n.y !== undefined && (n.y + 350) > maxBottomY) {
-              maxBottomY = n.y + 350;
-            }
-            if (n.x !== undefined && n.x < minStartX) {
-              minStartX = n.x;
-            }
-          });
-        }
-      });
-      maxBottomY += 500; // Place new tree 500px BELOW all existing boundaries
-    }
-
     const rootNode: NamuNode = {
       id: rootNodeId,
       title: name + ' Root Node',
       description: description || 'Starting node of your experiment tree',
       steps: ['Execute protocol procedure'],
       nextNodes: [],
-      x: minStartX,
-      y: maxBottomY,
+      // Every tree receives its own canvas workspace, so start each tree at
+      // the same comfortable origin instead of placing later trees farther
+      // into a shared mega-canvas.
+      x: 12500,
+      y: 10000,
       status: 'planned',
       leaves: []
     };
@@ -449,7 +447,11 @@ export class NamuStorageService {
   }
 
   autoLayoutTreeNodes(treeId: string) {
-    this.autoLayoutAllTrees();
+    const tree = this.currentDoc.trees.find(item => item.id === treeId);
+    if (!tree) return;
+    // Layout only the selected workspace. Other trees retain their own
+    // independent canvas positions until they are opened and aligned.
+    this.layoutSingleTreeAtPosition(tree, 12500, 10000);
   }
 
   private layoutSingleTreeAtPosition(tree: NamuTree, startX: number, startY: number): number {
@@ -715,9 +717,9 @@ export class NamuStorageService {
     return md;
   }
 
-  private updateDocument(doc: NamuDocument) {
+  private updateDocument(doc: NamuDocument, markDirty = true) {
     this.docSubject.next(doc);
-    this.saveToLocalStorage(doc);
+    this.saveToLocalStorage(doc, markDirty);
   }
 
   private getInitialDocument(): NamuDocument {

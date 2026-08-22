@@ -6,7 +6,6 @@ import { NamuDocument, NamuTree } from '../../models/namu.model';
 import { NamuStorageService } from '../../services/namu-storage.service';
 import { NamuFlowViewComponent } from '../../components/protocol-builder/namu-flow-view.component';
 import { NamuNotebookViewComponent } from '../../components/protocol-builder/namu-notebook-view.component';
-import { NamuNotesDrawerComponent } from '../../components/protocol-builder/namu-notes-drawer.component';
 import { ProtocolTreeService } from '../../services/protocol-tree.service';
 
 @Component({
@@ -16,8 +15,7 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
     CommonModule,
     FormsModule,
     NamuFlowViewComponent,
-    NamuNotebookViewComponent,
-    NamuNotesDrawerComponent
+    NamuNotebookViewComponent
   ],
   template: `
     <div class="namu-page-shell">
@@ -74,11 +72,6 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
               <button type="button" [class.active]="viewMode === 'canvas'" (click)="setViewMode('canvas')">Canvas</button>
               <button type="button" [class.active]="viewMode === 'notebook'" (click)="setViewMode('notebook')">Notebook</button>
             </div>
-            <!-- File actions never write until the user explicitly chooses Save. -->
-            <button type="button" class="btn-tool-action btn-notes-collection" (click)="showNotesDrawer = true" title="View all leaf notes repository">
-              Notes ({{ totalLeafNotesCount }})
-            </button>
-
             <div class="save-action-menu">
               <button type="button" class="btn-tool-action btn-primary-save" (click)="runPrimarySave()">
                 {{ primarySaveLabel }}
@@ -160,12 +153,6 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
         </div>
       </div>
 
-      <!-- Dedicated Leaf Notes Collection Repository Drawer -->
-      <app-namu-notes-drawer
-        *ngIf="showNotesDrawer && activeTree"
-        [tree]="activeTree"
-        (close)="showNotesDrawer = false">
-      </app-namu-notes-drawer>
     </div>
   `,
   styleUrl: './protocol-builder-page.component.css'
@@ -178,7 +165,6 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   saveStatus: 'saved' | 'saving' | 'error' | 'unsaved' = 'unsaved';
   openedFileName = '';
   isFileLoaded = false;
-  showNotesDrawer = false;
   connectionEditMode = false;
   viewMode: 'canvas' | 'notebook' = 'canvas';
   showSaveMenu = false;
@@ -260,7 +246,7 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     if (!title?.trim() || !this.doc) return;
     try {
       const saved = await this.protocolTreeService.saveTree(title.trim(), this.doc);
-      this.namuStorageService.markSavedToMyData(saved.id);
+      this.namuStorageService.markSavedToMyData(saved.id, title.trim());
       alert('Saved to My Data. You can share it with a lab from My Data → Protocol Trees.');
     } catch (error) {
       console.error('Failed to save protocol tree', error);
@@ -274,6 +260,7 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     if (!id || !this.doc) return;
     try {
       await this.protocolTreeService.updateTree(id, this.doc.title || this.activeTree?.name || 'Untitled Protocol', this.doc);
+      this.namuStorageService.markSavedToMyData(id);
       alert('My Data has been updated.');
     } catch (error) {
       console.error('Failed to update protocol tree', error);
@@ -293,28 +280,18 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     return this.namuStorageService.activeTree;
   }
 
-  get totalLeafNotesCount(): number {
-    if (!this.activeTree || !this.activeTree.nodes) return 0;
-    let sum = 0;
-    this.activeTree.nodes.forEach(n => {
-      if (n.leaves) sum += n.leaves.length;
-    });
-    return sum;
-  }
-
   switchTree(treeId: string) {
     this.namuStorageService.setActiveTree(treeId);
-    this.alignActiveTree();
-    // The first pass updates the document. Run the identical Align action once
-    // more after Angular has rendered the newly selected tree, so a large
-    // previous tree cannot leave the viewport centred on stale bounds.
-    setTimeout(() => this.alignActiveTree(), 180);
+    // Switching trees is workspace navigation. Keep each tree's saved layout
+    // intact and only centre the newly selected workspace after it renders.
+    setTimeout(() => this.flowView?.centerTreeInCanvas(), 80);
   }
 
   createNewTree() {
     const name = prompt('Enter new Experiment Tree Name:', 'New Research Protocol');
     if (name) {
       this.namuStorageService.createTree(name);
+      setTimeout(() => this.flowView?.centerTreeInCanvas(), 80);
     }
   }
 
