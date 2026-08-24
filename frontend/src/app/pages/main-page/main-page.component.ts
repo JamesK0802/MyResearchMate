@@ -31,7 +31,7 @@ import { AuthService } from '../../services/auth.service';
           <div class="cards-grid">
             <a routerLink="/crispr" class="tool-card">
               <div class="card-body">
-                <h3>CRISPR Tool</h3>
+                <h3>Crispr Analysis</h3>
                 <p>Run pooled CRISPR editing analysis from FASTQ files, define multiple genes and targets, review annotations, and save or export finished results.</p>
                 <div class="tag-row">
                   <span>FASTQ Analysis</span>
@@ -41,9 +41,31 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
+            <a routerLink="/tools/protocol-builder" class="tool-card">
+              <div class="card-body">
+                <h3>Tree Protocol</h3>
+                <p>Build visual experiment workflows, connect protocol stages, and keep step-specific notes in a local-first workspace.</p>
+                <div class="tag-row">
+                  <span>Visual Workflow</span>
+                  <span>Step Notes</span>
+                  <span>Local Files</span>
+                </div>
+              </div>
+            </a>
+            <a routerLink="/tools/plot-generator" class="tool-card">
+              <div class="card-body">
+                <h3>R-Plot Studio</h3>
+                <p>Build publication-ready figures from spreadsheet data, edit the generated R code, and keep each project in My Data.</p>
+                <div class="tag-row">
+                  <span>Excel Data</span>
+                  <span>R Script</span>
+                  <span>Figure Export</span>
+                </div>
+              </div>
+            </a>
             <a routerLink="/tools/pcr" class="tool-card">
               <div class="card-body">
-                <h3>PCR Setup Calculator</h3>
+                <h3>Solution Protocol</h3>
                 <p>Calculate mastermix volumes, dilutions, and primer concentrations with customizable presets.</p>
                 <div class="tag-row">
                   <span>Presets</span>
@@ -62,36 +84,14 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
-            <a routerLink="/tools/protocol-builder" class="tool-card">
-              <div class="card-body">
-                <h3>Protocol Builder</h3>
-                <p>Build visual experiment workflows, connect protocol stages, and keep step-specific notes in a local-first workspace.</p>
-                <div class="tag-row">
-                  <span>Visual Workflow</span>
-                  <span>Step Notes</span>
-                  <span>Local Files</span>
-                </div>
-              </div>
-            </a>
             <a routerLink="/tools/sample-photo-compare" class="tool-card">
               <div class="card-body">
-                <h3>Photo comparison</h3>
+                <h3>Photo Comparison</h3>
                 <p>Arrange earlier and current sample photos side by side, reorder them, and export a printable comparison sheet.</p>
                 <div class="tag-row">
                   <span>Photo Sets</span>
                   <span>Side-by-side</span>
                   <span>PDF Export</span>
-                </div>
-              </div>
-            </a>
-            <a routerLink="/tools/plot-generator" class="tool-card">
-              <div class="card-body">
-                <h3>Plot Generator</h3>
-                <p>Build publication-ready figures from spreadsheet data, edit the generated R code, and keep each project in My Data.</p>
-                <div class="tag-row">
-                  <span>Excel Data</span>
-                  <span>R Script</span>
-                  <span>Figure Export</span>
                 </div>
               </div>
             </a>
@@ -187,12 +187,12 @@ import { AuthService } from '../../services/auth.service';
           </div>
         </section>
 
-        <!-- 5. How CRISPR Tool Works -->
+        <!-- 5. How Crispr Analysis Works -->
         <section class="mechanism-container">
           <div class="mech-header">
             <div class="mech-title-wrap">
               <span class="m-badge">TECHNICAL CORE</span>
-              <h2>How CRISPR Tool Works</h2>
+              <h2>How Crispr Analysis Works</h2>
               <p class="m-intro">The CRISPR workflow is the main analysis engine: it converts pooled sequencing reads into target-level editing summaries while keeping ambiguous reads visible.</p>
             </div>
           </div>

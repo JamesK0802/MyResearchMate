@@ -1,15 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
+from datetime import datetime, timedelta, timezone
+import shutil
 from sqlalchemy.orm import Session
 from auth.dependencies import get_current_user, require_admin
 from database.db import get_db
-from database.models import Lab, LabMember, User, LabRegistrationRequest, LabJoinRequest
+from database.models import Lab, LabMember, User, LabRegistrationRequest, LabJoinRequest, CrisprResultShare, ProtocolTreeShare, PlotProjectShare, PcrPresetLabShare, WorkflowShare, StorageQuota, StorageQuotaRequest
 from pydantic import BaseModel
-import os
-import re
+from storage.file_store import lab_tool_dir
 
 # IMPORTANT: We use a clean prefix to avoid confusion
 router = APIRouter(prefix="", tags=["labs"])
+
+def purge_expired_labs(db: Session):
+    now = datetime.now(timezone.utc)
+    for lab in db.query(Lab).filter(Lab.archive_deletion_at.isnot(None), Lab.archive_deletion_at <= now).all():
+        try: shutil.rmtree(lab_tool_dir(lab.lab_name, "lab-archive").parent, ignore_errors=True)
+        except Exception: pass
+        db.query(CrisprResultShare).filter(CrisprResultShare.lab_id == lab.id).delete()
+        db.query(ProtocolTreeShare).filter(ProtocolTreeShare.lab_id == lab.id).delete()
+        db.query(PlotProjectShare).filter(PlotProjectShare.lab_id == lab.id).delete()
+        db.query(PcrPresetLabShare).filter(PcrPresetLabShare.lab_id == lab.id).delete()
+        db.query(WorkflowShare).filter(WorkflowShare.lab_id == lab.id).delete()
+        db.query(StorageQuota).filter(StorageQuota.lab_id == lab.id).delete()
+        db.query(StorageQuotaRequest).filter(StorageQuotaRequest.lab_id == lab.id).delete()
+        db.query(LabMember).filter(LabMember.lab_id == lab.id).delete()
+        db.query(LabJoinRequest).filter(LabJoinRequest.lab_id == lab.id).delete()
+        db.delete(lab)
+    db.commit()
 
 class LabCreate(BaseModel):
     lab_name: Optional[str] = None
@@ -50,6 +68,7 @@ async def get_my_labs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    purge_expired_labs(db)
     results = db.query(Lab, LabMember).join(LabMember, Lab.id == LabMember.lab_id).filter(
         LabMember.user_id == current_user["id"]
     ).all()
@@ -63,6 +82,7 @@ async def get_my_labs(
             "is_leader": (m.role_in_lab == "leader" or m.role_in_lab == "admin"),
             "role": m.role_in_lab,
             "created_at": m.created_at
+            ,"deletion_requested_at": l.deletion_requested_at, "archive_deletion_at": l.archive_deletion_at
         })
     return out
 
@@ -267,11 +287,9 @@ async def admin_approve_lab(
     req.status = "approved"
     db.commit()
     
-    # Create Labs Archive directory
+    # Create the lab-owned archive directory in the canonical data layout.
     try:
-        lab_dir_name = re.sub(r'[\\/*?:"<>|]', "", req.lab_name).strip()
-        archive_dir = os.path.join("..", "data", "Labs Archive", lab_dir_name)
-        os.makedirs(archive_dir, exist_ok=True)
+        lab_tool_dir(req.lab_name, "lab-archive")
     except Exception as e:
         print(f"Warning: Failed to create lab archive directory: {e}")
         
@@ -377,10 +395,27 @@ async def delete_lab(
     if not is_leader and not is_admin:
         raise HTTPException(status_code=403, detail="Only lab leaders or system administrators can delete labs")
         
-    # Delete members, requests and finally the lab
-    db.query(LabMember).filter(LabMember.lab_id == lab_id).delete()
-    db.query(LabJoinRequest).filter(LabJoinRequest.lab_id == lab_id).delete()
-    db.query(Lab).filter(Lab.id == lab_id).delete()
-    
+    if lab.archive_deletion_at:
+        return {"message": "Lab deletion is already scheduled", "archive_deletion_at": lab.archive_deletion_at}
+    # Shared Lab access ends immediately; personal owners retain their own data.
+    db.query(CrisprResultShare).filter(CrisprResultShare.lab_id == lab.id).delete()
+    db.query(ProtocolTreeShare).filter(ProtocolTreeShare.lab_id == lab.id).delete()
+    db.query(PlotProjectShare).filter(PlotProjectShare.lab_id == lab.id).delete()
+    db.query(PcrPresetLabShare).filter(PcrPresetLabShare.lab_id == lab.id).delete()
+    db.query(WorkflowShare).filter(WorkflowShare.lab_id == lab.id).delete()
+    lab.deletion_requested_at = datetime.now(timezone.utc)
+    lab.archive_deletion_at = lab.deletion_requested_at + timedelta(days=10)
     db.commit()
-    return {"message": "Lab deleted successfully"}
+    return {"message": "Lab deletion scheduled. Archive is read-only for 10 days.", "archive_deletion_at": lab.archive_deletion_at}
+
+@router.post("/labs/{lab_id}/cancel-deletion")
+async def cancel_lab_deletion(lab_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    lab = db.query(Lab).filter(Lab.id == lab_id).first()
+    if not lab: raise HTTPException(status_code=404, detail="Lab not found")
+    leader = db.query(LabMember).filter(LabMember.lab_id == lab.id, LabMember.user_id == current_user["id"], LabMember.role_in_lab.in_(["leader", "admin"])).first()
+    if not leader and current_user.get("role") not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Only the lab leader can cancel deletion")
+    if not lab.archive_deletion_at: raise HTTPException(status_code=400, detail="This Lab is not scheduled for deletion")
+    lab.deletion_requested_at = None; lab.archive_deletion_at = None
+    db.commit()
+    return {"message": "Lab deletion cancelled. Archive editing is restored."}

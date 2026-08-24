@@ -4,6 +4,8 @@ import { ProjectItem, SequenceDocument, SequenceFeature } from '../models/sequen
 import { parseFasta, parseGenBank, parseFastqFile } from '../utils/parsers.utils';
 import { shiftFeatures } from '../utils/biology.utils';
 import { exportToFasta, exportToGenBank } from '../utils/export.utils';
+import { AuthService } from './auth.service';
+import { SequenceStorageService, SequenceStorageUsage, StoredSequenceFile } from './sequence-storage.service';
 
 const DB_NAME = 'SequenceWorkspaceDB';
 const STORE_NAME = 'ProjectItems';
@@ -23,6 +25,9 @@ export class SequenceWorkspaceService {
   private db: IDBDatabase | null = null;
   private itemsSubject = new BehaviorSubject<ProjectItem[]>([]);
   public items$ = this.itemsSubject.asObservable();
+  private usageSubject = new BehaviorSubject<SequenceStorageUsage>({ used_bytes: 0, quota_bytes: 5 * 1024 * 1024 * 1024 });
+  public usage$ = this.usageSubject.asObservable();
+  private suppressRemoteSync = false;
   
   private selectedItemIdSubject = new BehaviorSubject<string | null>(null);
   public selectedItemId$ = this.selectedItemIdSubject.asObservable();
@@ -51,9 +56,32 @@ export class SequenceWorkspaceService {
 
   private history: Record<string, { past: SequenceDocument[], future: SequenceDocument[] }> = {};
   private readonly MAX_HISTORY = 20;
+  private storageUserId: string | null | undefined;
 
-  constructor() {
-    this.initDB().then(() => this.loadAllItems());
+  constructor(private auth: AuthService, private cloudStorage: SequenceStorageService) {
+    this.initDB().then(() => {
+      // Wait until Supabase has restored the session. Loading IndexedDB first made the
+      // temporary example appear briefly before the signed-in cloud workspace replaced it.
+      combineLatest([this.auth.session$, this.auth.loading$]).subscribe(([session, loading]) => {
+        if (loading) return;
+
+        // TOKEN_REFRESHED can emit a new session while the same user is working. The
+        // workspace must not be reset or reselected for that routine auth event.
+        const userId = session && !this.auth.isDemo ? session.user.id : null;
+        if (this.storageUserId === userId) return;
+        this.storageUserId = userId;
+
+        if (userId) {
+          void this.loadCloudItems();
+        } else {
+          void this.loadAllItems();
+        }
+      });
+    });
+  }
+
+  private get usesCloudStorage(): boolean {
+    return this.auth.isLoggedIn && !this.auth.isDemo;
   }
 
   private initDB(): Promise<void> {
@@ -81,20 +109,24 @@ export class SequenceWorkspaceService {
 
   private async loadAllItems() {
     if (!this.db) return;
-    return new Promise<void>((resolve, reject) => {
+    const items = await this.readLocalItems();
+    this.itemsSubject.next(items);
+    if (items.length > 0 && !this.selectedItemIdSubject.value) {
+      await this.selectItem(items[0].id);
+    } else if (items.length === 0 && !this.usesCloudStorage) {
+      this.loadExample();
+    }
+  }
+
+  private readLocalItems(): Promise<ProjectItem[]> {
+    if (!this.db) return Promise.resolve([]);
+    return new Promise<ProjectItem[]>((resolve, reject) => {
       const transaction = this.db!.transaction(STORE_NAME, 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const items = request.result as ProjectItem[];
-        this.itemsSubject.next(items);
-        if (items.length > 0 && !this.selectedItemIdSubject.value) {
-          this.selectItem(items[0].id);
-        } else if (items.length === 0) {
-          this.loadExample();
-        }
-        resolve();
+        resolve(request.result as ProjectItem[]);
       };
 
       request.onerror = () => reject(request.error);
@@ -122,10 +154,130 @@ export class SequenceWorkspaceService {
     this.saveItem(example);
   }
 
+  private itemMetadata(item: ProjectItem): ProjectItem {
+    const clone = JSON.parse(JSON.stringify(item)) as ProjectItem;
+    delete (clone as any).fileHandle;
+    delete (clone as any).remoteFileId;
+    delete (clone as any).remoteItemIndex;
+    delete (clone as any).originalFileName;
+    delete (clone as any).contentLoaded;
+    if (clone.type === 'fastq') {
+      clone.reads = [];
+    }
+    return clone;
+  }
+
+  private metadataForItems(items: ProjectItem[]): Record<string, unknown> {
+    return { items: items.map(item => this.itemMetadata(item)) };
+  }
+
+  private async refreshUsage() {
+    if (!this.usesCloudStorage) {
+      this.usageSubject.next({ used_bytes: 0, quota_bytes: 5 * 1024 * 1024 * 1024 });
+      return;
+    }
+    try {
+      this.usageSubject.next(await this.cloudStorage.getUsage());
+    } catch (error) {
+      console.error('Failed to load Sequence Viewer storage usage', error);
+    }
+  }
+
+  private async loadCloudItems() {
+    try {
+      const previouslySelectedId = this.selectedItemIdSubject.value;
+      // IndexedDB is guest-only. Migrate any pre-existing guest documents once,
+      // then keep signed-in work exclusively in account storage + memory.
+      const cachedItems = await this.readLocalItems();
+      const localItems = cachedItems.filter(item => !item.remoteFileId && item.id !== 'example-1');
+      if (localItems.length) {
+        await this.migrateLocalItems(localItems);
+      }
+      if (cachedItems.length) await this.clearLocalCache();
+      const files = await this.cloudStorage.list();
+      const items = files.flatMap(file => this.itemsFromCloudFile(file));
+      this.itemsSubject.next(items);
+      await this.refreshUsage();
+      const selectedId = previouslySelectedId && items.some(item => item.id === previouslySelectedId)
+        ? previouslySelectedId
+        : items[0]?.id ?? null;
+      await this.selectItem(selectedId);
+    } catch (error) {
+      console.error('Failed to load saved Sequence Viewer files', error);
+    }
+  }
+
+  private fileFromCachedItem(item: ProjectItem): File | null {
+    if (item.type === 'fastq') {
+      const content = item.reads.map(read => `@${read.id}\n${read.seq}\n+\n${read.qualString}`).join('\n') + '\n';
+      return new File([content], item.name || 'saved-reads.fastq', { type: 'text/plain' });
+    }
+    if (item.type === 'sequence') {
+      const isGenBank = item.sourceFormat === 'genbank';
+      const content = isGenBank ? exportToGenBank(item) : exportToFasta(item);
+      const name = item.name || 'saved-sequence';
+      const extension = isGenBank ? '.gb' : '.fasta';
+      return new File([content], /\.(gb|gbk|fa|fasta)$/i.test(name) ? name : `${name}${extension}`, { type: 'text/plain' });
+    }
+    return null;
+  }
+
+  private async migrateLocalItems(items: ProjectItem[]) {
+    for (const item of items) {
+      const file = this.fileFromCachedItem(item);
+      if (!file) continue;
+      await this.cloudStorage.upload(file, this.metadataForItems([item]));
+    }
+  }
+
+  private async clearLocalCache() {
+    if (!this.db) return;
+    await new Promise<void>((resolve, reject) => {
+      const transaction = this.db!.transaction(STORE_NAME, 'readwrite');
+      const request = transaction.objectStore(STORE_NAME).clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  private itemsFromCloudFile(file: StoredSequenceFile): ProjectItem[] {
+    const storedItems = Array.isArray((file.metadata_json as any)?.items) ? (file.metadata_json as any).items : [];
+    return storedItems.map((stored: ProjectItem, index: number) => {
+      const item = JSON.parse(JSON.stringify(stored)) as ProjectItem;
+      item.id = `${file.id}:${index}`;
+      item.remoteFileId = file.id;
+      item.remoteItemIndex = index;
+      item.originalFileName = file.original_name;
+      item.contentLoaded = item.type !== 'fastq';
+      if (item.type === 'fastq') item.reads = [];
+      return item;
+    });
+  }
+
+  private async syncRemoteItem(item: ProjectItem) {
+    if (!this.usesCloudStorage || this.suppressRemoteSync || !item.remoteFileId) return;
+    try {
+      const related = this.itemsSubject.value.filter(existing =>
+        existing.remoteFileId === item.remoteFileId && existing.id !== item.id
+      );
+      await this.cloudStorage.updateMetadata(item.remoteFileId, this.metadataForItems([...related, item]));
+    } catch (error) {
+      console.error('Failed to update saved Sequence Viewer file', error);
+    }
+  }
+
   async saveItem(item: ProjectItem) {
-    if (!this.db) await this.initDB();
     const clonedItem = JSON.parse(JSON.stringify(item));
     clonedItem.updatedTimestamp = Date.now();
+
+    if (this.usesCloudStorage) {
+      const currentItems = this.itemsSubject.value.filter(i => i.id !== clonedItem.id);
+      this.itemsSubject.next([...currentItems, clonedItem]);
+      await this.syncRemoteItem(clonedItem);
+      return;
+    }
+
+    if (!this.db) await this.initDB();
     return new Promise<void>((resolve, reject) => {
       const transaction = this.db!.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
@@ -134,13 +286,33 @@ export class SequenceWorkspaceService {
       request.onsuccess = () => {
         const currentItems = this.itemsSubject.value.filter(i => i.id !== clonedItem.id);
         this.itemsSubject.next([...currentItems, clonedItem]);
-        resolve();
+        this.syncRemoteItem(clonedItem).then(() => resolve()).catch(reject);
       };
       request.onerror = () => reject(request.error);
     });
   }
 
   async deleteItem(id: string) {
+    if (!this.db) return;
+    const target = this.itemsSubject.value.find(item => item.id === id);
+    if (target?.remoteFileId && this.usesCloudStorage) {
+      try {
+        await this.cloudStorage.delete(target.remoteFileId);
+        const relatedIds = this.itemsSubject.value
+          .filter(item => item.remoteFileId === target.remoteFileId)
+          .map(item => item.id);
+        await Promise.all(relatedIds.map(itemId => this.deleteLocalItem(itemId)));
+        await this.refreshUsage();
+        return;
+      } catch (error) {
+        console.error('Failed to delete saved Sequence Viewer file', error);
+        throw error;
+      }
+    }
+    return this.deleteLocalItem(id);
+  }
+
+  private async deleteLocalItem(id: string) {
     if (!this.db) return;
     return new Promise<void>((resolve, reject) => {
       const transaction = this.db!.transaction(STORE_NAME, 'readwrite');
@@ -158,8 +330,16 @@ export class SequenceWorkspaceService {
     });
   }
 
-  selectItem(id: string | null) {
+  async selectItem(id: string | null) {
+    // Set selection synchronously so the viewer never flashes "No Item Selected"
+    // while a saved FASTQ file is downloading and parsing.
     this.selectedItemIdSubject.next(id);
+    if (id) {
+      const item = this.itemsSubject.value.find(candidate => candidate.id === id);
+      if (item?.type === 'fastq' && item.remoteFileId && !item.contentLoaded) {
+        await this.loadRemoteFastq(item);
+      }
+    }
   }
 
   getSelectedItem(): ProjectItem | null {
@@ -281,14 +461,63 @@ export class SequenceWorkspaceService {
     await this.saveItem(doc);
   }
 
+  private async loadRemoteFastq(item: import('../models/sequence.model').FastqDocument) {
+    try {
+      const blob = await this.cloudStorage.download(item.remoteFileId!);
+      const sourceFile = new File([blob], item.originalFileName || item.name);
+      const parsed = await parseFastqFile(sourceFile);
+      parsed.id = item.id;
+      parsed.remoteFileId = item.remoteFileId;
+      parsed.remoteItemIndex = item.remoteItemIndex;
+      parsed.originalFileName = item.originalFileName;
+      parsed.contentLoaded = true;
+      this.suppressRemoteSync = true;
+      await this.saveItem(parsed);
+      this.suppressRemoteSync = false;
+    } catch (error) {
+      this.suppressRemoteSync = false;
+      console.error('Failed to load saved FASTQ file', error);
+      alert('The saved FASTQ file could not be opened. Please try downloading it again.');
+    }
+  }
+
+  private async persistImportedFile(file: File, items: ProjectItem[]) {
+    if (!items.length) return;
+    if (!this.usesCloudStorage) {
+      for (const item of items) await this.saveItem(item);
+      this.selectItem(items[0].id);
+      return;
+    }
+
+    try {
+      const stored = await this.cloudStorage.upload(file, this.metadataForItems(items));
+      this.suppressRemoteSync = true;
+      for (const [index, item] of items.entries()) {
+        item.id = `${stored.id}:${index}`;
+        item.remoteFileId = stored.id;
+        item.remoteItemIndex = index;
+        item.originalFileName = stored.original_name;
+        item.contentLoaded = item.type !== 'fastq' || item.reads.length > 0;
+        await this.saveItem(item);
+      }
+      this.suppressRemoteSync = false;
+      await this.cloudStorage.updateMetadata(stored.id, this.metadataForItems(items));
+      await this.refreshUsage();
+      await this.selectItem(items[0].id);
+    } catch (error: any) {
+      this.suppressRemoteSync = false;
+      console.error('Failed to save Sequence Viewer file', error);
+      alert(error?.error?.detail || 'Could not save this file to your Sequence Viewer storage.');
+    }
+  }
+
   async importFile(file: File) {
     const isFastq = file.name.endsWith('.fastq') || file.name.endsWith('.fq') || file.name.endsWith('.fastq.gz') || file.name.endsWith('.fq.gz');
     
     if (isFastq) {
       try {
         const doc = await parseFastqFile(file);
-        await this.saveItem(doc);
-        this.selectItem(doc.id);
+        await this.persistImportedFile(file, [doc]);
       } catch (e) {
         console.error('Failed to parse FASTQ', e);
       }
@@ -299,6 +528,7 @@ export class SequenceWorkspaceService {
     const isFasta = file.name.endsWith('.fasta') || file.name.endsWith('.fa') || text.startsWith('>');
     const isGenBank = file.name.endsWith('.gb') || file.name.endsWith('.gbk') || text.startsWith('LOCUS');
 
+    const importedItems: ProjectItem[] = [];
     if (isGenBank) {
       const doc = parseGenBank(text);
       if (doc) {
@@ -307,8 +537,7 @@ export class SequenceWorkspaceService {
         doc.sourceFormat = 'genbank';
         doc.createdTimestamp = Date.now();
         doc.primers = doc.primers || [];
-        await this.saveItem(doc as SequenceDocument);
-        this.selectItem(doc.id!);
+        importedItems.push(doc as SequenceDocument);
       }
     } else if (isFasta) {
       const docs = parseFasta(text);
@@ -320,8 +549,7 @@ export class SequenceWorkspaceService {
         d.features = [];
         d.primers = [];
         d.createdTimestamp = Date.now();
-        await this.saveItem(d as SequenceDocument);
-        this.selectItem(d.id!);
+        importedItems.push(d as SequenceDocument);
       }
     } else {
       // Treat as plain sequence
@@ -340,9 +568,54 @@ export class SequenceWorkspaceService {
           createdTimestamp: Date.now(),
           updatedTimestamp: Date.now()
         };
-        await this.saveItem(doc);
-        this.selectItem(doc.id);
+        importedItems.push(doc);
       }
+    }
+    await this.persistImportedFile(file, importedItems);
+  }
+
+  async importGeneratedFastq(file: File, autoAlign?: AutoAlignPayload) {
+    const doc = await parseFastqFile(file);
+    if (autoAlign) doc.autoAlign = autoAlign;
+    await this.persistImportedFile(file, [doc]);
+    if (autoAlign) this.setPendingAutoAlign(autoAlign);
+  }
+
+  async downloadOriginal(item: ProjectItem) {
+    if (!item.remoteFileId || !this.usesCloudStorage) {
+      alert('The original file is only available after signing in and saving it to Sequence Viewer storage.');
+      return;
+    }
+    try {
+      const blob = await this.cloudStorage.download(item.remoteFileId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = item.originalFileName || item.name;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download saved Sequence Viewer file', error);
+      alert('Could not download the original file.');
+    }
+  }
+
+  async renameItem(item: ProjectItem, requestedName: string) {
+    const name = requestedName.trim();
+    if (!name || name === item.name) return;
+    try {
+      if (item.remoteFileId && this.usesCloudStorage) {
+        const stored = await this.cloudStorage.rename(item.remoteFileId, name, item.remoteItemIndex ?? 0);
+        item.originalFileName = stored.original_name;
+      }
+      item.name = name;
+      item.updatedTimestamp = Date.now();
+      const currentItems = this.itemsSubject.value.map(existing => existing.id === item.id ? { ...item } : existing);
+      this.itemsSubject.next(currentItems);
+      if (!item.remoteFileId || !this.usesCloudStorage) await this.saveItem(item);
+    } catch (error: any) {
+      console.error('Failed to rename Sequence Viewer file', error);
+      alert(error?.error?.detail || 'Could not rename this file.');
     }
   }
 
@@ -381,11 +654,11 @@ export class SequenceWorkspaceService {
           const fileHandle = entry;
           const name = fileHandle.name.toLowerCase();
           
-          if (name.endsWith('.fasta') || name.endsWith('.fa') || name.endsWith('.gb') || name.endsWith('.gbk') || name.endsWith('.fastq') || name.endsWith('.fq')) {
+          if (name.endsWith('.fasta') || name.endsWith('.fa') || name.endsWith('.gb') || name.endsWith('.gbk') || name.endsWith('.fastq') || name.endsWith('.fq') || name.endsWith('.fastq.gz') || name.endsWith('.fq.gz')) {
             const file = await fileHandle.getFile();
             
             try {
-              if (name.endsWith('.fastq') || name.endsWith('.fq')) {
+              if (name.endsWith('.fastq') || name.endsWith('.fq') || name.endsWith('.fastq.gz') || name.endsWith('.fq.gz')) {
                 const doc = await parseFastqFile(file);
                 doc.fileHandle = fileHandle;
                 items.push(doc);
@@ -438,16 +711,23 @@ export class SequenceWorkspaceService {
           tx.onerror = () => reject(tx.error);
         });
         
-        // Save new items to DB
-        for (const item of items) {
-          await this.saveItem(item); // Note: saveItem stores in IndexedDB (fileHandle cannot be structurally cloned to IndexedDB easily in some browsers without issues, so we might lose the handle on refresh if we aren't careful, but we will try. Actually, FileSystemFileHandle CAN be stored in IndexedDB!)
+        this.itemsSubject.next([]);
+        if (this.usesCloudStorage) {
+          const grouped = new Map<any, ProjectItem[]>();
+          for (const item of items) {
+            const handle = (item as any).fileHandle;
+            grouped.set(handle, [...(grouped.get(handle) || []), item]);
+          }
+          for (const [handle, groupedItems] of grouped) {
+            await this.persistImportedFile(await handle.getFile(), groupedItems);
+          }
+        } else {
+          for (const item of items) await this.saveItem(item);
         }
       }
 
-      this.itemsSubject.next(items);
-      if (items.length > 0) {
-        this.selectItem(items[0].id);
-      }
+      const savedItems = this.itemsSubject.value;
+      if (savedItems.length > 0) await this.selectItem(savedItems[0].id);
       
     } catch (err: any) {
       if (err.name !== 'AbortError') {

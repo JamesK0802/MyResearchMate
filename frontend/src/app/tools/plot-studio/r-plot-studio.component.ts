@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
 import * as XLSX from 'xlsx';
 import { RPlotSyncService, PanelConfig } from '../../services/r-plot-sync.service';
 import { RDataTableComponent } from './r-data-table.component';
@@ -47,6 +48,14 @@ import { PlotProjectService } from '../../services/plot-project.service';
               <div class="action-text">
                 <strong>Manual Scratchpad</strong>
                 <span>Start with a clean blank spreadsheet, R script template, and plot canvas</span>
+              </div>
+            </button>
+
+            <button type="button" class="btn-welcome-secondary" (click)="openFromMyData()"
+              [disabled]="!auth.isLoggedIn" [title]="auth.isLoggedIn ? 'Open a saved R-Plot Studio project' : 'Sign in to open My Data'">
+              <div class="action-text">
+                <strong>Open from My Data</strong>
+                <span>Open a saved R-Plot Studio project</span>
               </div>
             </button>
           </div>
@@ -289,6 +298,16 @@ import { PlotProjectService } from '../../services/plot-project.service';
       transform: translateY(-1px);
     }
 
+    .btn-welcome-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: #f1f5f9;
+      border-color: #e2e8f0;
+      color: #94a3b8;
+      box-shadow: none;
+      transform: none;
+    }
+
     .file-upload-label {
       cursor: pointer;
     }
@@ -495,7 +514,8 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
   constructor(
     private rSyncService: RPlotSyncService,
     private plotProjects: PlotProjectService,
-    private auth: AuthService
+    public auth: AuthService,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -524,13 +544,18 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
     this.showWelcomeScreen = true;
   }
 
+  openFromMyData() {
+    if (!this.auth.isLoggedIn) return;
+    void this.router.navigate(['/data/plot-projects']);
+  }
+
   async onSaveClick() {
     if (!this.auth.isLoggedIn) {
-      alert('Please sign in to save plot projects to My Data.');
+      alert('Please sign in to save R-Plot Studio projects to My Data.');
       return;
     }
     if (this.auth.isDemo) {
-      this.auth.notifyDemoUnavailable('Saving plot projects to My Data');
+      this.auth.notifyDemoUnavailable('Saving R-Plot Studio projects to My Data');
       return;
     }
     const title = prompt('Save Plot Project to My Data', this.currentProjectTitle || 'Untitled Plot Project');
@@ -542,7 +567,7 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
         : await this.plotProjects.save(title.trim(), project);
       this.currentProjectId = saved.id;
       this.currentProjectTitle = saved.title;
-      alert(this.currentProjectId ? 'Saved to My Data. Excel and R files are available from My Data → Plot Projects.' : 'Saved to My Data.');
+      alert(this.currentProjectId ? 'Saved to My Data. Excel and R files are available from My Data → R-Plot Studio.' : 'Saved to My Data.');
     } catch (error) {
       console.error('Failed to save plot project', error);
       alert('Could not save the plot project. Please try again.');

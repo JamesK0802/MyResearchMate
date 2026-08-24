@@ -13,12 +13,9 @@ from database.models import User, Lab, LabMember
 from auth.dependencies import get_current_user
 from fastapi.responses import FileResponse
 from jose import jwt
+from storage.file_store import lab_tool_dir
 
 router = APIRouter(prefix="/lab-archive", tags=["lab-archive"])
-
-DEFAULT_DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
-BASE_DATA_DIR_ROOT = os.getenv("LAB_NOTEBOOK_DATA_DIR", DEFAULT_DATA_DIR)
-BASE_DATA_DIR = os.path.join(BASE_DATA_DIR_ROOT, "Labs Archive")
 
 def sanitize_name(name: str) -> str:
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
@@ -27,10 +24,7 @@ def get_lab_dir(db: Session, lab_id: str) -> str:
     lab = db.query(Lab).filter(Lab.id == lab_id).first()
     if not lab:
         raise HTTPException(status_code=404, detail="Lab not found")
-    lab_dir_name = sanitize_name(lab.lab_name)
-    path = os.path.join(BASE_DATA_DIR, lab_dir_name)
-    os.makedirs(path, exist_ok=True)
-    return path
+    return str(lab_tool_dir(lab.lab_name, "lab-archive"))
 
 def check_lab_membership(db: Session, current_user: dict, lab_id: str):
     member = db.query(LabMember).filter(LabMember.lab_id == lab_id, LabMember.user_id == current_user["id"]).first()

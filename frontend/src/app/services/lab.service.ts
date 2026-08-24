@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AuthService } from './auth.service';
 import { firstValueFrom } from 'rxjs';
+import { Subject } from 'rxjs';
 
 export interface LabMemberInfo {
   uid: string;
@@ -26,6 +27,8 @@ export interface LabRegistrationRequest {
 @Injectable({ providedIn: 'root' })
 export class LabService {
   private apiUrl = '/api';
+  private readonly labsChangedSubject = new Subject<void>();
+  readonly labsChanged$ = this.labsChangedSubject.asObservable();
   private readonly demoLabs = [
     { id: 'demo-lab-genome', lab_name: 'Demo Lab 1', lab_tagline: 'This is a demo lab', lab_description: 'Demo workspace for Sample 1-1 and demo workflow examples.', is_leader: true, my_role: 'leader', created_at: '2026-02-12T09:00:00Z' },
     { id: 'demo-lab-phenomics', lab_name: 'Demo Lab 2', lab_tagline: 'This is a demo lab', lab_description: 'Demo workspace for Sample 2-1 and demo workflow examples.', is_leader: false, my_role: 'member', created_at: '2026-03-05T09:00:00Z' },
@@ -85,6 +88,8 @@ export class LabService {
       this.http.get<any[]>(`${this.apiUrl}/labs/my`, { headers })
     );
   }
+
+  notifyLabsChanged() { this.labsChangedSubject.next(); }
 
   // --- Admin Methods ---
 
@@ -185,5 +190,9 @@ export class LabService {
     return firstValueFrom(
       this.http.delete(`${this.apiUrl}/labs/${labId}`, { headers })
     );
+  }
+  async cancelLabDeletion(labId: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.post(`${this.apiUrl}/labs/${labId}/cancel-deletion`, {}, { headers }));
   }
 }

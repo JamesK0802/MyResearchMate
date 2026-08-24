@@ -31,3 +31,4 @@ class TokenPayload(BaseModel):
     sub: str # This is the supabase_auth_id
     email: str
     exp: int
+    name: Optional[str] = None

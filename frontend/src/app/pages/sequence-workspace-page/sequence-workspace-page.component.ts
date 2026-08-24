@@ -4,6 +4,8 @@ import { ProjectExplorerComponent } from '../../components/sequence-workspace/pr
 import { MainViewerComponent } from '../../components/sequence-workspace/main-viewer.component';
 import { ItemInspectorComponent } from '../../components/sequence-workspace/item-inspector.component';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
+import { AuthService } from '../../services/auth.service';
+import { StorageUsageComponent } from '../../components/storage-usage.component';
 
 @Component({
   selector: 'app-sequence-workspace-page',
@@ -12,10 +14,17 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
     CommonModule, 
     ProjectExplorerComponent, 
     MainViewerComponent, 
-    ItemInspectorComponent
+    ItemInspectorComponent,
+    StorageUsageComponent
   ],
   template: `
-    <div class="workspace-container">
+    <div class="sequence-workspace-page">
+      <header class="storage-bar">
+        <span class="storage-title">Sequence Viewer</span>
+        <app-storage-usage *ngIf="(auth.session$ | async) && !auth.isDemo" scope="personal" label="Cloud storage"></app-storage-usage>
+        <span *ngIf="!(auth.session$ | async) || auth.isDemo" class="storage-usage muted">Sign in to save files to your account</span>
+      </header>
+      <div class="workspace-container">
       <!-- Collapsible Explorer Left Sidebar -->
       <div class="panel explorer-panel" *ngIf="!isSidebarCollapsed">
         <app-project-explorer (collapse)="toggleSidebar()"></app-project-explorer>
@@ -33,13 +42,20 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
       <div class="panel inspector-panel" *ngIf="(workspace.selectedItem$ | async)?.type !== 'fastq'">
         <app-item-inspector></app-item-inspector>
       </div>
+      </div>
     </div>
   `,
   styles: [`
+    .sequence-workspace-page { display: flex; flex-direction: column; height: calc(100vh - 56px); width: 100%; background: var(--color-background); overflow: hidden; }
+    .storage-bar { height: 34px; padding: 0 14px; flex: 0 0 34px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); background: var(--color-surface); box-sizing: border-box; }
+    .storage-title { color: var(--color-text-primary); font-size: 0.82rem; font-weight: 800; }
+    .storage-usage { color: var(--color-primary); font-size: 0.78rem; font-weight: 700; }
+    .storage-usage.muted { color: var(--color-text-tertiary); font-weight: 600; }
     .workspace-container {
       display: flex;
       flex-direction: row;
-      height: calc(100vh - 56px);
+      flex: 1;
+      min-height: 0;
       width: 100%;
       background: var(--color-background);
       overflow: hidden;
@@ -99,7 +115,14 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
 export class SequenceWorkspacePageComponent {
   isSidebarCollapsed = false;
 
-  constructor(public workspace: SequenceWorkspaceService) {}
+  constructor(public workspace: SequenceWorkspaceService, public auth: AuthService) {}
+
+  formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, index)).toFixed(index >= 3 ? 2 : 0)} ${units[index]}`;
+  }
 
   toggleSidebar() {
     this.isSidebarCollapsed = !this.isSidebarCollapsed;

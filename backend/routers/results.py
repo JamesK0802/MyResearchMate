@@ -6,8 +6,19 @@ from auth.dependencies import get_current_user
 from database.db import get_db
 from database.models import CrisprResult, CrisprResultShare, Lab, LabMember, User
 from models.results import CrisprResultCreate, CrisprResultUpdate, CrisprResultInDB
+from sqlalchemy.orm.attributes import set_committed_value
+from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/crispr-results", tags=["results"])
+
+def hydrate_result(result: CrisprResult):
+    payload = read_json(result.storage_path, None) if result.storage_path else None
+    if isinstance(payload, dict):
+        set_committed_value(result, "metadata_json", payload.get("metadata", {}))
+        set_committed_value(result, "result_json", payload.get("result", {}))
+        if payload.get("title"):
+            set_committed_value(result, "title", payload["title"])
+    return result
 
 def attach_share_metadata(result: CrisprResult, db: Session):
     """Helper to attach shared_with_labs and is_shared status to a result object."""
@@ -15,6 +26,7 @@ def attach_share_metadata(result: CrisprResult, db: Session):
         CrisprResultShare.result_id == result.id
     ).all()
     
+    hydrate_result(result)
     result.shared_with_labs = [s.Lab.lab_name for s in shares]
     result.is_shared = len(shares) > 0
     return result
@@ -29,10 +41,18 @@ async def create_result(
         new_result = CrisprResult(
             owner_user_id=current_user["id"],
             title=result_data.title,
-            metadata_json=result_data.metadata_json,
-            result_json=result_data.result_json
+            metadata_json={},
+            result_json={}
         )
         db.add(new_result)
+        db.flush()
+        path = document_path(current_user, "crispr-analysis", new_result.id)
+        write_json(path, {
+            "version": 1, "type": "crispr-analysis", "id": str(new_result.id),
+            "title": result_data.title, "metadata": result_data.metadata_json,
+            "result": result_data.result_json,
+        })
+        new_result.storage_path = relative_data_path(path)
         db.commit()
         db.refresh(new_result)
         return attach_share_metadata(new_result, db)
@@ -110,6 +130,16 @@ async def update_result_shares(
     if not result: raise HTTPException(status_code=403, detail="Not authorized")
     
     lab_ids = payload.get("lab_ids", [])
+    scheduled_labs = []
+    for lab_id in lab_ids:
+        try:
+            lab = db.query(Lab).filter(Lab.id == UUID(lab_id)).first()
+            if lab and lab.archive_deletion_at:
+                scheduled_labs.append(lab.lab_name)
+        except (ValueError, TypeError):
+            continue
+    if scheduled_labs:
+        raise HTTPException(status_code=409, detail=f"Sharing is unavailable because deletion is scheduled for: {', '.join(scheduled_labs)}")
     db.query(CrisprResultShare).filter(CrisprResultShare.result_id == result_id).delete()
     
     for lid in lab_ids:
@@ -150,6 +180,8 @@ async def delete_result(
     db.query(CrisprResultShare).filter(CrisprResultShare.result_id == result_id).delete()
     
     # 2. Delete the result
+    if result.storage_path:
+        resolve_data_path(result.storage_path).unlink(missing_ok=True)
     db.delete(result)
     db.commit()
     return {"message": "Deleted"}

@@ -44,6 +44,8 @@ class Lab(Base):
     lab_description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
+    archive_deletion_at = Column(DateTime(timezone=True), nullable=True)
 
 class LabMember(Base):
     __tablename__ = "lab_members"
@@ -55,6 +57,31 @@ class LabMember(Base):
     email = Column(String)
     role_in_lab = Column(String, default="member")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class StorageQuota(Base):
+    __tablename__ = "storage_quotas"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scope = Column(String, nullable=False)  # personal | lab
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=True, index=True)
+    quota_bytes = Column(BigInteger, nullable=False)
+    updated_by = Column(BigInteger, ForeignKey("users.id"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class StorageQuotaRequest(Base):
+    __tablename__ = "storage_quota_requests"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scope = Column(String, nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=True, index=True)
+    requested_bytes = Column(BigInteger, nullable=False)
+    reason = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    reviewed_by = Column(BigInteger, ForeignKey("users.id"), nullable=True)
+    approved_bytes = Column(BigInteger, nullable=True)
+    review_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
 class LabRegistrationRequest(Base):
     __tablename__ = "lab_registration_requests"
@@ -90,6 +117,7 @@ class CrisprResult(Base):
     title = Column(String)
     metadata_json = Column(JSON)
     result_json = Column(JSON)
+    storage_path = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -107,6 +135,7 @@ class ProtocolTree(Base):
     owner_user_id = Column(BigInteger, ForeignKey("users.id"))
     title = Column(String)
     document_json = Column(JSON)
+    storage_path = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -124,6 +153,7 @@ class PlotProject(Base):
     owner_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
     project_json = Column(JSON, nullable=False, default=dict)
+    storage_path = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -135,6 +165,18 @@ class PlotProjectShare(Base):
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class SequenceWorkspaceFile(Base):
+    __tablename__ = "sequence_workspace_files"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    original_name = Column(String, nullable=False)
+    stored_name = Column(String, nullable=False, unique=True)
+    size_bytes = Column(BigInteger, nullable=False)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    storage_path = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 class PcrPreset(Base):
     __tablename__ = "pcr_presets"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -144,6 +186,7 @@ class PcrPreset(Base):
     primer_r = Column(String, nullable=True)
     product_size = Column(Integer, default=0)
     components_json = Column(JSON, default=list) # Store full component list
+    storage_path = Column(Text, nullable=True)
     is_public = Column(Boolean, default=False)
     # ERD fields
     category = Column(String)

@@ -114,6 +114,9 @@
               <button *ngIf="viewMode === 'my'" class="app-btn app-btn-outline app-btn-sm" (click)="openShareModal(exp, $event)">
                 Share
               </button>
+              <button *ngIf="viewMode === 'my'" class="app-btn app-btn-danger app-btn-sm" (click)="deleteArchiveExperiment(exp, $event)">
+                Delete
+              </button>
             </div>
             
             <!-- Bottom: Dates stacked under button -->

@@ -48,6 +48,10 @@ export interface SequenceDocument {
   createdTimestamp: number;
   updatedTimestamp: number;
   fileHandle?: any;
+  remoteFileId?: string;
+  remoteItemIndex?: number;
+  originalFileName?: string;
+  contentLoaded?: boolean;
 }
 
 export interface AlignmentDocument {
@@ -64,6 +68,10 @@ export interface AlignmentDocument {
   createdTimestamp: number;
   updatedTimestamp: number;
   fileHandle?: any;
+  remoteFileId?: string;
+  remoteItemIndex?: number;
+  originalFileName?: string;
+  contentLoaded?: boolean;
 }
 
 export interface FastqRead {
@@ -102,6 +110,10 @@ export interface FastqDocument {
   updatedTimestamp: number;
   fileHandle?: any;
   autoAlign?: AutoAlignConfig;
+  remoteFileId?: string;
+  remoteItemIndex?: number;
+  originalFileName?: string;
+  contentLoaded?: boolean;
 }
 
 export type ProjectItem = SequenceDocument | AlignmentDocument | FastqDocument;

@@ -218,6 +218,21 @@ export class LabArchivePageComponent implements OnInit {
     this.selectedExp = null;
   }
 
+  async deleteArchiveExperiment(exp: any, event: Event) {
+    event.stopPropagation();
+    if (!confirm(`Delete archived experiment "${exp.title}"? This permanently deletes its workflow notes and attached images.`)) return;
+    try {
+      await this.labNotebookService.deleteExperiment(exp.id);
+      this.archivedExperiments = this.archivedExperiments.filter(item => item.id !== exp.id);
+      this.filteredExperiments = this.filteredExperiments.filter(item => item.id !== exp.id);
+      if (this.selectedExp?.id === exp.id) this.closeModal();
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('Failed to delete archived experiment', e);
+      alert('Could not delete the archived experiment. Please try again.');
+    }
+  }
+
   async addComment() {
     if (!this.newCommentText.trim() || !this.selectedExp) return;
     try {
@@ -344,4 +359,3 @@ export class LabArchivePageComponent implements OnInit {
     });
   }
 }
-

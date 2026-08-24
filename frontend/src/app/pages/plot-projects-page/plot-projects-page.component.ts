@@ -5,21 +5,22 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { LabService } from '../../services/lab.service';
 import { PlotProjectRecord, PlotProjectService } from '../../services/plot-project.service';
+import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 
 @Component({
   selector: 'app-plot-projects-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
   template: `
     <main class="my-data-container">
-      <div class="page-header"><h1>Plot Projects</h1></div>
+      <app-my-data-header title="R-Plot Studio"></app-my-data-header>
       <div class="tabs-nav">
         <button [class.active]="activeTab === 'all'" (click)="setTab('all')">All Data</button>
         <button [class.active]="activeTab === 'my'" (click)="setTab('my')">My Data</button>
         <button [class.active]="activeTab === 'shared'" (click)="setTab('shared')">Shared with Me</button>
       </div>
 
-      <div *ngIf="loading" class="loading-spinner"><div class="spinner"></div><p>Loading plot projects...</p></div>
+      <div *ngIf="loading" class="loading-spinner"><div class="spinner"></div><p>Loading R-Plot Studio projects...</p></div>
       <div *ngIf="!loading && projects.length" class="results-grid">
         <article *ngFor="let project of projects" class="result-card" [class.shared-card]="project.is_shared">
           <div class="card-body">
@@ -35,7 +36,7 @@ import { PlotProjectRecord, PlotProjectService } from '../../services/plot-proje
           </div>
         </article>
       </div>
-      <div *ngIf="!loading && !projects.length" class="empty-state"><div class="empty-icon">📁</div><h3>No plot projects found</h3><p>Save a plot from Plot Generator to keep its data, layout, and R script together.</p><button *ngIf="activeTab !== 'shared'" class="btn-primary" (click)="createNew()">Open Plot Generator</button></div>
+      <div *ngIf="!loading && !projects.length" class="empty-state"><div class="empty-icon">📁</div><h3>No R-Plot Studio projects found</h3><p>Save an R-Plot Studio project to keep its data, layout, and R script together.</p><button *ngIf="activeTab !== 'shared'" class="btn-primary" (click)="createNew()">Open R-Plot Studio</button></div>
 
       <div *ngIf="sharingProject" class="modal-overlay" (click)="closeShare()">
         <div class="modal-content" (click)="$event.stopPropagation()">
@@ -60,7 +61,6 @@ import { PlotProjectRecord, PlotProjectService } from '../../services/plot-proje
   `,
   styles: [`
     .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
-    .page-header { margin-bottom: var(--space-3); } .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin: 0; letter-spacing: -0.025em; }
     .tabs-nav { display: flex; gap: 0; margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); } .tabs-nav button { padding: 10px var(--space-6); border: none; background: none; font-family: var(--font-sans); font-weight: var(--fw-semi); font-size: var(--text-base); color: var(--color-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: var(--transition-fast); } .tabs-nav button:hover { color: var(--color-text-body); background: var(--color-surface-alt); } .tabs-nav button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
     .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-6); } .result-card { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-xs); border: 1px solid var(--color-border-light); display: flex; flex-direction: column; transition: var(--transition-normal); } .result-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--color-border); } .shared-card { border-left: 3px solid #3b82f6; }
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); } .result-title { font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--color-text-primary); margin: 0; line-height: var(--lh-tight); } .card-badges { display: flex; gap: var(--space-1); flex-wrap: wrap; } .badge { font-size: var(--text-xs); font-weight: var(--fw-black); padding: 3px 9px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid; } .owner { background: var(--color-primary-subtle); color: var(--color-primary); border-color: var(--color-primary-border); } .shared { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
@@ -72,7 +72,7 @@ import { PlotProjectRecord, PlotProjectService } from '../../services/plot-proje
 })
 export class PlotProjectsPageComponent implements OnInit {
   projects: PlotProjectRecord[] = []; loading = true; activeTab: 'all' | 'my' | 'shared' = 'all'; sharingProject: PlotProjectRecord | null = null; myLabs: any[] = []; selectedLabIds: string[] = [];
-  constructor(private projectService: PlotProjectService, private router: Router, private auth: AuthService, private labs: LabService, private cdr: ChangeDetectorRef) {}
+  constructor(private projectService: PlotProjectService, private router: Router, public auth: AuthService, private labs: LabService, private cdr: ChangeDetectorRef) {}
   ngOnInit() { void this.load(); }
   async load() { this.loading = true; this.cdr.detectChanges(); try { this.projects = this.auth.isDemo ? [] : await this.projectService.getProjects(this.activeTab); } catch (error) { console.error('Failed to load plot projects', error); this.projects = []; } finally { this.loading = false; this.cdr.detectChanges(); } }
   setTab(tab: 'all' | 'my' | 'shared') { this.activeTab = tab; void this.load(); }

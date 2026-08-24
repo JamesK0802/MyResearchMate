@@ -1,9 +1,11 @@
-<div class="archive-page app-page">
+<div class="archive-page app-page" [class.archive-readonly]="isReadOnly">
   <header class="page-header">
     <div class="header-content">
       <h1>{{ labName ? labName + ' Archive' : 'Lab Archive' }}</h1>
       <p>Store records, attach files and links, and collaborate with your lab team.</p>
+      <div *ngIf="archiveDeletionAt" class="archive-deletion-notice">⚠ Scheduled for permanent deletion in {{ remainingDays(archiveDeletionAt) }} day(s). This archive is view and download only.</div>
     </div>
+    <app-storage-usage *ngIf="labId" scope="lab" [labId]="labId" label="Lab storage"></app-storage-usage>
   </header>
 
   <!-- View Mode Tabs -->
@@ -21,7 +23,7 @@
         <input type="text" [(ngModel)]="searchQuery" (input)="filterRecords()" placeholder="Search by title or description...">
       </div>
     </div>
-    <button class="app-btn app-btn-primary" (click)="openNewRecordModal()">+ New Record</button>
+    <button class="app-btn app-btn-primary" (click)="openNewRecordModal()" [disabled]="isReadOnly">+ New Record</button>
   </div>
 
   <!-- ═══ RECORDS VIEW ═══ -->
@@ -70,7 +72,7 @@
     <div class="empty-state" *ngIf="filteredRecords.length === 0 && !searchQuery">
       <h3>No records yet</h3>
       <p>Create a record to log activities and attach files.</p>
-      <button class="app-btn app-btn-primary" (click)="openNewRecordModal()">+ New Record</button>
+      <button class="app-btn app-btn-primary" (click)="openNewRecordModal()" [disabled]="isReadOnly">+ New Record</button>
     </div>
     <div class="empty-state" *ngIf="filteredRecords.length === 0 && searchQuery"><p>No matching records.</p></div>
   </div>
@@ -80,7 +82,7 @@
     <!-- Spreadsheet Toolbar -->
     <div class="spreadsheet-toolbar">
       <div class="toolbar-left">
-        <button class="app-btn app-btn-outline app-btn-sm" (click)="addSampleRow()">+ Add Sample</button>
+        <button class="app-btn app-btn-outline app-btn-sm" (click)="addSampleRow()" [disabled]="isReadOnly">+ Add Sample</button>
         
         <!-- Desktop buttons: hidden on mobile -->
         <div class="toolbar-actions-desktop" style="display:flex; gap:8px; align-items:center;">
@@ -243,27 +245,27 @@
             
             <!-- Barcode (editable) -->
             <td class="col-barcode">
-              <input type="text" [(ngModel)]="sample.barcode" (ngModelChange)="onSamplesChange()" placeholder="e.g. BC001" class="grid-input">
+              <input type="text" [(ngModel)]="sample.barcode" (ngModelChange)="onSamplesChange()" placeholder="e.g. BC001" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Sample Name (editable) -->
             <td class="col-name">
-              <input type="text" [(ngModel)]="sample.sample_name" (ngModelChange)="onSamplesChange()" placeholder="Sample name" class="grid-input">
+              <input type="text" [(ngModel)]="sample.sample_name" (ngModelChange)="onSamplesChange()" placeholder="Sample name" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Person (editable) -->
             <td class="col-person">
-              <input type="text" [(ngModel)]="sample.person" (ngModelChange)="onSamplesChange()" placeholder="Researcher" class="grid-input">
+              <input type="text" [(ngModel)]="sample.person" (ngModelChange)="onSamplesChange()" placeholder="Researcher" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Project (editable) -->
             <td class="col-project">
-              <input type="text" [(ngModel)]="sample.project" (ngModelChange)="onSamplesChange()" placeholder="Project name" class="grid-input">
+              <input type="text" [(ngModel)]="sample.project" (ngModelChange)="onSamplesChange()" placeholder="Project name" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Lab (editable) -->
             <td class="col-lab">
-              <input type="text" [(ngModel)]="sample.lab" (ngModelChange)="onSamplesChange()" placeholder="Lab group" class="grid-input">
+              <input type="text" [(ngModel)]="sample.lab" (ngModelChange)="onSamplesChange()" placeholder="Lab group" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Files -->
@@ -275,11 +277,11 @@
                     <a [href]="getDownloadUrl(file.path)" target="_blank" class="inline-file-link" [title]="file.filename">
                       📄 {{ getDisplayText(file.filename, 22) }}
                     </a>
-                    <button type="button" class="chip-delete-x" (click)="removeSampleFileFromRow(sample, fIdx)">✕</button>
+                    <button type="button" class="chip-delete-x" (click)="removeSampleFileFromRow(sample, fIdx)" [disabled]="isReadOnly">✕</button>
                   </div>
                   <!-- Plus button and more indicator inline -->
                   <div class="inline-attachments-bottom-row">
-                    <button type="button" class="add-attachment-plus" (click)="openSampleFilesManager(sample)" title="Add Files">+</button>
+                    <button type="button" class="add-attachment-plus" (click)="openSampleFilesManager(sample)" title="Add Files" [disabled]="isReadOnly">+</button>
                     <span *ngIf="(sample.files?.length || 0) > 2" class="more-attachments-text" (click)="openSampleFilesManager(sample)">
                       +{{ (sample.files?.length || 0) - 2 }} more
                     </span>
@@ -297,11 +299,11 @@
                     <a [href]="formatExternalLink(link)" target="_blank" class="inline-url-link" [title]="link">
                       🔗 {{ getDisplayText(link, 22) }}
                     </a>
-                    <button type="button" class="chip-delete-x" (click)="removeLinkFromRow(sample, lIdx)">✕</button>
+                    <button type="button" class="chip-delete-x" (click)="removeLinkFromRow(sample, lIdx)" [disabled]="isReadOnly">✕</button>
                   </div>
                   <!-- Plus button and more indicator inline -->
                   <div class="inline-attachments-bottom-row">
-                    <button type="button" class="add-attachment-plus" (click)="openAddLinkModal(sample)" title="Add Link">+</button>
+                    <button type="button" class="add-attachment-plus" (click)="openAddLinkModal(sample)" title="Add Link" [disabled]="isReadOnly">+</button>
                     <span *ngIf="(sample.links?.length || 0) > 2" class="more-attachments-text" (click)="openAddLinkModal(sample)">
                       +{{ (sample.links?.length || 0) - 2 }} more
                     </span>
@@ -317,10 +319,10 @@
                   <a (click)="openLinkedRecord(sample.linked_record_id)" class="record-chip-link" [title]="getRecordTitle(sample.linked_record_id)">
                     {{ getDisplayText(getRecordTitle(sample.linked_record_id), 16) }}
                   </a>
-                  <button type="button" class="record-action-icon" (click)="openRecordLinkModal(sample)" title="Change Record">🔄</button>
-                  <button type="button" class="record-action-icon danger" (click)="unlinkRecordFromSample(sample)" title="Unlink Record">✕</button>
+                  <button type="button" class="record-action-icon" (click)="openRecordLinkModal(sample)" title="Change Record" [disabled]="isReadOnly">🔄</button>
+                  <button type="button" class="record-action-icon danger" (click)="unlinkRecordFromSample(sample)" title="Unlink Record" [disabled]="isReadOnly">✕</button>
                 </div>
-                <button *ngIf="!sample.linked_record_id" type="button" class="app-btn app-btn-outline app-btn-xs" (click)="openRecordLinkModal(sample)">
+                <button *ngIf="!sample.linked_record_id" type="button" class="app-btn app-btn-outline app-btn-xs" (click)="openRecordLinkModal(sample)" [disabled]="isReadOnly">
                   + Link
                 </button>
               </div>
@@ -328,7 +330,7 @@
             
             <!-- Delete Row -->
             <td class="col-actions">
-              <button class="delete-row-btn" (click)="deleteSampleRow(samples.indexOf(sample))" title="Delete Row">✕</button>
+              <button class="delete-row-btn" (click)="deleteSampleRow(samples.indexOf(sample))" title="Delete Row" [disabled]="isReadOnly">✕</button>
             </td>
           </tr>
         </tbody>
@@ -385,8 +387,8 @@
         </ng-container>
       </div>
       <div style="flex:1;"></div>
-      <button class="app-btn app-btn-outline app-btn-sm" (click)="showMkdirModal = true">New Folder</button>
-      <button class="app-btn app-btn-primary app-btn-sm" (click)="triggerFilePicker()">Upload</button>
+      <button class="app-btn app-btn-outline app-btn-sm" (click)="showMkdirModal = true" [disabled]="isReadOnly">New Folder</button>
+      <button class="app-btn app-btn-primary app-btn-sm" (click)="triggerFilePicker()" [disabled]="isReadOnly">Upload</button>
     </div>
 
     <!-- Finder Explorer Body (Split Layout) -->
@@ -472,7 +474,7 @@
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
             </a>
-            <button *ngIf="!file.is_linked" class="finder-action-icon-btn delete-btn" (click)="deleteFsItem(file)" title="Delete file">
+            <button *ngIf="!file.is_linked" class="finder-action-icon-btn delete-btn" (click)="deleteFsItem(file)" title="Delete file" [disabled]="isReadOnly">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -506,8 +508,8 @@
           <span class="detail-record-meta">By {{ selectedRecord.created_by }} · {{ selectedRecord.created_at | date:'medium' }}</span>
         </div>
         <div class="detail-header-actions">
-          <button class="app-btn app-btn-outline app-btn-sm" (click)="openEditRecordModal(selectedRecord)">Edit</button>
-          <button class="app-btn app-btn-danger app-btn-sm" (click)="deleteRecord(selectedRecord.id)">Delete</button>
+          <button class="app-btn app-btn-outline app-btn-sm" (click)="openEditRecordModal(selectedRecord)" [disabled]="isReadOnly">Edit</button>
+          <button class="app-btn app-btn-danger app-btn-sm" (click)="deleteRecord(selectedRecord.id)" [disabled]="isReadOnly">Delete</button>
           <button class="app-modal-close" (click)="closeDetails()">✕</button>
         </div>
       </div>
@@ -556,7 +558,7 @@
                   <strong>{{ comment.user_name }}</strong>
                   <div class="thread-meta-actions">
                     <span>{{ comment.created_at | date:'short' }}</span>
-                    <button class="delete-comment-btn" (click)="deleteComment(comment.id)">✕</button>
+                    <button class="delete-comment-btn" (click)="deleteComment(comment.id)" [disabled]="isReadOnly">✕</button>
                   </div>
                 </div>
                 <p class="detail-comment-text" [title]="comment.text">{{ comment.text }}</p>
@@ -564,8 +566,8 @@
               <div *ngIf="!selectedRecord.comments?.length" class="detail-empty-note">No comments yet.</div>
             </div>
             <div class="comment-compose">
-              <textarea class="app-textarea comment-input" [(ngModel)]="newCommentText" placeholder="Write a comment..." rows="2"></textarea>
-              <button class="app-btn app-btn-primary app-btn-sm" (click)="addComment()" [disabled]="!newCommentText.trim()">Post</button>
+              <textarea class="app-textarea comment-input" [(ngModel)]="newCommentText" placeholder="Write a comment..." rows="2" [disabled]="isReadOnly"></textarea>
+              <button class="app-btn app-btn-primary app-btn-sm" (click)="addComment()" [disabled]="isReadOnly || !newCommentText.trim()">Post</button>
             </div>
           </div>
         </aside>

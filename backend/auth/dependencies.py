@@ -38,10 +38,13 @@ async def get_current_user_token(credentials: HTTPAuthorizationCredentials = Dep
                 print(f"[AUTH] HS256 Decode failed: {str(decode_err)}, falling back to unverified")
                 payload = jwt.get_unverified_claims(token)
             
+        metadata = payload.get("user_metadata") or payload.get("raw_user_meta_data") or {}
+        profile_name = metadata.get("full_name") or metadata.get("name") or payload.get("name")
         token_data = TokenPayload(
             sub=payload.get("sub"),
             email=payload.get("email"),
-            exp=payload.get("exp")
+            exp=payload.get("exp"),
+            name=profile_name,
         )
         return token_data
     except Exception as e:
@@ -58,7 +61,7 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> dict:
     print(f"[AUTH] get_current_user called for {token.email}")
-    name = token.email.split("@")[0]
+    name = (token.name or "").strip() or token.email.split("@")[0]
     
     try:
         local_user = sync_user_to_local(

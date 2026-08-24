@@ -92,9 +92,8 @@ export class PcrPresetService {
   }
 
   private async getHeaders() {
-    // Access session from AuthService's internal state
-    const session = (this.auth as any).sessionSubject?.value;
-    const token = session?.access_token || '';
+    const token = this.auth.accessToken || (await this.auth.getSession())?.access_token;
+    if (!token) throw new Error('Not authenticated');
     return new HttpHeaders().set('Authorization', `Bearer ${token}`);
   }
 

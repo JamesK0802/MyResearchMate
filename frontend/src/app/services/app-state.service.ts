@@ -6,7 +6,6 @@ import { ExcelExportService, ExportParams } from './excel-export.service';
 import { CurationService } from './curation.service';
 import { LocalAnalysisService, LocalAnalysisEvent } from './local-analysis.service';
 import { SequenceWorkspaceService } from './sequence-workspace.service';
-import { parseFastqText } from '../utils/parsers.utils';
 import { extractWindow, findGrnaCutSite } from '../workers/core/classifier';
 import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult, SplitPreview } from '../models/analysis.model';
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
@@ -1178,7 +1177,6 @@ export class AppStateService {
       if (blobs.length > 0) {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
         const filename = `${target.target_id}_Group_${group.group_rank}.fastq`;
-        const fastqDoc = parseFastqText(text, filename);
 
         const refSeq = target.ref_sequence || target.reference_seq || '';
         const grnaSeq = target.sgrna_seq || '';
@@ -1190,11 +1188,8 @@ export class AppStateService {
         }
 
         const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
-        fastqDoc.autoAlign = autoAlign;
-
-        await this.sequenceWorkspaceService.saveItem(fastqDoc);
-        this.sequenceWorkspaceService.selectItem(fastqDoc.id);
-        this.sequenceWorkspaceService.setPendingAutoAlign(autoAlign);
+        const generatedFile = new File([text], filename, { type: 'text/plain' });
+        await this.sequenceWorkspaceService.importGeneratedFastq(generatedFile, autoAlign);
       }
     } catch (e: any) {
       console.error('Open group in workspace failed:', e);
@@ -1244,7 +1239,6 @@ export class AppStateService {
       if (blobs.length > 0) {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
         const filename = `${target.target_id}_All_Reads.fastq`;
-        const fastqDoc = parseFastqText(text, filename);
 
         const refSeq = target.ref_sequence || target.reference_seq || '';
         const grnaSeq = target.sgrna_seq || '';
@@ -1256,11 +1250,8 @@ export class AppStateService {
         }
 
         const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
-        fastqDoc.autoAlign = autoAlign;
-
-        await this.sequenceWorkspaceService.saveItem(fastqDoc);
-        this.sequenceWorkspaceService.selectItem(fastqDoc.id);
-        this.sequenceWorkspaceService.setPendingAutoAlign(autoAlign);
+        const generatedFile = new File([text], filename, { type: 'text/plain' });
+        await this.sequenceWorkspaceService.importGeneratedFastq(generatedFile, autoAlign);
       }
     } catch (e: any) {
       console.error('Open all target in workspace failed:', e);

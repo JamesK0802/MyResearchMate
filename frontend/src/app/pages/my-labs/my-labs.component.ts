@@ -13,6 +13,14 @@ import { LabService } from '../../services/lab.service';
         <p>Manage the labs you are a member of or lead.</p>
       </div>
 
+      <div class="modal-overlay" *ngIf="deleteWarningLab" (click)="deleteWarningLab=null">
+        <div class="modal-content delete-warning" (click)="$event.stopPropagation()">
+          <div class="modal-header"><h2>Schedule lab deletion?</h2><button class="close-btn" (click)="deleteWarningLab=null">×</button></div>
+          <div class="modal-body"><div class="warning-icon">⚠</div><p><strong>{{deleteWarningLab.lab_name}}</strong> will stop accepting Lab Archive changes immediately.</p><ul><li>Lab Archive remains available for viewing and download only for 10 days.</li><li>After 10 days, all Lab Archive files are permanently deleted.</li><li>Data shared with this Lab becomes visible immediately to its original owner only.</li></ul><p class="warning-note">This action cannot be undone after the 10-day retention period.</p></div>
+          <div class="modal-footer"><button class="btn-cancel" (click)="deleteWarningLab=null">Cancel</button><button class="btn-delete-confirm" (click)="confirmDeleteLab()">Schedule deletion</button></div>
+        </div>
+      </div>
+
       <div *ngIf="loading" class="loading-state">
         <div class="spinner"></div>
         <p>Loading your labs...</p>
@@ -25,7 +33,7 @@ import { LabService } from '../../services/lab.service';
       </div>
 
       <div *ngIf="!loading && myLabs.length > 0" class="labs-list">
-        <div *ngFor="let lab of myLabs" class="lab-item-row">
+        <div *ngFor="let lab of myLabs" class="lab-item-row" [class.deletion-scheduled]="lab.archive_deletion_at">
           <div class="lab-main">
             <div class="lab-header">
               <h3 class="lab-name">{{ lab.lab_name }}</h3>
@@ -41,6 +49,7 @@ import { LabService } from '../../services/lab.service';
                 👥 Team ({{ teamCounts[lab.id] || '...' }}) {{ expandedLabs[lab.id] ? '▲' : '▼' }}
               </span>
             </div>
+            <div *ngIf="lab.archive_deletion_at" class="deletion-banner">⚠ Deletion scheduled — Archive is read-only. {{ remainingDays(lab.archive_deletion_at) }} day(s) remain before permanent deletion.</div>
 
             <!-- Team Members Section -->
             <div class="team-section" *ngIf="expandedLabs[lab.id]">
@@ -67,19 +76,19 @@ import { LabService } from '../../services/lab.service';
           </div>
 
           <div class="lab-actions">
-            <button 
-              *ngIf="lab.is_leader" 
+            <button *ngIf="lab.is_leader && !lab.archive_deletion_at"
               (click)="openManageModal(lab)" 
               class="btn-manage">
-              Manage Requests
+              Manage Requests <span *ngIf="joinRequestCounts[lab.id]" class="request-badge">{{ joinRequestCounts[lab.id] }}</span>
             </button>
             <button 
-              *ngIf="lab.is_leader" 
+              *ngIf="lab.is_leader && !lab.archive_deletion_at"
               (click)="deleteLab(lab)" 
               class="btn-delete"
               [disabled]="isDeleting === lab.id">
               {{ isDeleting === lab.id ? 'Deleting...' : 'Delete Lab' }}
             </button>
+            <button *ngIf="lab.is_leader && lab.archive_deletion_at" (click)="cancelDeletion(lab)" class="btn-cancel-deletion">Cancel deletion</button>
           </div>
         </div>
       </div>
@@ -167,15 +176,21 @@ import { LabService } from '../../services/lab.service';
     .mini-spinner { width: 20px; height: 20px; border: 2px solid var(--color-border-light); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
     .lab-actions { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
-    .btn-manage { padding: 10px 18px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; transition: var(--transition-fast); white-space: nowrap; }
+    .btn-manage { padding: 10px 18px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; transition: var(--transition-fast); white-space: nowrap; }.request-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:.68rem;font-weight:800;line-height:1;vertical-align:middle}
     .btn-manage:hover { background: var(--color-primary-hover); }
     .btn-delete { padding: 10px 18px; background: var(--color-surface-alt); color: #ef4444; border: 1px solid var(--color-error-border); border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; transition: var(--transition-fast); white-space: nowrap; }
     .btn-delete:hover:not(:disabled) { background: var(--color-error-bg); }
     .btn-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+    .lab-item-row.deletion-scheduled{border:2px solid #f87171;background:#fff8f8}.deletion-banner{margin-top:14px;padding:9px 12px;border-radius:7px;background:#fff1f2;color:#b91c1c;font-size:.82rem;font-weight:700}.btn-cancel-deletion{padding:10px 18px;background:#fff;color:#b91c1c;border:1px solid #fca5a5;border-radius:var(--radius-md);font-family:var(--font-sans);font-weight:var(--fw-bold);font-size:var(--text-base);cursor:pointer}.btn-cancel-deletion:hover{background:#fff1f2}
+    .delete-warning{border:2px solid #fca5a5}.warning-icon{font-size:32px}.delete-warning ul{padding-left:20px;color:var(--color-text-secondary);line-height:1.65}.warning-note{color:#b91c1c;font-weight:700}
 
     /* Modal Styles */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(6px); padding: var(--space-5); }
     .modal-content { background: var(--color-surface); width: 100%; max-width: 500px; border-radius: var(--radius-2xl); box-shadow: var(--shadow-xl); overflow: hidden; animation: modalIn 0.25s cubic-bezier(0.16,1,0.3,1); }
+    .modal-footer { display:flex; justify-content:flex-end; align-items:center; gap:var(--space-3); padding:var(--space-4) var(--space-6); border-top:1px solid var(--color-border-light); }
+    .delete-warning .modal-footer .btn-cancel, .delete-warning .modal-footer .btn-delete-confirm { box-sizing:border-box; height:40px; padding:0 18px; display:inline-flex; align-items:center; justify-content:center; border-radius:var(--radius-md); font-family:var(--font-sans); font-size:var(--text-base); font-weight:var(--fw-bold); line-height:1; }
+    .delete-warning .modal-footer .btn-cancel { background:var(--color-surface); color:var(--color-text-secondary); border:1px solid var(--color-border); cursor:pointer; }
+    .delete-warning .modal-footer .btn-delete-confirm { background:#dc2626; color:#fff; border:0; cursor:pointer; }
     @keyframes modalIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .modal-header { padding: var(--space-6) var(--space-6); border-bottom: 1px solid var(--color-border-light); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
     .modal-header h2 { font-size: var(--text-lg); font-weight: var(--fw-black); color: var(--color-text-primary); margin: 0; }
@@ -225,6 +240,7 @@ export class MyLabsComponent implements OnInit {
   labMembers: { [key: string]: any[] } = {};
   loadingTeam: { [key: string]: boolean } = {};
   teamCounts: { [key: string]: number } = {};
+  joinRequestCounts: { [key: string]: number } = {};
 
   async loadMyLabs() {
     this.loading = true;
@@ -234,6 +250,7 @@ export class MyLabsComponent implements OnInit {
       // Initialize counts
       for (const lab of this.myLabs) {
         this.fetchMemberCount(lab.id);
+        if (lab.is_leader && !lab.archive_deletion_at) this.fetchJoinRequestCount(lab.id);
       }
     } catch (err) {
       console.error('Failed to load my labs', err);
@@ -248,6 +265,14 @@ export class MyLabsComponent implements OnInit {
       const members = await this.labService.getLabMembers(labId);
       this.teamCounts[labId] = members.length;
       this.labMembers[labId] = members;
+      this.cdr.detectChanges();
+    } catch (err) {}
+  }
+
+  async fetchJoinRequestCount(labId: string) {
+    try {
+      const requests = await this.labService.getLabJoinRequests(labId);
+      this.joinRequestCounts[labId] = requests.filter(request => request.status === 'pending').length;
       this.cdr.detectChanges();
     } catch (err) {}
   }
@@ -315,6 +340,7 @@ export class MyLabsComponent implements OnInit {
     try {
       await this.labService.approveJoinRequest(req.id);
       this.pendingRequests = this.pendingRequests.filter(r => r.id !== req.id);
+      this.joinRequestCounts[this.managingLab.id] = this.pendingRequests.length;
       alert('Member approved and added to lab.');
     } catch (err) {
       alert('Failed to approve request.');
@@ -330,6 +356,7 @@ export class MyLabsComponent implements OnInit {
     try {
       await this.labService.rejectJoinRequest(req.id);
       this.pendingRequests = this.pendingRequests.filter(r => r.id !== req.id);
+      this.joinRequestCounts[this.managingLab.id] = this.pendingRequests.length;
     } catch (err) {
       alert('Failed to reject request.');
     } finally {
@@ -339,18 +366,32 @@ export class MyLabsComponent implements OnInit {
   }
 
   async deleteLab(lab: any) {
-    if (!confirm(`Are you sure you want to delete "${lab.lab_name}"? This action cannot be undone.`)) return;
+    this.deleteWarningLab = lab;
+  }
+  deleteWarningLab: any = null;
+  async confirmDeleteLab() {
+    const lab = this.deleteWarningLab;
+    if (!lab) return;
 
     this.isDeleting = lab.id;
     try {
       await this.labService.deleteLab(lab.id);
-      this.myLabs = this.myLabs.filter(l => l.id !== lab.id);
-      alert('Lab deleted successfully.');
+      this.myLabs = await this.labService.getMyLabs();
+      this.labService.notifyLabsChanged();
+      this.deleteWarningLab = null;
+      alert('Deletion scheduled. The Lab Archive is read-only for 10 days.');
     } catch (err: any) {
       alert(err.error?.detail || 'Failed to delete lab');
     } finally {
       this.isDeleting = null;
       this.cdr.detectChanges();
     }
+  }
+  remainingDays(value: string) { return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000)); }
+  async cancelDeletion(lab: any) {
+    if (!confirm(`Cancel deletion for "${lab.lab_name}" and restore Archive editing?`)) return;
+    try { await this.labService.cancelLabDeletion(lab.id); this.myLabs = await this.labService.getMyLabs(); this.labService.notifyLabsChanged(); }
+    catch (err: any) { alert(err?.error?.detail || 'Could not cancel deletion'); }
+    finally { this.cdr.detectChanges(); }
   }
 }

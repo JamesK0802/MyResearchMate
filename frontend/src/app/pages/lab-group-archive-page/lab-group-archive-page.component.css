@@ -22,6 +22,8 @@
 .archive-page .page-header p {
   display: none;
 }
+.archive-deletion-notice { margin-top:8px; width:fit-content; max-width:100%; padding:7px 10px; border:1px solid #fecaca; border-radius:7px; background:#fff1f2; color:#b91c1c; font-size:.78rem; font-weight:750; line-height:1.4; }
+.archive-readonly .app-btn:disabled, .archive-readonly input:disabled, .archive-readonly textarea:disabled, .archive-readonly button:disabled { cursor:not-allowed; opacity:.52; filter:saturate(.35); }
 
 /* ── View Tabs ── */
 .view-mode-tabs {

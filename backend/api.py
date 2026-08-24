@@ -1,7 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()  # Load .env before any other imports that need env vars
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, APIRouter
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, APIRouter, Request
+from fastapi.responses import JSONResponse
 import core.classifier as classifier
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
@@ -11,6 +12,7 @@ import shutil
 import tempfile
 import uuid
 import time
+import asyncio
 import pcr_presets
 
 # PCR Presets are now managed via Supabase (pcr_presets.py)
@@ -19,7 +21,7 @@ import pcr_presets
 from run_local import process_files, process_files_multi, process_single_file_worker, _get_code_version, SUBSTITUTION_POLICY
 
 # Database Initialization
-from database.db import engine, Base
+from database.db import engine, Base, SessionLocal
 import database.models # Ensure all models are loaded
 import multiprocessing
 from sqlalchemy import text
@@ -27,17 +29,59 @@ from sqlalchemy import text
 if multiprocessing.current_process().name == 'MainProcess':
     Base.metadata.create_all(bind=engine)
 
-    # Self-healing DB check for WorkflowShare updates (supporting individual researcher shares)
+    # Small, idempotent schema additions used by local/self-hosted deployments.
+    # The database keeps ownership and path indexes; research payloads live in /data.
     try:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE workflow_shares ADD COLUMN IF NOT EXISTS shared_with_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE"))
             conn.execute(text("ALTER TABLE workflow_shares ALTER COLUMN lab_id DROP NOT NULL"))
+            for table_name in ("crispr_results", "protocol_trees", "plot_projects", "pcr_presets", "sequence_workspace_files"):
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS storage_path TEXT"))
+            conn.execute(text("ALTER TABLE labs ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ"))
+            conn.execute(text("ALTER TABLE labs ADD COLUMN IF NOT EXISTS archive_deletion_at TIMESTAMPTZ"))
             conn.commit()
-        print("[DB] Self-healing workflow_shares migration executed successfully.")
+        from database.db import SessionLocal
+        from storage.migrate_layout import migrate_data_layout
+        with SessionLocal() as migration_db:
+            migrate_data_layout(migration_db)
+        print("[STORAGE] Owner-oriented /data layout is ready.")
     except Exception as e:
-        print(f"[DB] Self-healing workflow_shares migration: {e}")
+        print(f"[STORAGE] Layout/schema migration failed: {e}")
 
 app = FastAPI(title="My Lab Mate API")
+
+
+async def _purge_expired_lab_archives_periodically():
+    """Remove expired Lab Archives even when nobody opens the Labs page."""
+    while True:
+        try:
+            from routers.labs import purge_expired_labs
+            with SessionLocal() as db:
+                purge_expired_labs(db)
+        except Exception as exc:
+            print(f"[LAB ARCHIVE] Expired archive cleanup failed: {exc}")
+        await asyncio.sleep(60 * 60)
+
+
+@app.on_event("startup")
+async def start_lab_archive_cleanup():
+    asyncio.create_task(_purge_expired_lab_archives_periodically())
+
+@app.middleware("http")
+async def block_writes_to_deleting_lab_archives(request: Request, call_next):
+    """A scheduled Lab deletion leaves its archive strictly read-only."""
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/lab-archive/"):
+        parts = request.url.path.split("/")
+        if len(parts) > 3:
+            from database.models import Lab
+            db = SessionLocal()
+            try:
+                lab = db.query(Lab).filter(Lab.id == parts[3]).first()
+                if lab and lab.archive_deletion_at:
+                    return JSONResponse(status_code=423, content={"detail": "This Lab Archive is read-only until its scheduled deletion."})
+            finally:
+                db.close()
+    return await call_next(request)
 
 # ── Main API Router ──────────────────────────────────────────────────────────
 api_router = APIRouter(prefix="/api")
@@ -84,9 +128,9 @@ async def cancel_task(task_id: str):
 # ── Constants for Limits ──────────────────────────────────────────────────────
 MAX_TOTAL_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 MAX_FILE_COUNT = 100
-# Use a local data directory for jobs to avoid /tmp partition limits
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JOBS_DIR = os.path.join(BASE_DIR, "data", "jobs")
+# Analysis uploads are temporary runtime files, not user documents. Keep them
+# outside /data so the persistent tree contains only personal and lab data.
+JOBS_DIR = os.getenv("ANALYSIS_JOBS_DIR", os.path.join(tempfile.gettempdir(), "myresearchmate-jobs"))
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 
@@ -521,10 +565,14 @@ from routers.results import router as results_router
 from routers.protocol_trees import router as protocol_trees_router
 from routers.plot_projects import router as plot_projects_router
 from routers.tool_directory import router as tool_directory_router
+from routers.sequence_workspace import router as sequence_workspace_router
+from routers.storage_quotas import router as storage_quotas_router
 api_router.include_router(results_router)
 api_router.include_router(protocol_trees_router)
 api_router.include_router(plot_projects_router)
 api_router.include_router(tool_directory_router)
+api_router.include_router(sequence_workspace_router)
+api_router.include_router(storage_quotas_router)
 
 # Include labs router
 print("[DEBUG] Including labs_router from routers.labs")

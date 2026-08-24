@@ -21,6 +21,7 @@ export class App implements OnInit {
   appVersion = environment.version;
   isMobileMenuOpen = false;
   myLabs: any[] = [];
+  remainingArchiveDays(value: string): number { return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000)); }
 
   constructor(
     public auth: AuthService,
@@ -42,10 +43,20 @@ export class App implements OnInit {
         this.myLabs = [];
       }
     });
+    this.labService.labsChanged$.subscribe(async () => {
+      if (!this.auth.isLoggedIn) return;
+      try { this.myLabs = await this.labService.getMyLabs(); }
+      catch (e) { console.error('Failed to refresh user labs in navbar:', e); }
+    });
   }
 
   toggleMobileMenu() {
     this.isMobileMenuOpen = !this.isMobileMenuOpen;
+  }
+
+  navigateAdmin(event: MouseEvent, path: string) {
+    event.preventDefault();
+    this.router.navigateByUrl(path);
   }
 
   async logout() {

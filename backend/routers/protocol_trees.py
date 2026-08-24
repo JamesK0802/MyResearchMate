@@ -6,14 +6,26 @@ from auth.dependencies import get_current_user
 from database.db import get_db
 from database.models import ProtocolTree, ProtocolTreeShare, Lab, LabMember, User
 from models.protocol_trees import ProtocolTreeCreate, ProtocolTreeUpdate, ProtocolTreeInDB
+from sqlalchemy.orm.attributes import set_committed_value
+from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/protocol-trees", tags=["protocol-trees"])
+
+
+def hydrate_tree(tree: ProtocolTree):
+    payload = read_json(tree.storage_path, None) if tree.storage_path else None
+    if isinstance(payload, dict):
+        set_committed_value(tree, "document_json", payload.get("document", {}))
+        if payload.get("title"):
+            set_committed_value(tree, "title", payload["title"])
+    return tree
 
 
 def attach_share_metadata(tree: ProtocolTree, db: Session):
     shares = db.query(ProtocolTreeShare, Lab).join(
         Lab, ProtocolTreeShare.lab_id == Lab.id
     ).filter(ProtocolTreeShare.protocol_tree_id == tree.id).all()
+    hydrate_tree(tree)
     tree.shared_with_labs = [item.Lab.lab_name for item in shares]
     tree.is_shared = bool(shares)
     return tree
@@ -25,8 +37,12 @@ async def create_protocol_tree(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    tree = ProtocolTree(owner_user_id=current_user["id"], title=data.title, document_json=data.document_json)
+    tree = ProtocolTree(owner_user_id=current_user["id"], title=data.title, document_json={})
     db.add(tree)
+    db.flush()
+    path = document_path(current_user, "tree-protocol", tree.id)
+    write_json(path, {"version": 1, "type": "tree-protocol", "id": str(tree.id), "title": data.title, "document": data.document_json})
+    tree.storage_path = relative_data_path(path)
     db.commit()
     db.refresh(tree)
     return attach_share_metadata(tree, db)
@@ -94,10 +110,14 @@ async def update_protocol_tree(tree_id: UUID, data: ProtocolTreeUpdate, db: Sess
     tree = db.query(ProtocolTree).filter(ProtocolTree.id == tree_id, ProtocolTree.owner_user_id == current_user["id"]).first()
     if not tree:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if data.title is not None:
-        tree.title = data.title
-    if data.document_json is not None:
-        tree.document_json = data.document_json
+    hydrate_tree(tree)
+    title = data.title if data.title is not None else tree.title
+    document = data.document_json if data.document_json is not None else tree.document_json
+    path = resolve_data_path(tree.storage_path) if tree.storage_path else document_path(current_user, "tree-protocol", tree.id)
+    write_json(path, {"version": 1, "type": "tree-protocol", "id": str(tree.id), "title": title, "document": document})
+    tree.title = title
+    tree.document_json = {}
+    tree.storage_path = relative_data_path(path)
     db.commit()
     db.refresh(tree)
     return attach_share_metadata(tree, db)
@@ -129,6 +149,8 @@ async def delete_protocol_tree(tree_id: UUID, db: Session = Depends(get_db), cur
     tree = db.query(ProtocolTree).filter(ProtocolTree.id == tree_id, ProtocolTree.owner_user_id == current_user["id"]).first()
     if not tree:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if tree.storage_path:
+        resolve_data_path(tree.storage_path).unlink(missing_ok=True)
     db.delete(tree)
     db.commit()
     return {"message": "Deleted"}

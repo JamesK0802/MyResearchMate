@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { LabService } from '../../services/lab.service';
 import { LabArchiveService } from '../../services/lab-archive.service';
+import { StorageUsageComponent } from '../../components/storage-usage.component';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import ExcelJS from 'exceljs';
@@ -12,13 +13,15 @@ import { saveAs } from 'file-saver';
 @Component({
   selector: 'app-lab-group-archive-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, StorageUsageComponent],
   templateUrl: './lab-group-archive-page.component.html',
   styleUrl: './lab-group-archive-page.component.css'
 })
 export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   labId = '';
   labName = '';
+  archiveDeletionAt: string | null = null;
+  isReadOnly = false;
 
   viewMode: 'card' | 'table' | 'explorer' = 'card';
 
@@ -184,7 +187,11 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
         try {
           const myLabs = await this.labService.getMyLabs();
           const lab = myLabs.find(l => l.id === this.labId);
-          if (lab) this.labName = lab.lab_name;
+          if (lab) {
+            this.labName = lab.lab_name;
+            this.archiveDeletionAt = lab.archive_deletion_at || null;
+            this.isReadOnly = !!this.archiveDeletionAt;
+          }
           await this.loadRecords();
           await this.loadSamples();
         } catch (e) {
@@ -236,6 +243,10 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
       this.initTree();
     }
     this.cdr.detectChanges();
+  }
+
+  remainingDays(value: string): number {
+    return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000));
   }
 
   startArchiveColumnResize(index: number, event: MouseEvent) {
@@ -538,11 +549,13 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   }
 
   onSamplesChange() {
+    if (this.isReadOnly) return;
     this.syncState = 'saving';
     this.autoSaveSubject.next();
   }
 
   async triggerAutoSave() {
+    if (this.isReadOnly) return;
     try {
       const samplesToSave = this.samples.map(s => {
         return {

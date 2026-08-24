@@ -21,7 +21,7 @@ interface PaletteDef {
         <!-- Header (Clean, No verbose subtitle) -->
         <div class="wizard-header">
           <div class="header-left">
-            <h2 class="wizard-title">Guided Plot Generator</h2>
+            <h2 class="wizard-title">Guided R-Plot Studio</h2>
           </div>
           <button type="button" class="btn-close" (click)="close()">Close</button>
         </div>

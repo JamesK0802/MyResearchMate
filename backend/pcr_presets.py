@@ -6,20 +6,60 @@ from database.db import get_db
 from database.models import PcrPreset, User, PcrPresetTransfer, PcrPresetLabShare, Lab, LabMember
 from pydantic import BaseModel
 import uuid
+from sqlalchemy.orm.attributes import set_committed_value
+from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/pcr-presets", tags=["pcr"])
 
+
+def hydrate_preset(preset: PcrPreset):
+    payload = read_json(preset.storage_path, None) if preset.storage_path else None
+    if isinstance(payload, dict):
+        for field, key in (
+            ("name", "name"), ("category", "category"), ("description", "description"),
+            ("primer_f", "primer_f"), ("primer_r", "primer_r"), ("product_size", "product_size"),
+            ("components_json", "components"), ("is_public", "is_public"),
+        ):
+            if key in payload:
+                set_committed_value(preset, field, payload[key])
+        preset.file_default_reaction_volume = payload.get("defaultReactionVolume", 20)
+        preset.file_allowed_reaction_volumes = payload.get("allowedReactionVolumes", [])
+    return preset
+
+
+def save_personal_preset_file(
+    preset: PcrPreset,
+    current_user: dict,
+    components: list,
+    default_reaction_volume: float = 20,
+    allowed_reaction_volumes: Optional[List[float]] = None,
+) -> None:
+    path = document_path(current_user, "solution-protocol", preset.id)
+    write_json(path, {
+        "version": 1, "type": "solution-protocol", "id": str(preset.id), "name": preset.name,
+        "category": preset.category, "description": preset.description or "", "primer_f": preset.primer_f,
+        "primer_r": preset.primer_r, "product_size": preset.product_size,
+        "components": components, "is_public": bool(preset.is_public),
+        "defaultReactionVolume": default_reaction_volume,
+        "allowedReactionVolumes": allowed_reaction_volumes or [default_reaction_volume],
+    })
+    preset.storage_path = relative_data_path(path)
+
 class PcrComponent(BaseModel):
     name: str
+    componentType: Optional[str] = None
     calculationMode: str
-    isOptional: bool = False
+    # Older built-in presets omitted this field, which Angular represented as
+    # null when a user saved a copy. Treat that legacy value as false.
+    isOptional: Optional[bool] = False
     stockConcentration: Optional[float] = None
     stockUnit: Optional[str] = None
     finalConcentration: Optional[float] = None
     finalUnit: Optional[str] = None
     ratioDenominator: Optional[float] = None
     fixedVolume: Optional[float] = None
-    includeInMasterMix: bool = True
+    volumePer25ul: Optional[float] = None
+    includeInMasterMix: Optional[bool] = True
     displayOrder: int = 0
 
 class PcrPresetCreate(BaseModel):
@@ -29,6 +69,8 @@ class PcrPresetCreate(BaseModel):
     primer_r: Optional[str] = None
     product_size: Optional[int] = 0
     defaultReactionVolume: Optional[int] = 20
+    allowedReactionVolumes: List[float] = []
+    description: Optional[str] = ""
     isSystem: bool = False
     is_public: bool = False
     components: List[PcrComponent] = []
@@ -87,12 +129,16 @@ def ensure_system_presets(db: Session):
         db.commit()
 
 def preset_default_reaction_volume(preset: PcrPreset) -> int:
+    hydrate_preset(preset)
+    if getattr(preset, "file_default_reaction_volume", None) is not None:
+        return int(preset.file_default_reaction_volume)
     for default in DEFAULT_PRESETS:
         if preset.is_system and preset.name == default["name"]:
             return default["defaultReactionVolume"]
     return 20
 
 def preset_data(preset: PcrPreset, db: Session, current_user: dict):
+    hydrate_preset(preset)
     shares = db.query(PcrPresetLabShare, Lab).join(Lab, PcrPresetLabShare.lab_id == Lab.id).filter(
         PcrPresetLabShare.preset_id == preset.id
     ).all()
@@ -101,6 +147,7 @@ def preset_data(preset: PcrPreset, db: Session, current_user: dict):
         "title": preset.name, "name": preset.name, "category": preset.category,
         "is_system": preset.is_system, "isSystem": preset.is_system,
         "components": preset.components_json or [], "defaultReactionVolume": preset_default_reaction_volume(preset),
+        "allowedReactionVolumes": getattr(preset, "file_allowed_reaction_volumes", []),
         "created_at": preset.created_at, "updated_at": preset.updated_at,
         "is_shared": bool(shares), "shared_with_labs": [share.Lab.lab_name for share in shares]
     }
@@ -176,11 +223,20 @@ async def create_preset(
         primer_f=preset_data.primer_f,
         primer_r=preset_data.primer_r,
         product_size=preset_data.product_size,
-        components_json=[c.dict() for c in preset_data.components],
+        description=preset_data.description,
+        components_json=[],
         is_public=preset_data.is_public,
         is_system=preset_data.isSystem
     )
     db.add(new_preset)
+    db.flush()
+    save_personal_preset_file(
+        new_preset, current_user, [
+            {**c.model_dump(), "isOptional": bool(c.isOptional), "includeInMasterMix": c.includeInMasterMix is not False}
+            for c in preset_data.components
+        ],
+        preset_data.defaultReactionVolume or 20, preset_data.allowedReactionVolumes,
+    )
     db.commit()
     db.refresh(new_preset)
     return {"id": str(new_preset.id), "name": new_preset.name}
@@ -217,6 +273,9 @@ async def list_presets(
                 "createdAt": t.created_at
             })
 
+    for preset in presets:
+        hydrate_preset(preset)
+
     return {
         "presets": [
             {
@@ -246,7 +305,8 @@ async def delete_preset(
     
     if not preset:
         raise HTTPException(status_code=403, detail="Not authorized to delete this preset")
-        
+    if preset.storage_path:
+        resolve_data_path(preset.storage_path).unlink(missing_ok=True)
     db.delete(preset)
     db.commit()
     return {"message": "Preset deleted successfully"}
@@ -302,15 +362,21 @@ async def accept_transfer(
     if not original:
         raise HTTPException(status_code=404, detail="Original preset no longer exists")
         
+    hydrate_preset(original)
+    original_components = original.components_json or []
     new_preset = PcrPreset(
         owner_user_id=current_user["id"],
         name=f"{original.name} (Shared)",
         category="Shared",
-        components_json=original.components_json,
+        components_json=[],
         is_system=False,
         is_public=False
     )
     db.add(new_preset)
+    db.flush()
+    save_personal_preset_file(
+        new_preset, current_user, original_components, preset_default_reaction_volume(original)
+    )
     
     # Mark transfer as accepted
     transfer.status = "accepted"

@@ -122,7 +122,7 @@ export class PcrCalculator implements OnInit {
         id: [comp.id],
         name: [comp.name],
         calculationMode: [comp.calculationMode],
-        isOptional: [comp.isOptional],
+        isOptional: [!!comp.isOptional],
         enabled: [!comp.isOptional],
         userInputVolume: [comp.fixedVolume || 0],
         stockConcentration: [comp.stockConcentration || 10],
@@ -131,7 +131,7 @@ export class PcrCalculator implements OnInit {
         finalUnit: [comp.finalUnit || 'µM'],
         ratioDenominator: [comp.ratioDenominator || 2],
         fixedVolume: [comp.fixedVolume || 0],
-        includeInMasterMix: [comp.includeInMasterMix]
+        includeInMasterMix: [comp.includeInMasterMix !== false]
       }));
     });
   }
@@ -263,7 +263,7 @@ export class PcrCalculator implements OnInit {
         stockConcentration: c.stockConcentration, stockUnit: c.stockUnit,
         finalConcentration: c.finalConcentration, finalUnit: c.finalUnit,
         ratioDenominator: c.ratioDenominator, fixedVolume: c.fixedVolume,
-        includeInMasterMix: c.includeInMasterMix, isOptional: c.isOptional, displayOrder: i
+        includeInMasterMix: c.includeInMasterMix !== false, isOptional: !!c.isOptional, displayOrder: i
       }))
     };
 
@@ -271,8 +271,13 @@ export class PcrCalculator implements OnInit {
       await this.presetService.createPreset(newPreset);
       alert('Preset saved successfully!');
       this.loadData();
-    } catch (err) {
-      alert('Failed to save preset');
+    } catch (err: any) {
+      console.error('Failed to save Solution Protocol', err);
+      const detail = err?.error?.detail;
+      const message = Array.isArray(detail)
+        ? detail.map((item: any) => `${(item.loc || []).slice(1).join('.')}: ${item.msg || 'Invalid value'}`).join('\n')
+        : detail || err?.message || 'Failed to save Solution Protocol';
+      alert(message);
     }
   }
 

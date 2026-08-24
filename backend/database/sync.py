@@ -32,6 +32,13 @@ def sync_user_to_local(db: Session, supabase_auth_id: str, email: str, name: str
             db.commit()
             db.refresh(local_user)
         else:
+            # Supabase user metadata may become available after the first local
+            # sign-in. Replace a UID placeholder, but never overwrite a name
+            # that the user has explicitly chosen in their profile.
+            if name and name != derived_uid and local_user.name in (None, "", derived_uid):
+                local_user.name = name
+                db.commit()
+                db.refresh(local_user)
             # Update existing user role if they should be owner
             if email.lower() == "u6646386@anu.edu.au" and local_user.role != "owner":
                 local_user.role = "owner"

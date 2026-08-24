@@ -51,7 +51,9 @@ export class NamuStorageService {
     this.myDataRecordId = recordId;
     this.openedFileName$.next(title);
     this.isFileLoaded$.next(true);
-    this.updateDocument(structuredClone(document), false);
+    const savedDocument = structuredClone(document);
+    savedDocument.title = title;
+    this.updateDocument(savedDocument, false);
     this.saveStatus$.next('saved');
     // Preserve the layout saved with this My Data record. Re-laying out here
     // changes the connection geometry and makes existing links hard to target.
@@ -257,6 +259,13 @@ export class NamuStorageService {
       tree.updatedAt = Date.now();
       this.updateDocument({ ...doc });
     }
+  }
+
+  renameDocument(newTitle: string) {
+    const title = newTitle.trim();
+    if (!title) return;
+    this.updateDocument({ ...this.currentDoc, title });
+    this.openedFileName$.next(`${title} — not saved`);
   }
 
   deleteTree(treeId: string) {

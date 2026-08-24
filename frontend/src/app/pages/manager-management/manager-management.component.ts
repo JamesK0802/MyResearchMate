@@ -40,7 +40,6 @@ import { firstValueFrom } from 'rxjs';
                   <div class="user-info">
                     <span class="user-name">{{ user.name || 'No Name' }}</span>
                     <span class="user-email">{{ user.email }}</span>
-                    <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 500;">UID: {{ user.uid }}</span>
                   </div>
                 </td>
                 <td>

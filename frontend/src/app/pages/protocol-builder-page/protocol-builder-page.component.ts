@@ -2,11 +2,13 @@ import { Component, OnInit, OnDestroy, ViewChild, NgZone, ChangeDetectorRef } fr
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
 import { NamuDocument, NamuTree } from '../../models/namu.model';
 import { NamuStorageService } from '../../services/namu-storage.service';
 import { NamuFlowViewComponent } from '../../components/protocol-builder/namu-flow-view.component';
 import { NamuNotebookViewComponent } from '../../components/protocol-builder/namu-notebook-view.component';
 import { ProtocolTreeService } from '../../services/protocol-tree.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-namu-page',
@@ -32,7 +34,7 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
       <div class="vscode-welcome-screen" *ngIf="!isFileLoaded">
         <div class="welcome-card-box">
           <div class="welcome-header">
-            <h1 class="welcome-title">Protocol Builder</h1>
+            <h1 class="welcome-title">Tree Protocol</h1>
             <p class="welcome-subtitle">Map experiment steps visually, record supporting notes, and save the protocol directly on your device.</p>
           </div>
 
@@ -50,6 +52,14 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
                 <span>Start a new local working copy</span>
               </div>
             </button>
+
+            <button type="button" class="btn-welcome-secondary" (click)="openFromMyData()"
+              [disabled]="!auth.isLoggedIn" [title]="auth.isLoggedIn ? 'Open a saved Tree Protocol' : 'Sign in to open My Data'">
+              <div class="action-text">
+                <strong>Open from My Data</strong>
+                <span>Open a saved Tree Protocol</span>
+              </div>
+            </button>
           </div>
 
           <div class="welcome-footer">
@@ -63,8 +73,8 @@ import { ProtocolTreeService } from '../../services/protocol-tree.service';
         <!-- ── Top Toolbar ── -->
         <header class="namu-toolbar">
           <div class="toolbar-left">
-            <!-- Plain Text File Title -->
-            <span class="plain-file-title">{{ openedFileName }}</span>
+            <span class="plain-file-title">{{ doc?.title || openedFileName }}</span>
+            <button type="button" class="btn-tool-action" (click)="renameProtocol()">Rename protocol</button>
           </div>
 
           <div class="toolbar-right">
@@ -174,6 +184,8 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   constructor(
     private namuStorageService: NamuStorageService,
     private protocolTreeService: ProtocolTreeService,
+    public auth: AuthService,
+    private router: Router,
     private zone: NgZone,
     private cdr: ChangeDetectorRef
   ) {}
@@ -212,6 +224,11 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     });
   }
 
+  openFromMyData() {
+    if (!this.auth.isLoggedIn) return;
+    void this.router.navigate(['/data/protocol-trees']);
+  }
+
   get canSave(): boolean {
     return this.namuStorageService.canSaveToFile;
   }
@@ -245,9 +262,10 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     const title = prompt('Save Protocol Tree to My Data', this.doc?.title || this.activeTree?.name || 'Untitled Protocol');
     if (!title?.trim() || !this.doc) return;
     try {
-      const saved = await this.protocolTreeService.saveTree(title.trim(), this.doc);
+      this.namuStorageService.renameDocument(title.trim());
+      const saved = await this.protocolTreeService.saveTree(title.trim(), this.namuStorageService.currentDoc);
       this.namuStorageService.markSavedToMyData(saved.id, title.trim());
-      alert('Saved to My Data. You can share it with a lab from My Data → Protocol Trees.');
+      alert('Saved to My Data. You can share it with a lab from My Data → Tree Protocol.');
     } catch (error) {
       console.error('Failed to save protocol tree', error);
       alert('Could not save to My Data. Please sign in and try again.');
@@ -301,6 +319,12 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     if (newName && newName.trim()) {
       this.namuStorageService.renameTree(this.activeTree.id, newName.trim());
     }
+  }
+
+  renameProtocol() {
+    if (!this.doc) return;
+    const newTitle = prompt('Rename Tree Protocol:', this.doc.title || this.openedFileName.replace(/\s+—\s+not saved$/, ''));
+    if (newTitle?.trim()) this.namuStorageService.renameDocument(newTitle.trim());
   }
 
   deleteActiveTree() {

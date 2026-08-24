@@ -13,21 +13,17 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import User, Lab, LabMember, WorkflowPresetTransfer, WorkflowShare
+from storage.file_store import DATA_ROOT, PERSONAL_ROOT, personal_tool_dir, safe_segment, user_uid
 
 
 # Paths
-DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-BASE_DIR = Path(os.getenv("LAB_NOTEBOOK_DATA_DIR", str(DEFAULT_DATA_DIR))).resolve()
-NOTES_DIR = BASE_DIR / "notes"
-EXP_ACTIVE_DIR = BASE_DIR / "experiments" / "active"
-EXP_ARCHIVE_DIR = BASE_DIR / "experiments" / "archive"
-PRESETS_DIR = BASE_DIR / "workflow-presets"
-ASSETS_DIR = BASE_DIR / "assets"
-
-# Ensure dirs exist
-for d in [NOTES_DIR, EXP_ACTIVE_DIR, EXP_ARCHIVE_DIR, PRESETS_DIR, ASSETS_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
-print(f"[LAB_NOTEBOOK] Using data directory: {BASE_DIR}")
+BASE_DIR = DATA_ROOT
+NOTES_DIR = Path("notes")
+EXP_ACTIVE_DIR = Path("experiments") / "active"
+EXP_ARCHIVE_DIR = Path("experiments") / "archive"
+PRESETS_DIR = Path("workflow-presets")
+ASSETS_DIR = Path("assets")
+print(f"[LAB_NOTEBOOK] Using owner-oriented data directory: {PERSONAL_ROOT}")
 
 router = APIRouter(prefix="/lab-notebook", tags=["lab-notebook"])
 
@@ -110,28 +106,24 @@ def get_primary_user_storage_key(current_user: dict):
     return keys[0]
 
 def get_existing_user_dirs(base_dir: Path, current_user: dict):
-    dirs = []
-    for key in get_user_storage_keys(current_user):
-        dir_path = base_dir / key
-        if dir_path.exists() and dir_path.is_dir():
-            dirs.append(dir_path)
-    return dirs
+    directory = personal_tool_dir(current_user, "lab-note", create=False) / base_dir
+    return [directory] if directory.exists() and directory.is_dir() else []
 
 def get_user_dir(base_dir: Path, current_user: dict, create: bool = False):
     existing_dirs = get_existing_user_dirs(base_dir, current_user)
     if existing_dirs:
         return existing_dirs[0]
 
-    dir_path = base_dir / get_primary_user_storage_key(current_user)
+    dir_path = personal_tool_dir(current_user, "lab-note", create=create) / base_dir
     if create:
         dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
 def find_user_file(base_dir: Path, current_user: dict, filename: str):
-    for key in get_user_storage_keys(current_user):
-        file_path = base_dir / key / filename
-        if file_path.exists():
-            return file_path, key
+    key = user_uid(current_user)
+    file_path = personal_tool_dir(current_user, "lab-note", create=False) / base_dir / filename
+    if file_path.exists():
+        return file_path, key
     return None, None
 
 def iter_user_files(base_dir: Path, current_user: dict, pattern: str):
@@ -154,10 +146,9 @@ def now_iso():
 
 def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, directory: Path):
     # 1. Direct ownership
-    for user_key in get_user_storage_keys(current_user):
-        personal_file = directory / user_key / f"{exp_id}.json"
-        if personal_file.exists():
-            return personal_file, user_key
+    personal_file = personal_tool_dir(current_user, "lab-note", create=False) / directory / f"{exp_id}.json"
+    if personal_file.exists():
+        return personal_file, user_uid(current_user)
         
     # 2. Shared access
     lab_memberships = db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()
@@ -176,15 +167,14 @@ def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, 
     if share:
         owner = db.query(User).filter(User.id == share.shared_by_user_id).first()
         if owner:
-            for owner_key in get_storage_keys(owner.uid, owner.id):
-                shared_file = directory / owner_key / f"{exp_id}.json"
-                if shared_file.exists():
-                    return shared_file, owner_key
+            shared_file = personal_tool_dir(owner, "lab-note", create=False) / directory / f"{exp_id}.json"
+            if shared_file.exists():
+                return shared_file, user_uid(owner)
                 
     return None, None
 
 def delete_asset_file(owner_key: Any, year: str, month: str, filename: str):
-    file_path = ASSETS_DIR / str(owner_key) / year / month / filename
+    file_path = PERSONAL_ROOT / safe_segment(owner_key) / "lab-note" / ASSETS_DIR / year / month / filename
     if file_path.exists():
         try:
             file_path.unlink()
@@ -485,18 +475,16 @@ async def get_shared_workflows(
             
         filepath = None
         workflow_type = "active"
-        for owner_key in get_storage_keys(owner.uid, owner.id):
-            candidate = EXP_ACTIVE_DIR / owner_key / f"{share.workflow_id}.json"
-            if candidate.exists():
-                filepath = candidate
-                workflow_type = "active"
-                break
-
-            candidate = EXP_ARCHIVE_DIR / owner_key / f"{share.workflow_id}.json"
+        owner_root = personal_tool_dir(owner, "lab-note", create=False)
+        candidate = owner_root / EXP_ACTIVE_DIR / f"{share.workflow_id}.json"
+        if candidate.exists():
+            filepath = candidate
+            workflow_type = "active"
+        else:
+            candidate = owner_root / EXP_ARCHIVE_DIR / f"{share.workflow_id}.json"
             if candidate.exists():
                 filepath = candidate
                 workflow_type = "archive"
-                break
 
         if not filepath or not filepath.exists():
             continue
@@ -631,8 +619,7 @@ async def list_archived_experiments(
 
 @router.post("/experiments")
 async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(get_current_user)):
-    user_storage_key = get_primary_user_storage_key(current_user)
-    dir_path = EXP_ACTIVE_DIR / user_storage_key
+    dir_path = personal_tool_dir(current_user, "lab-note") / EXP_ACTIVE_DIR
     dir_path.mkdir(parents=True, exist_ok=True)
     
     exp_id = generate_id()
@@ -771,7 +758,12 @@ async def update_experiment(
     return data
 
 @router.delete("/experiments/{exp_id}")
-async def delete_experiment(exp_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_experiment(
+    exp_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    deleted = False
     f1, _ = find_user_file(EXP_ACTIVE_DIR, current_user, f"{exp_id}.json")
     if f1 and f1.exists():
         try:
@@ -780,6 +772,7 @@ async def delete_experiment(exp_id: str, current_user: dict = Depends(get_curren
         except Exception as e:
             print(f"Error cleaning active experiment assets: {e}")
         f1.unlink()
+        deleted = True
         
     f2, _ = find_user_file(EXP_ARCHIVE_DIR, current_user, f"{exp_id}.json")
     if f2 and f2.exists():
@@ -789,6 +782,14 @@ async def delete_experiment(exp_id: str, current_user: dict = Depends(get_curren
         except Exception as e:
             print(f"Error cleaning archived experiment assets: {e}")
         f2.unlink()
+        deleted = True
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Experiment not found or unauthorized")
+
+    # The owner is deleting the workflow, so its sharing records must not remain.
+    db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).delete(synchronize_session=False)
+    db.commit()
         
     return {"status": "success"}
 
@@ -803,7 +804,8 @@ async def archive_experiment(
     if not active_f or not active_f.exists():
         raise HTTPException(status_code=404, detail="Active experiment not found or unauthorized")
         
-    archive_dir = EXP_ARCHIVE_DIR / str(owner_id)
+    owner = db.query(User).filter(User.uid == str(owner_id)).first() or current_user
+    archive_dir = personal_tool_dir(owner, "lab-note") / EXP_ARCHIVE_DIR
     archive_dir.mkdir(parents=True, exist_ok=True)
     
     data = json.loads(active_f.read_text())
@@ -824,7 +826,7 @@ async def upload_asset(file: UploadFile = File(...), current_user: dict = Depend
     user_id = get_primary_user_storage_key(current_user)
     now = datetime.now()
     year_month = now.strftime("%Y/%m")
-    asset_dir = ASSETS_DIR / str(user_id) / year_month
+    asset_dir = personal_tool_dir(current_user, "lab-note") / ASSETS_DIR / year_month
     asset_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate unique filename
@@ -887,7 +889,7 @@ async def get_asset(user_id: str, year: str, month: str, filename: str):
     # This allows serving assets securely. We verify user_id.
     # In a real app, verify current_user, but for images often simple path is ok or we can just serve them statically.
     # We will serve them statically but routed through this endpoint for simplicity.
-    file_path = ASSETS_DIR / user_id / year / month / filename
+    file_path = PERSONAL_ROOT / safe_segment(user_id) / "lab-note" / ASSETS_DIR / year / month / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Asset not found")
     return FileResponse(path=file_path)
@@ -902,13 +904,13 @@ async def add_archive_comment(
 ):
     # Find experiment JSON file in archive
     archive_file = None
-    for f in EXP_ARCHIVE_DIR.glob(f"**/{exp_id}.json"):
+    for f in PERSONAL_ROOT.glob(f"*/lab-note/{EXP_ARCHIVE_DIR.as_posix()}/{exp_id}.json"):
         archive_file = f
         break
         
     if not archive_file or not archive_file.exists():
         # Check active directory just in case the experiment is not yet archived
-        for f in EXP_ACTIVE_DIR.glob(f"**/{exp_id}.json"):
+        for f in PERSONAL_ROOT.glob(f"*/lab-note/{EXP_ACTIVE_DIR.as_posix()}/{exp_id}.json"):
             archive_file = f
             break
             
@@ -1102,4 +1104,3 @@ async def update_workflow_shares(
             
     db.commit()
     return {"message": "Workflow sharing configuration updated successfully"}
-

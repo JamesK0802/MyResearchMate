@@ -1,28 +1,40 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { LabService, LabRegistrationRequest } from '../../services/lab.service';
 import { AuthService } from '../../services/auth.service';
+import { StorageQuotaService } from '../../services/storage-quota.service';
 
 @Component({
   selector: 'app-admin-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="admin-container">
       <div class="page-header">
         <h1>Admin Dashboard</h1>
         <p>Review and manage lab workspace registration requests.</p>
       </div>
+      <div class="tabs"><button [class.active]="activeAdminTab==='labs'" (click)="activeAdminTab='labs'">Lab Approval <span *ngIf="pendingRequests.length" class="request-badge">{{pendingRequests.length}}</span></button><button [class.active]="activeAdminTab==='storage'" (click)="activeAdminTab='storage'">Storage Management <span *ngIf="pendingStorageRequests.length" class="request-badge">{{pendingStorageRequests.length}}</span></button></div>
+      <div class="admin-section" *ngIf="activeAdminTab==='storage'">
+        <h2 class="section-title">Storage requests</h2>
+        <div *ngFor="let req of pendingStorageRequests" class="request-row storage-request"><div class="req-main"><div class="request-top"><strong>{{req.target}}</strong><span>{{gb(req.requested_bytes)}} requested</span></div><p>{{req.reason}}</p><div class="review-fields"><label>Approve total <input type="number" [(ngModel)]="req.approvedGb" min="1"><small>GB</small></label><label>Review note <input [(ngModel)]="req.reviewReason" placeholder="Optional for approval, required for rejection"></label></div></div><div class="req-actions"><button class="btn-approve" (click)="approveStorage(req)">Approve</button><button class="btn-reject" (click)="rejectStorage(req)">Reject</button></div></div>
+        <div *ngIf="!pendingStorageRequests.length" class="empty-mini">No pending storage requests.</div>
+        <h2 class="section-title" style="margin-top:24px">Personal storage</h2>
+        <div *ngFor="let target of personalTargets" class="request-row processed allocation-row"><strong>{{displayStorageTarget(target)}}</strong><span class="req-date">{{gb(target.used_bytes)}} used / {{gb(target.quota_bytes)}}</span><button class="btn-manage-quota" (click)="manageQuota(target)" [attr.aria-label]="'Edit storage allocation for ' + displayStorageTarget(target)">✎ <span>Edit allocation</span></button></div>
+        <h2 class="section-title" style="margin-top:24px">Lab storage</h2>
+        <div *ngFor="let target of labTargets" class="request-row processed allocation-row"><strong>{{target.name}}</strong><span class="req-date">{{gb(target.used_bytes)}} used / {{gb(target.quota_bytes)}}</span><button class="btn-manage-quota" (click)="manageQuota(target)" [attr.aria-label]="'Edit storage allocation for ' + target.name">✎ <span>Edit allocation</span></button></div>
+      </div>
 
-      <div *ngIf="loading" class="loading-state">
+      <div *ngIf="activeAdminTab==='labs' && loading" class="loading-state">
         <p>Loading requests...</p>
       </div>
 
-      <div *ngIf="!loading && requests.length === 0" class="empty-state">
+      <div *ngIf="activeAdminTab==='labs' && !loading && requests.length === 0" class="empty-state">
         <p>No registration requests found.</p>
       </div>
 
-      <div *ngIf="!loading && requests.length > 0" class="requests-list">
+      <div *ngIf="activeAdminTab==='labs' && !loading && requests.length > 0" class="requests-list">
         <!-- Pending Section -->
         <div class="admin-section">
           <h2 class="section-title">Pending Requests ({{ pendingRequests.length }})</h2>
@@ -96,7 +108,8 @@ import { AuthService } from '../../services/auth.service';
   `,
   styles: [`
     .admin-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
-    .page-header { margin-bottom: var(--space-8); }
+    .page-header { margin-bottom: var(--space-5); }
+    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border);margin-bottom:var(--space-7)}.tabs button{padding:10px 16px;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-weight:700;color:var(--color-text-secondary);cursor:pointer}.tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}.request-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:.68rem;font-weight:800;line-height:1;vertical-align:middle}
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); letter-spacing: -0.025em; margin-bottom: var(--space-2); }
     .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
@@ -122,6 +135,7 @@ import { AuthService } from '../../services/auth.service';
     .req-actions { display: flex; gap: var(--space-2); flex-shrink: 0; align-self: flex-start; }
     .req-actions button { padding: 9px 18px; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-base); cursor: pointer; border: none; transition: var(--transition-fast); }
     .req-actions button:hover:not(:disabled) { transform: translateY(-1px); }
+    .storage-request{padding:20px 24px}.request-top{display:flex;align-items:center;gap:10px}.request-top strong{font-size:1rem}.request-top span{font-size:.78rem;font-weight:800;color:var(--color-primary);background:var(--color-primary-subtle);padding:4px 8px;border-radius:999px}.storage-request p{margin:10px 0 14px;color:var(--color-text-secondary);font-size:.9rem}.review-fields{display:grid;grid-template-columns:150px 1fr;gap:10px}.review-fields label{font-size:.72rem;font-weight:800;color:var(--color-text-tertiary);text-transform:uppercase}.review-fields input{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:8px;border:1px solid var(--color-border);border-radius:6px;font:inherit;text-transform:none}.review-fields small{display:block;margin-top:3px}.allocation-row{align-items:center;padding:16px 22px;gap:14px}.allocation-row .req-date{margin-left:auto}.btn-manage-quota{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--color-surface);color:var(--color-primary);border:1px solid var(--color-primary-border);border-radius:var(--radius-md);font:inherit;font-size:.82rem;font-weight:var(--fw-bold);cursor:pointer;white-space:nowrap;transition:var(--transition-fast)}.btn-manage-quota:hover{background:var(--color-primary-light);border-color:var(--color-primary)}
     .btn-approve { background: var(--color-primary); color: white; }
     .btn-approve:hover:not(:disabled) { background: var(--color-primary-hover); }
     .btn-reject { background: var(--color-surface-alt); color: var(--color-text-secondary); border: 1px solid var(--color-border) !important; }
@@ -144,6 +158,11 @@ export class AdminPanelComponent implements OnInit {
   loading = true;
   processingId: string | null = null;
   showHistory = false;
+  storageRequests: any[] = []; storageTargets: any[] = [];
+  activeAdminTab: 'labs'|'storage' = 'labs';
+  get personalTargets(){return this.storageTargets.filter(t=>t.scope==='personal');} get labTargets(){return this.storageTargets.filter(t=>t.scope==='lab');}
+  displayStorageTarget(target:any){ return target.scope === 'personal' && target.uid ? `${target.name} (${target.uid})` : target.name; }
+  get pendingStorageRequests(){ return this.storageRequests.filter(r => r.status === 'pending'); }
 
   get pendingRequests() {
     return this.requests.filter(r => r.status === 'pending');
@@ -156,12 +175,19 @@ export class AdminPanelComponent implements OnInit {
   constructor(
     private labService: LabService,
     public auth: AuthService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private storage: StorageQuotaService
   ) {}
 
   ngOnInit() {
-    this.loadRequests();
+    this.loadRequests(); this.loadStorage();
   }
+  gb(bytes:number){ return `${(bytes / 1024 ** 3).toFixed(2)} GB`; }
+  async loadStorage(){ try { const data:any=await this.storage.adminOverview(); this.storageRequests=data.requests.map((r:any)=>({...r,approvedGb:Math.ceil(r.requested_bytes/1024**3),reviewReason:''})); this.storageTargets=data.targets.map((t:any)=>({...t,quotaGb:Math.ceil(t.quota_bytes/1024**3)})); this.cdr.detectChanges(); }catch(e){console.error('Failed to load storage admin data',e)} }
+  async approveStorage(r:any){ try{await this.storage.adminApprove(r.id,r.approvedGb*1024**3,r.reviewReason); await this.loadStorage();}catch(e:any){alert(e?.error?.detail||'Could not approve request.')} }
+  async rejectStorage(r:any){ if(!r.reviewReason?.trim()){alert('Enter a rejection reason.');return;} try{await this.storage.adminReject(r.id,r.reviewReason);await this.loadStorage();}catch(e:any){alert(e?.error?.detail||'Could not reject request.')} }
+  async saveQuota(t:any){ try{await this.storage.adminSet(t.scope,t.id,t.quotaGb*1024**3);await this.loadStorage();}catch(e:any){alert(e?.error?.detail||'Could not update quota.')} }
+  async manageQuota(t:any){ const value=prompt(`Set ${t.name} allocation in GB`, String(Math.ceil(t.quota_bytes/1024**3))); if(value===null)return; const gb=Number(value); if(!Number.isFinite(gb)||gb<=0){alert('Enter a positive number.');return;} try{await this.storage.adminSet(t.scope,t.id,gb*1024**3);await this.loadStorage();}catch(e:any){alert(e?.error?.detail||'Could not update quota.')} }
 
   async loadRequests() {
     this.loading = true;

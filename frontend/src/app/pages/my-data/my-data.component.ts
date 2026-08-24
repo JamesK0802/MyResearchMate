@@ -9,17 +9,16 @@ import { AuthService } from '../../services/auth.service';
 import { ProtocolTreeService, ProtocolTreeRecord } from '../../services/protocol-tree.service';
 import { NamuStorageService } from '../../services/namu-storage.service';
 import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
+import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 
 @Component({
   selector: 'app-my-data',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
   template: `
     <div class="my-data-container">
 
-      <div class="page-header">
-        <h1>{{ pageTitle }}</h1>
-      </div>
+      <app-my-data-header [title]="pageTitle"></app-my-data-header>
 
       <!-- Tab Navigation -->
       <div class="tabs-nav">
@@ -30,7 +29,7 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 
       <div *ngIf="loading" class="loading-spinner">
         <div class="spinner"></div>
-        <p>Loading {{ resource === 'protocol' ? 'protocol trees' : resource === 'pcr' ? 'PCR protocols' : 'results' }}...</p>
+        <p>Loading {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }}...</p>
       </div>
 
       <!-- Results Grid -->
@@ -80,7 +79,7 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
           </div>
 
           <div class="card-actions">
-            <button (click)="loadItem(res)" class="btn-load">{{ resource === 'protocol' ? 'Open Tree' : resource === 'pcr' ? 'Open Protocol' : 'View Result' }}</button>
+            <button (click)="loadItem(res)" class="btn-load">{{ resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'View Crispr Analysis' }}</button>
             
             <!-- Owner Actions -->
             <ng-container *ngIf="canManage(res)">
@@ -104,9 +103,9 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 
       <div *ngIf="!loading && displayResults.length === 0" class="empty-state">
         <div class="empty-icon">📁</div>
-        <h3>No {{ resource === 'protocol' ? 'protocol trees' : resource === 'pcr' ? 'PCR protocols' : 'results' }} found</h3>
-        <p>You haven't saved or shared any {{ resource === 'protocol' ? 'protocol trees' : resource === 'pcr' ? 'PCR protocols' : 'results' }} in this category yet.</p>
-        <button *ngIf="activeTab === 'my'" (click)="startNewItem()" class="btn-primary">{{ resource === 'protocol' ? 'Open Protocol Builder' : resource === 'pcr' ? 'Open PCR Calculator' : 'Start New Analysis' }}</button>
+        <h3>No {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }} found</h3>
+        <p>You haven't saved or shared any {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }} in this category yet.</p>
+        <button *ngIf="activeTab === 'my'" (click)="startNewItem()" class="btn-primary">{{ resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'Start Crispr Analysis' }}</button>
       </div>
 
       <!-- Share Modal -->
@@ -124,15 +123,17 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
             </div>
 
             <div class="labs-list">
-              <div *ngFor="let lab of myLabs" class="lab-item">
+              <div *ngFor="let lab of myLabs" class="lab-item" [class.lab-unavailable]="isLabUnavailable(lab)">
                 <label class="checkbox-container">
                   <input type="checkbox" 
                          [checked]="isLabSelected(lab.id)"
+                         [disabled]="isLabUnavailable(lab)"
                          (change)="toggleLabShare(lab.id)">
                   <span class="checkmark"></span>
                   <div class="lab-info">
                     <span class="lab-name">{{ lab.lab_name }}</span>
                     <span class="lab-role">{{ (lab.my_role || lab.role_in_lab) | titlecase }}</span>
+                    <span *ngIf="isLabUnavailable(lab)" class="lab-deletion-status">Deletion scheduled — sharing unavailable</span>
                   </div>
                 </label>
               </div>
@@ -150,9 +151,6 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
   `,
   styles: [`
     .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
-    .page-header { margin-bottom: var(--space-3); }
-    .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: 0; letter-spacing: -0.025em; }
-    .page-header p { display: none; }
 
     /* Tabs */
     .tabs-nav { display: flex; gap: 0; margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
@@ -167,6 +165,10 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
     .result-card.system-preset-card { background: #f5f6f7; border-color: #e4e7eb; }
     .result-card.system-preset-card:hover { background: #f1f3f5; }
     .shared-card { border-left: 3px solid #3b82f6; }
+    .lab-item.lab-unavailable { border-color:#fca5a5; background:#fff7f7; }
+    .lab-item.lab-unavailable .checkbox-container { cursor:not-allowed; }
+    .lab-item.lab-unavailable .lab-name { color:#b91c1c; }
+    .lab-deletion-status { margin-top:3px; color:#dc2626; font-size:var(--text-xs); font-weight:var(--fw-bold); }
 
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); }
     .result-title { font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--color-text-primary); margin: 0; line-height: var(--lh-tight); }
@@ -261,7 +263,7 @@ export class MyDataComponent implements OnInit {
     private protocolStorage: NamuStorageService,
     private pcrPresetService: PcrPresetService,
     private labService: LabService,
-    private auth: AuthService,
+    public auth: AuthService,
     private router: Router,
     private state: AppStateService,
     private cdr: ChangeDetectorRef,
@@ -275,6 +277,11 @@ export class MyDataComponent implements OnInit {
     await this.loadData();
     // Pre-load labs for sharing modal
     if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
+    this.labService.labsChanged$.subscribe(async () => {
+      if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
+      if (this.sharingResult) this.selectedLabIds = this.selectedLabIds.filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
+      this.cdr.detectChanges();
+    });
   }
 
   async loadData() {
@@ -311,7 +318,7 @@ export class MyDataComponent implements OnInit {
     this.loadData();
   }
 
-  get pageTitle(): string { return this.resource === 'protocol' ? 'Protocol Trees' : this.resource === 'pcr' ? 'PCR Protocols' : 'CRISPR Analysis Results'; }
+  get pageTitle(): string { return this.resource === 'protocol' ? 'Tree Protocol' : this.resource === 'pcr' ? 'Solution Protocol' : 'Crispr Analysis'; }
 
   isOwner(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean {
     const currentUserId = this.auth.currentProfile?.id;
@@ -438,7 +445,7 @@ export class MyDataComponent implements OnInit {
           : await this.resultsService.getResultShares(String(result.id || ''));
       // Backend returns string[] of lab_ids
       if (Array.isArray(shares)) {
-        this.selectedLabIds = shares.filter(id => typeof id === 'string');
+        this.selectedLabIds = shares.filter(id => typeof id === 'string' && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
       }
     } catch (err) {
       console.error('Failed to load current shares', err);
@@ -457,8 +464,11 @@ export class MyDataComponent implements OnInit {
     return isSelected;
   }
 
+  isLabUnavailable(lab: any): boolean { return !!lab?.archive_deletion_at; }
+
   toggleLabShare(labId: string) {
     if (!labId) return;
+    if (this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(labId)))) return;
     if (this.isLabSelected(labId)) {
       this.selectedLabIds = this.selectedLabIds.filter(id => id !== labId);
     } else {
@@ -474,7 +484,7 @@ export class MyDataComponent implements OnInit {
     }
     
     // Final safety check: remove any non-string values
-    const cleanLabIds = this.selectedLabIds.filter(id => typeof id === 'string' && id.length > 0);
+    const cleanLabIds = this.selectedLabIds.filter(id => typeof id === 'string' && id.length > 0 && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
     
     this.savingShares = true;
     try {

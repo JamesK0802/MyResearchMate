@@ -13,7 +13,7 @@ type PhotoSlot = { id: string; url?: string; printUrl?: string; name?: string; r
   template: `
     <main class="compare-shell">
       <header class="compare-header">
-        <div><h1>Photo comparison</h1><p class="comparison-summary">{{ comparisonCount }} comparisons · {{ pdfPageCount }} PDF {{ pdfPageCount === 1 ? 'page' : 'pages' }}</p></div>
+        <div><h1>Photo Comparison</h1><p class="comparison-summary">{{ comparisonCount }} comparisons · {{ pdfPageCount }} PDF {{ pdfPageCount === 1 ? 'page' : 'pages' }}</p></div>
         <button type="button" class="save-pdf" (click)="openSaveDialog()" [disabled]="pendingUploads > 0 || pendingPdfPrep > 0">
           {{ pendingUploads > 0 ? 'Loading photos…' : pendingPdfPrep > 0 ? 'Preparing PDF…' : 'Save PDF' }}
         </button>
@@ -88,7 +88,7 @@ type PhotoSlot = { id: string; url?: string; printUrl?: string; name?: string; r
 export class SamplePhotoComparePageComponent {
   @ViewChild('previousGrid') previousGrid?: ElementRef<HTMLElement>;
   @ViewChild('todayGrid') todayGrid?: ElementRef<HTMLElement>;
-  readonly title = 'Photo comparison';
+  readonly title = 'Photo Comparison';
   sampleName = 'Sample';
   previousLabel = 'Previous';
   todayLabel = 'Today';

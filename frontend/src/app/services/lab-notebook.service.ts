@@ -142,6 +142,11 @@ export class LabNotebookService {
   }
 
   async deleteExperiment(id: string) {
+    if (this.auth.isDemo) {
+      const index = this.demoArchiveExperiments.findIndex(exp => exp.id === id);
+      if (index >= 0) this.demoArchiveExperiments.splice(index, 1);
+      return { status: 'success' };
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.delete(`${this.apiUrl}/experiments/${id}`, { headers }));
   }
