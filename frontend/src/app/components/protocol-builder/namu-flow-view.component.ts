@@ -262,8 +262,11 @@ export interface ConnectionPath {
       pointer-events: none;
     }
     .connection-edit-frame {
-      /* Fixed to the screen, not the 25,000px scrollable canvas. */
-      position: fixed; inset: 10px; z-index: 40; pointer-events: none;
+      /* Fixed to the visible canvas, below the global and Tree Protocol toolbars. */
+      position: fixed;
+      top: calc(var(--nav-height, 56px) + 66px);
+      right: 10px; bottom: 10px; left: 10px;
+      z-index: 40; pointer-events: none;
       box-sizing: border-box;
       padding: 2px; border-radius: 18px;
       background: linear-gradient(120deg, #8b5cf6, #3b82f6, #34d399, #fbbf24);
@@ -274,7 +277,9 @@ export interface ConnectionPath {
     }
     .namu-flow-container.connection-edit-mode { cursor: crosshair; }
     .connection-edit-hint {
-      position: fixed; z-index: 45; top: 22px; left: 50%; transform: translateX(-50%);
+      position: fixed; z-index: 45;
+      top: calc(var(--nav-height, 56px) + 68px);
+      left: 50%; transform: translateX(-50%);
       display: flex; align-items: center; gap: 12px; padding: 9px 12px;
       border: 1px solid transparent; border-radius: 12px;
       background:

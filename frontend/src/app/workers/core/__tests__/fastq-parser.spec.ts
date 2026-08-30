@@ -10,6 +10,7 @@ IIII`;
     const reads = parseFastqString(fastqText);
     expect(reads).toHaveLength(1);
     expect(reads[0].seq).toBe('ACTG');
+    expect(reads[0].id).toBe('SRR001.1 length=4');
     // 'I' has ASCII code 73. 73 - 33 = 40.
     expect(reads[0].qual).toEqual([40, 40, 40, 40]);
   });

@@ -7,6 +7,15 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { findGrnaCutSite, extractWindow, cutIndexInWindow } from '../../workers/core/classifier';
 import { SequenceMatcher } from '../../workers/core/sequence-matcher';
+import {
+  IlluminaMateSlot,
+  IlluminaFilePair,
+  SequencingPlatform,
+  addFilesToIlluminaPairs,
+  displayIlluminaPairName,
+  deriveIlluminaPairName,
+  moveIlluminaMate,
+} from '../../models/illumina.model';
 
 export interface ExtractedWindowItem {
   geneName: string;
@@ -103,6 +112,22 @@ export class AnalysisPageComponent implements OnInit {
 
   ngOnInit() {
     this.state.activateSlot('analysis');
+  }
+
+  get sequencingPlatform(): SequencingPlatform {
+    return this.state.analysisForm.get('sequencingPlatform')?.value === 'illumina' ? 'illumina' : 'nanopore';
+  }
+
+  get illuminaUnitCount(): number {
+    return this.state.illuminaPairs.filter(pair => pair.r1 || pair.r2).length;
+  }
+
+  displayIlluminaPairName(pair: IlluminaFilePair): string {
+    return displayIlluminaPairName(pair);
+  }
+
+  setSequencingPlatform(platform: SequencingPlatform): void {
+    this.state.analysisForm.get('sequencingPlatform')?.setValue(platform);
   }
 
   toggleWindowCheck() {
@@ -433,20 +458,15 @@ export class AnalysisPageComponent implements OnInit {
   }
 
   onFileSelected(event: any) {
-    const files = event.target.files;
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].name.match(/\.(fastq|fq)$/)) this.state.selectedFiles.push(files[i]);
-    }
+    this.addSequencingFiles(Array.from(event.target.files || []));
+    event.target.value = '';
   }
 
   onFileDropped(event: DragEvent) {
     event.preventDefault();
     this.state.isDragging = false;
     if (event.dataTransfer?.files) {
-      const files = event.dataTransfer.files;
-      for (let i = 0; i < files.length; i++) {
-        if (files[i].name.match(/\.(fastq|fq)$/)) this.state.selectedFiles.push(files[i]);
-      }
+      this.addSequencingFiles(Array.from(event.dataTransfer.files));
     }
   }
 
@@ -454,11 +474,64 @@ export class AnalysisPageComponent implements OnInit {
   onDragLeave(event: DragEvent) { event.preventDefault(); this.state.isDragging = false; }
   removeFile(i: number) { this.state.selectedFiles.splice(i, 1); }
 
+  private addSequencingFiles(files: File[]): void {
+    const fastqFiles = files.filter(file => /\.(?:fastq|fq)(?:\.gz)?$/i.test(file.name));
+    if (this.sequencingPlatform === 'illumina') {
+      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles);
+    } else {
+      this.state.selectedFiles.push(...fastqFiles);
+    }
+  }
+
+  removeIlluminaMate(pairId: string, slot: IlluminaMateSlot): void {
+    const pair = this.state.illuminaPairs.find(item => item.id === pairId);
+    if (!pair) return;
+    pair[slot] = null;
+    if (!pair.r1 && !pair.r2) {
+      this.state.illuminaPairs = this.state.illuminaPairs.filter(item => item.id !== pairId);
+    } else {
+      pair.name = deriveIlluminaPairName(pair);
+    }
+  }
+
+  startMateDrag(event: DragEvent, pairId: string, slot: IlluminaMateSlot): void {
+    event.stopPropagation();
+    event.dataTransfer?.setData('application/x-illumina-mate', JSON.stringify({ pairId, slot }));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  allowMateDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  dropMate(event: DragEvent, targetPairId: string, targetSlot: IlluminaMateSlot): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const encoded = event.dataTransfer?.getData('application/x-illumina-mate');
+    if (!encoded) return;
+    try {
+      const source = JSON.parse(encoded) as { pairId: string; slot: IlluminaMateSlot };
+      this.state.illuminaPairs = moveIlluminaMate(
+        this.state.illuminaPairs,
+        source.pairId,
+        source.slot,
+        targetPairId,
+        targetSlot
+      );
+    } catch {
+      return;
+    }
+  }
+
   runAnalysis() {
     const rawValue = this.state.analysisForm.value;
     const formInvalid = this.state.analysisForm.get('genes')?.invalid || this.state.analysisForm.get('interestRegion')?.invalid;
 
-    if (formInvalid || this.state.selectedFiles.length === 0) {
+    const platform: SequencingPlatform = rawValue.sequencingPlatform === 'illumina' ? 'illumina' : 'nanopore';
+    const inputCount = platform === 'illumina' ? this.illuminaUnitCount : this.state.selectedFiles.length;
+    if (formInvalid || inputCount === 0) {
       this.state.error = 'Validation failed. Check files and parameters.';
       return;
     }
@@ -492,8 +565,8 @@ export class AnalysisPageComponent implements OnInit {
       customWindowRight: customWindowEnabled ? customWindowRight : undefined,
       analyzeAmbiguous: rawValue.analyzeAmbiguous || false,
       rescueAmbiguous: rawValue.rescueAmbiguous || false,
-      dataType: 'single-end',
-      fileCount: this.state.selectedFiles.length
+      dataType: platform === 'illumina' ? 'paired-end' : 'single-end',
+      fileCount: inputCount
     };
 
     const genesPayload = rawValue.genes.map((g: any, gi: number) => ({
@@ -523,7 +596,9 @@ export class AnalysisPageComponent implements OnInit {
         rescueThreshold: rescueThreshold,
         cutSiteDistanceWeight: distanceWeight,
         cutSiteExclusionFlank: exclusionFlank,
-      }
+        sequencingPlatform: platform,
+      },
+      platform === 'illumina' ? this.state.illuminaPairs.map(pair => ({ ...pair })) : []
     );
   }
 }

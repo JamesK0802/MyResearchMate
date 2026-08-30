@@ -108,7 +108,11 @@ import { AuthService } from '../../services/auth.service';
             [tree]="activeTree"
             [connectionEditMode]="connectionEditMode">
           </app-namu-flow-view>
-          <app-namu-notebook-view *ngIf="viewMode === 'notebook'" [tree]="activeTree"></app-namu-notebook-view>
+          <app-namu-notebook-view *ngIf="viewMode === 'notebook'"
+            [tree]="activeTree"
+            [trees]="doc?.trees || []"
+            (treeChange)="switchTree($event)">
+          </app-namu-notebook-view>
         </main>
       </div>
 
@@ -119,7 +123,7 @@ import { AuthService } from '../../services/auth.service';
         <button (click)="createNewTree()">+ Create Experiment Tree</button>
       </div>
 
-      <!-- ── BOTTOM-RIGHT FLOATING CANVAS QUICK-TOOLS DOCK ── -->
+      <!-- ── BOTTOM-RIGHT CANVAS QUICK-TOOLS DOCK ── -->
       <div class="floating-canvas-dock" *ngIf="isFileLoaded && activeTree && viewMode === 'canvas'">
         <!-- Tree Controls Dock -->
         <div class="fab-tree-selector-group" *ngIf="doc && doc.trees && doc.trees.length > 0">
@@ -146,11 +150,11 @@ import { AuthService } from '../../services/auth.service';
         </div>
 
         <!-- Sleek Floating Align FAB Button with Modern Vector Layout Icon -->
-        <button type="button" class="btn-fab-layout" (click)="alignActiveTree()" title="Align tree nodes in clean straight-line layout">
+        <button type="button" class="btn-fab-layout" *ngIf="viewMode === 'canvas'" (click)="alignActiveTree()" title="Align tree nodes in clean straight-line layout">
           <span>Align</span>
         </button>
 
-        <button type="button" class="btn-fab-layout" [class.connection-edit-active]="connectionEditMode"
+        <button type="button" class="btn-fab-layout" *ngIf="viewMode === 'canvas'" [class.connection-edit-active]="connectionEditMode"
           (click)="toggleConnectionEditMode()">
           <span>{{ connectionEditMode ? 'Done editing links' : 'Edit links' }}</span>
         </button>

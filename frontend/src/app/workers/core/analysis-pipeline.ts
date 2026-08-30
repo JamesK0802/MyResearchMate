@@ -23,6 +23,7 @@ import {
 import { classifyMutationWithAlignment, AlignmentToken } from './analyzer';
 import { assignReadsToReferences, GenePayload, DemuxResult } from './multi-reference-assigner';
 import { FastqRead } from './fastq-parser';
+import { SequencingPlatform } from '../../models/illumina.model';
 
 const SUBSTITUTION_POLICY = 'separate_category_indel_editing_excludes_substitutions';
 
@@ -712,6 +713,7 @@ export interface AnalysisParams {
   rescueThreshold?: number;
   cutSiteDistanceWeight?: number;
   cutSiteExclusionFlank?: number;
+  sequencingPlatform?: SequencingPlatform;
 }
 
 export function processFile(
@@ -771,6 +773,7 @@ export function buildFinalPayload(
         rescue_filtering_threshold: params.rescueThreshold,
         analyze_ambiguous: params.analyzeAmbiguous ?? false,
         rescue_ambiguous: params.rescueAmbiguous ?? false,
+        sequencing_platform: params.sequencingPlatform ?? 'nanopore',
       },
       references: genesPayload.map(g => ({
         gene: g.gene,

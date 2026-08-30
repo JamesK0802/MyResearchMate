@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NamuNode, NamuTree } from '../../models/namu.model';
@@ -13,6 +13,13 @@ import { NamuStorageService } from '../../services/namu-storage.service';
       <header class="notebook-controls">
         <div class="notebook-title">{{ tree.name }}</div>
         <div class="notebook-actions">
+          <select class="notebook-tree-select"
+            *ngIf="trees.length > 1"
+            [ngModel]="tree.id"
+            (ngModelChange)="treeChange.emit($event)"
+            aria-label="Select protocol tree">
+            <option *ngFor="let item of trees" [value]="item.id">{{ item.name }} ({{ item.nodes.length }})</option>
+          </select>
           <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
           <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
           <button type="button" (click)="printNotebook()">Print</button>
@@ -21,7 +28,10 @@ import { NamuStorageService } from '../../services/namu-storage.service';
 
       <p class="notebook-empty" *ngIf="!tree.nodes.length">This tree has no nodes.</p>
 
-      <div class="screen-notebook" *ngIf="tree.nodes.length">
+      <div class="screen-notebook"
+        [class.screen-spread]="layout === 'spread'"
+        [class.screen-overview]="layout === 'overview'"
+        *ngIf="tree.nodes.length">
         <div class="notebook-spread" *ngIf="layout === 'spread'" [class.turning]="turning">
           <div class="notebook-spine" aria-hidden="true"></div>
           <article class="notebook-page left-page" *ngIf="spreadNodes[0] as node">
@@ -59,33 +69,37 @@ import { NamuStorageService } from '../../services/namu-storage.service';
         </div>
       </div>
 
-      <!-- Print the same layout that is currently selected, including every page. -->
-      <div class="print-notebook print-spread-notebook" *ngIf="tree.nodes.length && layout === 'spread'">
-        <section class="notebook-spread print-spread" *ngFor="let pair of printSpreads">
-          <div class="notebook-spine" aria-hidden="true"></div>
-          <article class="notebook-page left-page">
-            <ng-container *ngTemplateOutlet="page; context: { $implicit: pair[0], editable: false }"></ng-container>
-          </article>
-          <article class="notebook-page right-page" *ngIf="pair[1] as node; else blankPage">
-            <ng-container *ngTemplateOutlet="page; context: { $implicit: node, editable: false }"></ng-container>
-          </article>
-        </section>
-      </div>
+      <!-- Created only while printing, so large protocols do not slow the live 8-page view. -->
+      <div class="print-notebook" *ngIf="printing && tree.nodes.length">
+        <ng-container *ngIf="layout === 'spread'">
+          <section class="notebook-spread print-spread" *ngFor="let pair of printSpreads">
+            <div class="notebook-spine" aria-hidden="true"></div>
+            <article class="notebook-page left-page">
+              <ng-container *ngTemplateOutlet="page; context: { $implicit: pair[0], editable: false }"></ng-container>
+            </article>
+            <article class="notebook-page right-page" *ngIf="pair[1] as node">
+              <ng-container *ngTemplateOutlet="page; context: { $implicit: node, editable: false }"></ng-container>
+            </article>
+            <article class="notebook-page right-page blank-page" *ngIf="!pair[1]">End of notebook</article>
+          </section>
+        </ng-container>
 
-      <div class="print-notebook print-overview-notebook" *ngIf="tree.nodes.length && layout === 'overview'">
-        <section class="print-overview-sheet" *ngFor="let sheet of printOverviewSheets">
-          <div class="print-overview-cell" *ngFor="let pair of sheet">
-            <section class="notebook-spread print-overview-spread">
-              <div class="notebook-spine" aria-hidden="true"></div>
-              <article class="notebook-page left-page" *ngIf="pair[0] as node">
-                <ng-container *ngTemplateOutlet="page; context: { $implicit: node, editable: false }"></ng-container>
-              </article>
-              <article class="notebook-page right-page" *ngIf="pair[1] as node; else blankPage">
-                <ng-container *ngTemplateOutlet="page; context: { $implicit: node, editable: false }"></ng-container>
-              </article>
-            </section>
-          </div>
-        </section>
+        <ng-container *ngIf="layout === 'overview'">
+          <section class="print-overview-sheet" *ngFor="let sheet of printOverviewSheets">
+            <div class="print-overview-cell" *ngFor="let pair of sheet">
+              <section class="notebook-spread print-overview-spread">
+                <div class="notebook-spine" aria-hidden="true"></div>
+                <article class="notebook-page left-page">
+                  <ng-container *ngTemplateOutlet="page; context: { $implicit: pair[0], editable: false }"></ng-container>
+                </article>
+                <article class="notebook-page right-page" *ngIf="pair[1] as node">
+                  <ng-container *ngTemplateOutlet="page; context: { $implicit: node, editable: false }"></ng-container>
+                </article>
+                <article class="notebook-page right-page blank-page" *ngIf="!pair[1]">End of notebook</article>
+              </section>
+            </div>
+          </section>
+        </ng-container>
       </div>
 
       <ng-template #blankPage><article class="notebook-page right-page blank-page">End of notebook</article></ng-template>
@@ -141,13 +155,14 @@ import { NamuStorageService } from '../../services/namu-storage.service';
     .notebook-shell { min-height:100%; padding:26px; box-sizing:border-box; }
     .notebook-controls { max-width:1260px; margin:0 auto 20px; display:flex; justify-content:space-between; align-items:center; }
     .notebook-title { font:700 1rem Georgia, serif; }
-    .notebook-actions { display:flex; gap:6px; }
+    .notebook-actions { display:flex; align-items:center; gap:6px; }
+    .notebook-tree-select { max-width:280px; height:31px; padding:0 30px 0 10px; border:1px solid #aaa397; border-radius:5px; background:#f9f7f2; color:#322f2a; font:600 .8rem Arial,sans-serif; cursor:pointer; }
     button { font:600 .8rem Arial, sans-serif; border:1px solid #aaa397; border-radius:5px; padding:7px 10px; background:#f9f7f2; color:#322f2a; cursor:pointer; }
     button:hover, button.active { background:#37342f; border-color:#37342f; color:#fff; }
     button:disabled { opacity:.35; cursor:not-allowed; }
-    .notebook-spread { position:relative; display:grid; grid-template-columns:1fr 1fr; max-width:1260px; min-height:690px; margin:auto; filter:drop-shadow(0 12px 18px rgba(45,40,32,.18)); }
+    .notebook-spread { position:relative; display:grid; grid-template-columns:1fr 1fr; width:100%; max-width:1260px; min-height:0; aspect-ratio:297 / 210; margin:auto; filter:drop-shadow(0 12px 18px rgba(45,40,32,.18)); }
     .notebook-spread.turning { animation:page-turn .38s ease-out both; }
-    .notebook-page { --rule:32px; position:relative; display:flex; flex-direction:column; padding:0 48px; min-height:690px; box-sizing:border-box; background:repeating-linear-gradient(to bottom, #fffdf7 0, #fffdf7 30px, #d7e1ec 31px, #fffdf7 32px); border:1px solid #d5cec2; overflow:hidden; }
+    .notebook-page { --rule:32px; position:relative; display:flex; flex-direction:column; height:100%; min-height:0; padding:0 48px; box-sizing:border-box; background:repeating-linear-gradient(to bottom, #fffdf7 0, #fffdf7 30px, #d7e1ec 31px, #fffdf7 32px); border:1px solid #d5cec2; overflow:hidden; }
     .left-page { border-radius:8px 0 0 8px; padding-right:60px; }
     .right-page { border-radius:0 8px 8px 0; padding-left:60px; }
     .notebook-spine { position:absolute; left:50%; top:0; bottom:0; z-index:2; width:22px; transform:translateX(-50%); background:radial-gradient(circle at center 9px, #5c5851 0 4px, transparent 4.5px) center top/22px 24px repeat-y; }
@@ -175,9 +190,9 @@ import { NamuStorageService } from '../../services/namu-storage.service';
     .blank-page { justify-content:center; align-items:center; color:#777168; font:italic 1rem Georgia,serif; }
     .notebook-pagination { display:flex; align-items:center; justify-content:center; gap:18px; margin:18px auto 0; }
     .notebook-pagination span { font:600 .8rem Arial,sans-serif; color:#625d55; }
-    .notebook-overview { display:grid; grid-template-columns:repeat(2, minmax(630px, 1fr)); gap:18px; max-width:1500px; margin:auto; overflow-x:auto; }
-    .overview-spread-cell { height:345px; overflow:hidden; }
-    .notebook-overview .overview-spread { width:1260px; min-height:690px; margin:0; transform:scale(.5); transform-origin:top left; }
+    .notebook-overview { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:4px; width:100%; max-width:1264px; margin:auto; overflow:hidden; }
+    .overview-spread-cell { min-width:0; aspect-ratio:297 / 210; overflow:hidden; }
+    .notebook-overview .overview-spread { width:200%; max-width:none; min-height:0; aspect-ratio:297 / 210; margin:0; transform:scale(.5); transform-origin:top left; pointer-events:none; user-select:none; }
     .page-title-input, .editable-step input, .note-entry textarea { width:100%; box-sizing:border-box; border:0; border-bottom:1px dashed #8d887f; border-radius:0; outline:none; color:#252422; background:transparent; font:inherit; }
     .page-title-input { margin:0; height:var(--rule); font:700 1.45rem/var(--rule) Georgia,serif; }
     .editable-step { display:flex; align-items:center; gap:5px; min-height:var(--rule); }
@@ -189,35 +204,40 @@ import { NamuStorageService } from '../../services/namu-storage.service';
     .notebook-empty { text-align:center; color:#625d55; }
     .print-notebook { display:none; }
     @keyframes page-turn { from { opacity:.25; transform:perspective(1200px) rotateY(-11deg); transform-origin:left center; } to { opacity:1; transform:none; } }
-    @media (max-width:900px) { .notebook-spread { grid-template-columns:1fr; } .notebook-spine, .right-page { display:none; } .left-page { border-radius:8px; padding-right:48px; } .notebook-overview { grid-template-columns:1fr; } .overview-spread-cell { height:345px; } }
-    @media print { @page { size:A4 landscape; margin:10mm; } :host { overflow:visible; background:#fff; } .notebook-shell { padding:0; } .notebook-controls, .screen-notebook { display:none; } .print-notebook { display:block; }
-      /* Print preview is narrow enough to trigger the mobile query above. Restore the actual two-page spread explicitly. */
-      .print-spread, .print-overview-spread { grid-template-columns:1fr 1fr !important; }
-      .print-spread .right-page, .print-overview-spread .right-page { display:flex !important; }
-      .print-spread .notebook-spine, .print-overview-spread .notebook-spine { display:block !important; }
-      .print-spread .left-page, .print-overview-spread .left-page { border-radius:8px 0 0 8px; padding-right:60px; }
-      .print-spread .right-page, .print-overview-spread .right-page { border-radius:0 8px 8px 0; padding-left:60px; }
-      /* Use the available print width instead of a fixed paper height. Safari can
-         apply a larger dialog margin than @page, which otherwise pushes the
-         notebook footer to a second sheet. */
-      .print-spread { width:100%; max-width:none; min-height:0; height:auto; aspect-ratio:277 / 177; box-sizing:border-box; overflow:hidden; filter:none; break-after:page; page-break-after:always; }
-      .print-spread .notebook-page { min-height:0; height:100%; box-sizing:border-box; overflow:hidden; box-shadow:none; }
+    @media (max-width:900px) { .notebook-spread { grid-template-columns:1fr; } .notebook-spine, .right-page { display:none; } .left-page { border-radius:8px; padding-right:48px; } .notebook-overview { grid-template-columns:1fr; } }
+    @media print { @page { size:A4 landscape; margin:10mm; }
+      :host { height:auto; overflow:visible; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .notebook-shell { min-height:0; padding:0; }
+      .notebook-controls, .screen-notebook { display:none !important; }
+      .print-notebook { display:block !important; width:100%; }
+      .print-notebook .notebook-spread { grid-template-columns:1fr 1fr !important; filter:none !important; box-shadow:none !important; }
+      .print-notebook .right-page { display:flex !important; }
+      .print-notebook .notebook-spine { display:block !important; }
+      .print-notebook .left-page { border-radius:8px 0 0 8px; padding-right:60px; }
+      .print-notebook .right-page { border-radius:0 8px 8px 0; padding-left:60px; }
+
+      .print-spread { width:268.7mm; max-width:100%; min-height:0; height:auto; aspect-ratio:297 / 210; overflow:hidden; break-after:page; page-break-after:always; }
       .print-spread:last-child { break-after:auto; page-break-after:auto; }
-      .print-overview-sheet { display:grid; grid-template-columns:1fr 1fr; gap:3mm; width:100%; height:190mm; break-after:page; page-break-after:always; overflow:hidden; }
+      .print-spread .notebook-page { min-height:0; height:100%; }
+
+      .print-overview-sheet { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(2, minmax(0, 1fr)); gap:0; width:268.7mm; max-width:100%; height:190mm; margin:0 auto; overflow:hidden; break-after:page; page-break-after:always; }
       .print-overview-sheet:last-child { break-after:auto; page-break-after:auto; }
-      .print-overview-cell { height:92mm; overflow:hidden; }
-      .print-overview-spread { width:1260px; min-height:690px; margin:0; transform:scale(.21); transform-origin:top left; filter:none; }
-      .print-overview-spread .notebook-page { min-height:690px; height:690px; }
+      .print-overview-cell { min-height:0; overflow:hidden; }
+      .print-overview-spread { width:200%; max-width:none; min-height:0; height:auto; aspect-ratio:297 / 210; margin:0; transform:scale(.5); transform-origin:top left; }
+      .print-overview-spread .notebook-page { min-height:0; height:100%; }
     }
   `]
 })
 export class NamuNotebookViewComponent implements OnChanges {
   @Input({ required: true }) tree!: NamuTree;
+  @Input() trees: NamuTree[] = [];
+  @Output() treeChange = new EventEmitter<string>();
   Math = Math;
   layout: 'spread' | 'overview' = 'spread';
   spreadStart = 0;
   overviewStart = 0;
   turning = false;
+  printing = false;
 
   constructor(private namuStorageService: NamuStorageService) {}
 
@@ -232,14 +252,13 @@ export class NamuNotebookViewComponent implements OnChanges {
   }
   get printSpreads(): Array<[NamuNode, NamuNode | undefined]> {
     const spreads: Array<[NamuNode, NamuNode | undefined]> = [];
-    for (let index = 0; index < this.tree.nodes.length; index += 2) {
-      spreads.push([this.tree.nodes[index], this.tree.nodes[index + 1]]);
-    }
+    for (let index = 0; index < this.tree.nodes.length; index += 2) spreads.push([this.tree.nodes[index], this.tree.nodes[index + 1]]);
     return spreads;
   }
   get printOverviewSheets(): Array<Array<[NamuNode, NamuNode | undefined]>> {
     const sheets: Array<Array<[NamuNode, NamuNode | undefined]>> = [];
-    for (let index = 0; index < this.printSpreads.length; index += 4) sheets.push(this.printSpreads.slice(index, index + 4));
+    const spreads = this.printSpreads;
+    for (let index = 0; index < spreads.length; index += 4) sheets.push(spreads.slice(index, index + 4));
     return sheets;
   }
   setLayout(layout: 'spread' | 'overview') { this.layout = layout; }
@@ -255,6 +274,15 @@ export class NamuNotebookViewComponent implements OnChanges {
   addStep(node: NamuNode) { node.steps.push('New protocol step'); this.saveNode(node); }
   deleteStep(node: NamuNode, index: number) { if (node.steps.length <= 1) return; node.steps.splice(index, 1); this.saveNode(node); }
   addNote(node: NamuNode) { this.namuStorageService.addLeafNote(this.tree.id, node.id, 'Note', ''); }
-  printNotebook() { window.print(); }
+  printNotebook() {
+    this.printing = true;
+    document.body.classList.add('namu-printing');
+    const cleanup = () => {
+      this.printing = false;
+      document.body.classList.remove('namu-printing');
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  }
   private turnPage() { this.turning = false; requestAnimationFrame(() => { this.turning = true; setTimeout(() => this.turning = false, 380); }); }
 }
