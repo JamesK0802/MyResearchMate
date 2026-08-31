@@ -19,6 +19,7 @@ export class NamuStorageService {
   isFileLoaded$ = new BehaviorSubject<boolean>(false);
   private activeFileHandle: any = null;
   private myDataRecordId: string | null = null;
+  private copiedNode: NamuNode | null = null;
 
   constructor() {
     this.loadFromLocalStorage();
@@ -45,6 +46,7 @@ export class NamuStorageService {
 
   get hasMyDataRecord(): boolean { return !!this.myDataRecordId; }
   get currentMyDataRecordId(): string | null { return this.myDataRecordId; }
+  get hasCopiedNode(): boolean { return !!this.copiedNode; }
 
   loadSavedDocument(document: NamuDocument, title: string, recordId: string) {
     this.activeFileHandle = null;
@@ -320,6 +322,32 @@ export class NamuStorageService {
     return newTree;
   }
 
+  /** Append whole trees from other protocol documents without mutating either source. */
+  mergeDocuments(documents: NamuDocument[]): number {
+    const importedTrees: NamuTree[] = [];
+    const usedNames = new Set(this.currentDoc.trees.map(tree => tree.name));
+
+    for (const document of documents) {
+      for (const sourceTree of document.trees || []) {
+        const tree = this.cloneTreeWithFreshIds(sourceTree);
+        const baseName = tree.name || 'Imported Tree';
+        let name = baseName;
+        let suffix = 2;
+        while (usedNames.has(name)) name = `${baseName} (${suffix++})`;
+        tree.name = name;
+        usedNames.add(name);
+        importedTrees.push(tree);
+      }
+    }
+
+    if (!importedTrees.length) return 0;
+    this.updateDocument({
+      ...this.currentDoc,
+      trees: [...this.currentDoc.trees, ...importedTrees]
+    });
+    return importedTrees.length;
+  }
+
   updateTree(updatedTree: NamuTree) {
     const doc = this.currentDoc;
     const trees = doc.trees.map(t => (t.id === updatedTree.id ? { ...updatedTree, updatedAt: Date.now() } : t));
@@ -367,6 +395,35 @@ export class NamuStorageService {
 
     this.updateTree(updatedTree);
     return newNode;
+  }
+
+  copyNode(node: NamuNode) {
+    this.copiedNode = structuredClone(node);
+  }
+
+  /** Paste node content only. Connections stay independent to avoid accidental rewiring. */
+  pasteNode(treeId: string, anchorNodeId?: string): NamuNode | undefined {
+    if (!this.copiedNode) return undefined;
+    const tree = this.currentDoc.trees.find(item => item.id === treeId);
+    if (!tree) return undefined;
+    const anchor = anchorNodeId ? tree.nodes.find(node => node.id === anchorNodeId) : undefined;
+    const nodeId = this.freshId('node');
+    const copied = structuredClone(this.copiedNode);
+    const pasted: NamuNode = {
+      ...copied,
+      id: nodeId,
+      title: `${copied.title} (Copy)`,
+      nextNodes: [],
+      x: (anchor?.x ?? copied.x ?? 12500) + 70,
+      y: (anchor?.y ?? copied.y ?? 10000) + 70,
+      leaves: (copied.leaves || []).map(leaf => ({
+        ...leaf,
+        id: this.freshId('leaf'),
+        nodeId
+      }))
+    };
+    this.updateTree({ ...tree, nodes: [...tree.nodes, pasted], updatedAt: Date.now() });
+    return pasted;
   }
 
   insertNodeBefore(treeId: string, targetNodeId: string): NamuNode {
@@ -671,6 +728,36 @@ export class NamuStorageService {
       console.error('Invalid Namu JSON document format', e);
     }
     return false;
+  }
+
+  private cloneTreeWithFreshIds(sourceTree: NamuTree): NamuTree {
+    const nodeIds = new Map(sourceTree.nodes.map(node => [node.id, this.freshId('node')]));
+    const now = Date.now();
+    const nodes = sourceTree.nodes.map(node => {
+      const nodeId = nodeIds.get(node.id)!;
+      return {
+        ...structuredClone(node),
+        id: nodeId,
+        nextNodes: (node.nextNodes || []).map(id => nodeIds.get(id)).filter((id): id is string => !!id),
+        leaves: (node.leaves || []).map(leaf => ({
+          ...structuredClone(leaf),
+          id: this.freshId('leaf'),
+          nodeId
+        }))
+      };
+    });
+    return {
+      ...structuredClone(sourceTree),
+      id: this.freshId('tree'),
+      rootNodeId: nodeIds.get(sourceTree.rootNodeId) || nodes[0]?.id || '',
+      nodes,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  private freshId(prefix: string): string {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
   exportTreeToMarkdown(tree: NamuTree): string {

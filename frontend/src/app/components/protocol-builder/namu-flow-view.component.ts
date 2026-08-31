@@ -143,6 +143,7 @@ export interface ConnectionPath {
                     {{ node.leaves.length }} {{ node.leaves.length === 1 ? 'Note' : 'Notes' }}
                   </span>
                   <div class="node-card-actions">
+                    <button type="button" class="btn-node-copy" (mousedown)="$event.stopPropagation()" (click)="copyNode(node); $event.stopPropagation()" title="Copy node">Copy</button>
                     <button type="button" class="btn-action-del" (mousedown)="$event.stopPropagation()" (click)="deleteNode(node, t); $event.stopPropagation()" title="Delete node">✕</button>
                   </div>
                 </div>
@@ -202,6 +203,8 @@ export interface ConnectionPath {
                 {{ focusedNode.leaves.length }} {{ focusedNode.leaves.length === 1 ? 'Note' : 'Notes' }}
               </span>
               <div class="node-card-actions">
+                <button type="button" class="btn-node-copy" (click)="copyNode(focusedNode); $event.stopPropagation()">Copy node</button>
+                <button type="button" class="btn-node-copy" *ngIf="hasCopiedNode" (click)="pasteNode(focusedNode); $event.stopPropagation()">Paste node</button>
                 <button type="button" class="btn-add-note" (click)="addLeafNote(focusedNode); $event.stopPropagation()">
                   + Add Note
                 </button>
@@ -393,6 +396,8 @@ export interface ConnectionPath {
     .node-card-actions { display: flex; gap: 8px; }
     .btn-add-note { border: 1px solid #86efac; border-radius: 6px; padding: 5px 10px; background: #f0fdf4; color: #15803d; cursor: pointer; font-size: 0.82rem; font-weight: 700; }
     .btn-add-note:hover { background: #dcfce7; }
+    .btn-node-copy { border:1px solid #bfdbfe; border-radius:6px; padding:5px 9px; background:#eff6ff; color:#1d4ed8; cursor:pointer; font-size:.78rem; font-weight:700; }
+    .btn-node-copy:hover { background:#dbeafe; border-color:#93c5fd; }
     .btn-action-del { background: none; border: none; color: #94a3b8; cursor: pointer; font-weight: bold; }
     .btn-action-del:hover { color: #dc2626; }
 
@@ -547,6 +552,8 @@ export class NamuFlowViewComponent implements AfterViewInit {
     }
     return undefined;
   }
+
+  get hasCopiedNode(): boolean { return this.namuStorageService.hasCopiedNode; }
 
   get connections(): ConnectionPath[] {
     const res: ConnectionPath[] = [];
@@ -789,6 +796,20 @@ export class NamuFlowViewComponent implements AfterViewInit {
     if (!movement) return;
     e.preventDefault();
     (this.containerRef.nativeElement as HTMLElement).scrollBy({ ...movement, behavior: 'smooth' });
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || !this.focusedNode) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.matches('input, textarea, [contenteditable="true"]')) return;
+    if (e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      this.copyNode(this.focusedNode);
+    } else if (e.key.toLowerCase() === 'v' && this.hasCopiedNode) {
+      e.preventDefault();
+      this.pasteNode(this.focusedNode);
+    }
   }
 
   // Node Click: Focus node
@@ -1115,6 +1136,18 @@ export class NamuFlowViewComponent implements AfterViewInit {
     const t = this.getTreeForNode(sourceNode, tree);
     const newNode = this.namuStorageService.addNode(t.id, sourceNode.id);
     this.onNodeClick(newNode);
+  }
+
+  copyNode(node: NamuNode) {
+    this.namuStorageService.copyNode(node);
+  }
+
+  pasteNode(anchorNode: NamuNode) {
+    const tree = this.getTreeForNode(anchorNode);
+    const pasted = this.namuStorageService.pasteNode(tree.id, anchorNode.id);
+    if (!pasted) return;
+    this.focusedNodeId = pasted.id;
+    setTimeout(() => this.centerNodeInCanvas(pasted), 0);
   }
 
   deleteNode(node: NamuNode, tree?: NamuTree) {

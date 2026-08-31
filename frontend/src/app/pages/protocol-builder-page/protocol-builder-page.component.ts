@@ -29,6 +29,14 @@ import { AuthService } from '../../services/auth.service';
         accept=".json,.namu.json,application/json,text/plain"
         (change)="importJsonFile($event)"
       />
+      <input
+        #mergeFileInput
+        class="file-input-hidden"
+        type="file"
+        multiple
+        accept=".json,.namu.json,application/json,text/plain"
+        (change)="importProtocolTrees($event)"
+      />
       
       <!-- ── VSCODE-STYLE WELCOME LANDING SCREEN (When no file is open) ── -->
       <div class="vscode-welcome-screen" *ngIf="!isFileLoaded">
@@ -75,6 +83,7 @@ import { AuthService } from '../../services/auth.service';
           <div class="toolbar-left">
             <span class="plain-file-title">{{ doc?.title || openedFileName }}</span>
             <button type="button" class="btn-tool-action" (click)="renameProtocol()">Rename protocol</button>
+            <button type="button" class="btn-tool-action" (click)="mergeProtocolFiles()" title="Import every tree from other Tree Protocol files into this file">Merge protocols</button>
           </div>
 
           <div class="toolbar-right">
@@ -174,6 +183,7 @@ import { AuthService } from '../../services/auth.service';
 export class NamuPageComponent implements OnInit, OnDestroy {
   @ViewChild(NamuFlowViewComponent) flowView?: NamuFlowViewComponent;
   @ViewChild('fileInput') fileInput: any;
+  @ViewChild('mergeFileInput') mergeFileInput: any;
 
   doc: NamuDocument | null = null;
   saveStatus: 'saved' | 'saving' | 'error' | 'unsaved' = 'unsaved';
@@ -329,6 +339,31 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     if (!this.doc) return;
     const newTitle = prompt('Rename Tree Protocol:', this.doc.title || this.openedFileName.replace(/\s+—\s+not saved$/, ''));
     if (newTitle?.trim()) this.namuStorageService.renameDocument(newTitle.trim());
+  }
+
+  mergeProtocolFiles() {
+    this.mergeFileInput?.nativeElement.click();
+  }
+
+  async importProtocolTrees(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    try {
+      const documents: NamuDocument[] = [];
+      for (const file of files) {
+        const parsed = JSON.parse(await file.text()) as NamuDocument;
+        if (!parsed || !Array.isArray(parsed.trees)) throw new Error(`${file.name} is not a Tree Protocol file.`);
+        documents.push(parsed);
+      }
+      const count = this.namuStorageService.mergeDocuments(documents);
+      alert(`${count} tree${count === 1 ? '' : 's'} imported from ${files.length} protocol file${files.length === 1 ? '' : 's'}.`);
+    } catch (error) {
+      console.error('Failed to merge protocol files', error);
+      alert(error instanceof Error ? error.message : 'Could not merge the selected protocol files.');
+    } finally {
+      input.value = '';
+    }
   }
 
   deleteActiveTree() {
