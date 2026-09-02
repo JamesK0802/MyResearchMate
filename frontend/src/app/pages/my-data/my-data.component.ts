@@ -20,11 +20,22 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
 
       <app-my-data-header [title]="pageTitle"></app-my-data-header>
 
-      <!-- Tab Navigation -->
-      <div class="tabs-nav">
-        <button [class.active]="activeTab === 'all'" (click)="setTab('all')">All Data</button>
-        <button [class.active]="activeTab === 'my'" (click)="setTab('my')">My Data</button>
-        <button [class.active]="activeTab === 'shared'" (click)="setTab('shared')">Shared with Me</button>
+      <!-- Navigation and compact list controls -->
+      <div class="data-toolbar">
+        <div class="tabs-nav">
+          <button [class.active]="activeTab === 'all'" (click)="setTab('all')">All Data</button>
+          <button [class.active]="activeTab === 'my'" (click)="setTab('my')">My Data</button>
+          <button [class.active]="activeTab === 'shared'" (click)="setTab('shared')">Shared with Me</button>
+        </div>
+        <label class="sort-control">
+          <span>Sort</span>
+          <select [(ngModel)]="sortMode" (ngModelChange)="applySorting()" aria-label="Sort saved data">
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+          </select>
+        </label>
       </div>
 
       <div *ngIf="loading" class="loading-spinner">
@@ -35,6 +46,9 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
       <!-- Results Grid -->
       <div *ngIf="!loading && displayResults.length > 0" class="results-grid">
         <div *ngFor="let res of displayResults" class="result-card" [class.shared-card]="res.is_shared" [class.system-preset-card]="resource === 'pcr' && isSystemPreset(res)">
+          <button type="button" class="btn-pin" [class.pinned]="isPinned(res)" (click)="togglePin(res, $event)" [attr.aria-label]="isPinned(res) ? 'Unpin from top' : 'Pin to top'" [title]="isPinned(res) ? 'Unpin from top' : 'Pin to top'">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Zm3 11h2v7l-1-1-1 1v-7Z"></path></svg>
+          </button>
           <div class="card-body">
             <div class="card-top">
               <h3 class="result-title">{{ getItemTitle(res) }}</h3>
@@ -152,15 +166,18 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
   styles: [`
     .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
 
-    /* Tabs */
-    .tabs-nav { display: flex; gap: 0; margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+    /* Tabs and compact list controls */
+    .data-toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:var(--space-4); margin-bottom:var(--space-4); border-bottom:1px solid var(--color-border); }
+    .tabs-nav { display: flex; gap: 0; }
     .tabs-nav button { padding: 10px var(--space-6); border: none; background: none; font-family: var(--font-sans); font-weight: var(--fw-semi); font-size: var(--text-base); color: var(--color-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: var(--transition-fast); }
     .tabs-nav button:hover { color: var(--color-text-body); background: var(--color-surface-alt); }
     .tabs-nav button.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+    .sort-control { display:flex; align-items:center; gap:6px; padding-bottom:8px; color:var(--color-text-tertiary); font-size:var(--text-xs); font-weight:var(--fw-bold); }
+    .sort-control select { appearance:auto; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-surface); color:var(--color-text-body); padding:4px 7px; font:inherit; font-size:var(--text-xs); font-weight:var(--fw-semi); cursor:pointer; }
 
     /* Grid & Cards */
     .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-6); }
-    .result-card { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-xs); border: 1px solid var(--color-border-light); display: flex; flex-direction: column; transition: var(--transition-normal); }
+    .result-card { position:relative; background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-xs); border: 1px solid var(--color-border-light); display: flex; flex-direction: column; transition: var(--transition-normal); }
     .result-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--color-border); }
     .result-card.system-preset-card { background: #f5f6f7; border-color: #e4e7eb; }
     .result-card.system-preset-card:hover { background: #f1f3f5; }
@@ -170,12 +187,16 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
     .lab-item.lab-unavailable .lab-name { color:#b91c1c; }
     .lab-deletion-status { margin-top:3px; color:#dc2626; font-size:var(--text-xs); font-weight:var(--fw-bold); }
 
-    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); padding-right:28px; }
     .result-title { font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--color-text-primary); margin: 0; line-height: var(--lh-tight); }
     .card-badges { display: flex; gap: var(--space-1); flex-wrap: wrap; }
     .badge { font-size: var(--text-xs); font-weight: var(--fw-black); padding: 3px 9px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid; }
     .badge.owner { background: var(--color-primary-subtle); color: var(--color-primary); border-color: var(--color-primary-border); }
     .badge.shared { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    .btn-pin { position:absolute; top:var(--space-4); right:var(--space-4); width:24px; height:24px; padding:4px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-text-tertiary); cursor:pointer; opacity:.65; transition:var(--transition-fast); z-index:1; }
+    .btn-pin svg { display:block; width:16px; height:16px; transform:rotate(35deg); }
+    .btn-pin:hover { background:var(--color-surface-alt); color:var(--color-primary); opacity:1; }
+    .btn-pin.pinned { color:var(--color-primary); background:var(--color-primary-subtle); opacity:1; }
 
     .result-meta { display: flex; gap: var(--space-4); font-size: var(--text-sm); color: var(--color-text-secondary); margin-bottom: var(--space-5); font-weight: var(--fw-medium); }
     .sharing-info { background: var(--color-surface-alt); padding: var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-5); border: 1px solid var(--color-border-light); }
@@ -242,6 +263,7 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
     .empty-state p { color: var(--color-text-secondary); margin-bottom: var(--space-6); font-size: var(--text-md); }
     .btn-primary { padding: 12px 28px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-md); cursor: pointer; transition: var(--transition-fast); }
     .btn-primary:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
+    @media (max-width:600px) { .data-toolbar { align-items:stretch; flex-direction:column; gap:0; } .sort-control { justify-content:flex-end; } .tabs-nav { overflow-x:auto; } .tabs-nav button { padding:10px var(--space-4); white-space:nowrap; } }
   `]
 })
 export class MyDataComponent implements OnInit {
@@ -249,7 +271,9 @@ export class MyDataComponent implements OnInit {
   displayResults: Array<CrisprResult | ProtocolTreeRecord | PCRPreset> = [];
   resource: 'crispr' | 'protocol' | 'pcr' = 'crispr';
   activeTab: 'all' | 'my' | 'shared' = 'all';
+  sortMode: 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' = 'date-desc';
   loading: boolean = true;
+  private pinnedIds = new Set<string>();
   
   // Sharing Modal
   sharingResult: CrisprResult | ProtocolTreeRecord | PCRPreset | null = null;
@@ -274,6 +298,7 @@ export class MyDataComponent implements OnInit {
   async ngOnInit() {
     const resource = this.route.snapshot.data['resource'];
     if (resource === 'protocol' || resource === 'pcr' || resource === 'crispr') this.resource = resource;
+    this.loadPinnedIds();
     await this.loadData();
     // Pre-load labs for sharing modal
     if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
@@ -290,7 +315,7 @@ export class MyDataComponent implements OnInit {
     try {
       if (this.auth.isDemo) {
         this.allResults = this.getDemoItems();
-        this.displayResults = [...this.allResults];
+        this.applySorting();
         return;
       }
       if (this.resource === 'protocol') {
@@ -304,7 +329,7 @@ export class MyDataComponent implements OnInit {
       } else {
         this.allResults = await this.resultsService.getSharedResults();
       }
-      this.displayResults = [...this.allResults];
+      this.applySorting();
     } catch (err) {
       console.error('Failed to load results:', err);
     } finally {
@@ -316,6 +341,57 @@ export class MyDataComponent implements OnInit {
   setTab(tab: 'all' | 'my' | 'shared') {
     this.activeTab = tab;
     this.loadData();
+  }
+
+  isPinned(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean {
+    return this.pinnedIds.has(String((res as any).id || ''));
+  }
+
+  togglePin(res: CrisprResult | ProtocolTreeRecord | PCRPreset, event: MouseEvent) {
+    event.stopPropagation();
+    const id = String((res as any).id || '');
+    if (!id) return;
+    if (this.pinnedIds.has(id)) this.pinnedIds.delete(id);
+    else this.pinnedIds.add(id);
+    this.persistPinnedIds();
+    this.applySorting();
+  }
+
+  applySorting() {
+    const byTitle = (a: CrisprResult | ProtocolTreeRecord | PCRPreset, b: CrisprResult | ProtocolTreeRecord | PCRPreset) =>
+      this.getItemTitle(a).localeCompare(this.getItemTitle(b), undefined, { sensitivity: 'base', numeric: true });
+    const byDate = (a: CrisprResult | ProtocolTreeRecord | PCRPreset, b: CrisprResult | ProtocolTreeRecord | PCRPreset) => this.itemTimestamp(a) - this.itemTimestamp(b);
+    this.displayResults = [...this.allResults].sort((a, b) => {
+      const pinnedDifference = Number(this.isPinned(b)) - Number(this.isPinned(a));
+      if (pinnedDifference) return pinnedDifference;
+      if (this.sortMode === 'name-asc') return byTitle(a, b);
+      if (this.sortMode === 'name-desc') return byTitle(b, a);
+      return this.sortMode === 'date-asc' ? byDate(a, b) : byDate(b, a);
+    });
+  }
+
+  private itemTimestamp(res: CrisprResult | ProtocolTreeRecord | PCRPreset): number {
+    const raw = (res as any).updated_at || (res as any).created_at || 0;
+    if (typeof raw === 'number') return raw;
+    const parsed = Date.parse(String(raw));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private pinnedStorageKey(): string {
+    return `mrm-my-data-pins:${this.auth.currentProfile?.id || (this.auth.isDemo ? 'demo' : 'guest')}:${this.resource}`;
+  }
+
+  private loadPinnedIds() {
+    try {
+      const saved = localStorage.getItem(this.pinnedStorageKey());
+      this.pinnedIds = new Set(saved ? JSON.parse(saved) : []);
+    } catch {
+      this.pinnedIds = new Set();
+    }
+  }
+
+  private persistPinnedIds() {
+    localStorage.setItem(this.pinnedStorageKey(), JSON.stringify([...this.pinnedIds]));
   }
 
   get pageTitle(): string { return this.resource === 'protocol' ? 'Tree Protocol' : this.resource === 'pcr' ? 'Solution Protocol' : 'Crispr Analysis'; }

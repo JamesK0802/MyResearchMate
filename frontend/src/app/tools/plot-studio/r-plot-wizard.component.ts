@@ -2,7 +2,7 @@ import { Component, OnInit, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as XLSX from 'xlsx';
-import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service';
+import { RPlotSyncService, PlotState, PlotType } from '../../services/r-plot-sync.service';
 import { RPlotPreviewComponent } from './r-plot-preview.component';
 
 interface PaletteDef {
@@ -205,7 +205,7 @@ interface PaletteDef {
                   [class.active]="currentPlot.chartType === 'bar'"
                   (click)="setChartType('bar')">
                   Bar Chart
-                  <span class="info-bubble" data-tooltip="Categorical comparisons & error bars">?</span>
+                  <span class="info-bubble" data-tooltip="Categorical comparisons & error bars" (click)="$event.stopPropagation(); openGuidedHelp('bar')">?</span>
                 </button>
                 <button
                   type="button"
@@ -213,7 +213,7 @@ interface PaletteDef {
                   [class.active]="currentPlot.chartType === 'line'"
                   (click)="setChartType('line')">
                   Line Plot
-                  <span class="info-bubble" data-tooltip="Time courses, kinetics, continuous trends">?</span>
+                  <span class="info-bubble" data-tooltip="Time courses, kinetics, continuous trends" (click)="$event.stopPropagation(); openGuidedHelp('line')">?</span>
                 </button>
                 <button
                   type="button"
@@ -221,7 +221,7 @@ interface PaletteDef {
                   [class.active]="currentPlot.chartType === 'scatter'"
                   (click)="setChartType('scatter')">
                   Scatter Plot
-                  <span class="info-bubble" data-tooltip="Standard curves, correlations">?</span>
+                  <span class="info-bubble" data-tooltip="Standard curves, correlations" (click)="$event.stopPropagation(); openGuidedHelp('scatter')">?</span>
                 </button>
                 <button
                   type="button"
@@ -229,7 +229,7 @@ interface PaletteDef {
                   [class.active]="currentPlot.chartType === 'boxplot'"
                   (click)="setChartType('boxplot')">
                   Boxplot
-                  <span class="info-bubble" data-tooltip="Data distributions & quartiles">?</span>
+                  <span class="info-bubble" data-tooltip="Data distributions & quartiles" (click)="$event.stopPropagation(); openGuidedHelp('boxplot')">?</span>
                 </button>
               </div>
 
@@ -422,6 +422,15 @@ interface PaletteDef {
           </button>
         </div>
 
+        <div class="guided-help-backdrop" *ngIf="guidedHelp" (click)="guidedHelp = null">
+          <section class="guided-help-card" (click)="$event.stopPropagation()">
+            <button type="button" class="guided-help-close" (click)="guidedHelp = null">×</button>
+            <span>QUICK PLOT GUIDE</span><h3>{{ guidedHelpName }}</h3><p>{{ guidedHelpUse }}</p>
+            <div class="guided-help-map"><b>X</b> → {{ guidedHelp.plot.xColumn }} <b>Y</b> → {{ guidedHelp.plot.yColumn }} <ng-container *ngIf="guidedHelp.plot.groupColumn"><b>Group</b> → {{ guidedHelp.plot.groupColumn }}</ng-container></div>
+            <div class="guided-help-preview"><app-r-plot-preview [plotState]="guidedHelp.plot" [data]="guidedHelp.rows"></app-r-plot-preview></div>
+          </section>
+        </div>
+
       </div>
     </div>
   `,
@@ -455,6 +464,9 @@ interface PaletteDef {
       color: #0f172a;
       overflow: hidden;
     }
+
+    .guided-help-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(15,23,42,.42); border-radius: 10px; }
+    .guided-help-card { position: relative; width: min(560px, 92%); padding: 22px; border-radius: 12px; background: #ffffff; box-shadow: 0 18px 45px rgba(15,23,42,.25); }.guided-help-card > span { color: #2563eb; font-size: 10px; font-weight: 800; letter-spacing: .08em; }.guided-help-card h3 { margin: 5px 0; font-size: 19px; color: #1e293b; }.guided-help-card p { margin: 0 0 12px; color: #475569; font-size: 12px; line-height: 1.5; }.guided-help-close { position: absolute; top: 12px; right: 12px; width: 27px; height: 27px; border: none; border-radius: 50%; background: #f1f5f9; color: #475569; font-size: 19px; cursor: pointer; }.guided-help-map { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-radius: 7px; background: #eff6ff; color: #1e40af; font-size: 11px; }.guided-help-map b { font-size: 10px; text-transform: uppercase; }.guided-help-preview { margin-top: 12px; border: 1px solid #dbe3ef; border-radius: 8px; overflow: hidden; }
 
     .wizard-header {
       padding: 14px 24px;
@@ -1274,6 +1286,9 @@ export class RPlotWizardComponent implements OnInit {
   ];
   selectedPaletteKey: string = 'npg';
   customColors: string[] = ['#2563EB', '#EF4444', '#10B981', '#F59E0B'];
+  guidedHelp: ReturnType<RPlotSyncService['getPlotExample']> | null = null;
+  guidedHelpName = '';
+  guidedHelpUse = '';
 
   constructor(
     private rSyncService: RPlotSyncService,
@@ -1335,9 +1350,21 @@ export class RPlotWizardComponent implements OnInit {
     });
   }
 
-  setChartType(type: 'bar' | 'scatter' | 'boxplot' | 'line') {
+  setChartType(type: PlotType) {
     this.currentPlot.chartType = type;
     this.currentPlot = { ...this.currentPlot };
+  }
+
+  openGuidedHelp(type: Extract<PlotType, 'bar' | 'line' | 'scatter' | 'boxplot'>) {
+    this.guidedHelp = this.rSyncService.getPlotExample(type);
+    const copy = {
+      bar: ['Bar chart', 'Compare summarized group values, commonly a mean with SD or SEM error bars.'],
+      line: ['Line plot', 'Show change over time, dose, or another ordered variable; use Group for multiple trajectories.'],
+      scatter: ['Scatter plot', 'Show the association between two continuous variables, such as a standard curve or correlation.'],
+      boxplot: ['Boxplot', 'Compare the median, spread, and outliers of replicate-level data across groups.']
+    } as const;
+    this.guidedHelpName = copy[type][0];
+    this.guidedHelpUse = copy[type][1];
   }
 
   onMappingUpdated() {

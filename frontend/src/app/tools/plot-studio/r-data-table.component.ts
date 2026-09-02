@@ -30,25 +30,46 @@ import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service'
 
           <div class="map-item">
             <label>Y-Axis (y):</label>
-            <select [(ngModel)]="plotState.yColumn" (change)="onMappingChange()" class="map-select">
-              <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
-            </select>
+            <ng-container *ngIf="usesDerivedYAxis; else editableYAxis">
+              <select class="map-select map-select-disabled" disabled>
+                <option>{{ derivedYAxisLabel }}</option>
+              </select>
+            </ng-container>
+            <ng-template #editableYAxis>
+              <select [(ngModel)]="plotState.yColumn" (change)="onMappingChange()" class="map-select">
+                <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
+              </select>
+            </ng-template>
           </div>
 
           <div class="map-item">
             <label>Group / Fill:</label>
-            <select [(ngModel)]="plotState.groupColumn" (change)="onMappingChange()" class="map-select">
-              <option value="">(None)</option>
-              <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
-            </select>
+            <ng-container *ngIf="supportsGroupMapping; else unavailableGroupMapping">
+              <select [(ngModel)]="plotState.groupColumn" (change)="onMappingChange()" class="map-select">
+                <option value="">(None)</option>
+                <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
+              </select>
+            </ng-container>
+            <ng-template #unavailableGroupMapping>
+              <select class="map-select map-select-disabled" disabled>
+                <option>Not used by this plot</option>
+              </select>
+            </ng-template>
           </div>
 
           <div class="map-item">
             <label>Error Bar (SD/SE):</label>
-            <select [(ngModel)]="plotState.errorColumn" (change)="onMappingChange()" class="map-select">
-              <option value="">(None)</option>
-              <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
-            </select>
+            <ng-container *ngIf="supportsErrorMapping; else unavailableErrorMapping">
+              <select [(ngModel)]="plotState.errorColumn" (change)="onMappingChange()" class="map-select">
+                <option value="">(None)</option>
+                <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
+              </select>
+            </ng-container>
+            <ng-template #unavailableErrorMapping>
+              <select class="map-select map-select-disabled" disabled>
+                <option>Not used by this plot</option>
+              </select>
+            </ng-template>
           </div>
         </div>
       </div>
@@ -174,6 +195,14 @@ import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service'
 
     .map-select:focus {
       border-color: #2563eb;
+    }
+
+    .map-select:disabled,
+    .map-select-disabled {
+      cursor: not-allowed;
+      color: #94a3b8;
+      background: #f1f5f9;
+      border-color: #e2e8f0;
     }
 
     .table-actions {
@@ -370,6 +399,28 @@ export class RDataTableComponent implements OnInit {
 
   get activePlot(): PlotState | undefined {
     return this.plots[this.activePlotIndex];
+  }
+
+  /** Histogram and density derive their Y values from a single numeric X column. */
+  get usesDerivedYAxis(): boolean {
+    return this.plotState?.chartType === 'histogram' || this.plotState?.chartType === 'density';
+  }
+
+  get derivedYAxisLabel(): string {
+    return this.plotState?.chartType === 'histogram'
+      ? 'Auto-calculated distribution'
+      : 'Auto-calculated density';
+  }
+
+  /** Group/fill is meaningful only where the generated R layer uses it. */
+  get supportsGroupMapping(): boolean {
+    return ['bar', 'line', 'scatter', 'boxplot', 'violin', 'dotplot', 'histogram', 'density']
+      .includes(this.plotState?.chartType || '');
+  }
+
+  /** The generated R script draws SD/SE bars only for bar and line plots. */
+  get supportsErrorMapping(): boolean {
+    return ['bar', 'line'].includes(this.plotState?.chartType || '');
   }
 
   constructor(private rSyncService: RPlotSyncService) {}

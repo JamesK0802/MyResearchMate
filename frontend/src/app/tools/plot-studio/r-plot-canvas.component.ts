@@ -2,14 +2,35 @@ import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { jsPDF } from 'jspdf';
-import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service';
+import * as XLSX from 'xlsx';
+import { RPlotSyncService, PlotState, PlotType, PlotExample } from '../../services/r-plot-sync.service';
 import { RPlotPreviewComponent } from './r-plot-preview.component';
 
 interface InlineTextEditorState {
   isOpen: boolean;
-  field: 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legendTitle';
+  field: 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legendTitle' | 'figureTag';
   label: string;
   value: string;
+}
+
+type DraggableElement = 'tag' | 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legend';
+
+interface ElementDragState {
+  element: DraggableElement;
+  mode: 'move' | 'resize';
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  startSize: number;
+}
+
+interface PlotHelpCard extends PlotExample {
+  type: PlotType;
+  name: string;
+  use: string;
+  xMeaning: string;
+  yMeaning: string;
 }
 
 @Component({
@@ -64,14 +85,15 @@ interface InlineTextEditorState {
       <div class="canvas-toolbar" *ngIf="viewMode === 'single'">
         <div class="toolbar-controls">
           <!-- Chart Type -->
-          <div class="ctrl-group">
+          <div class="ctrl-group type-menu-wrap">
             <label>Type:</label>
-            <select [ngModel]="activePlot.chartType" (ngModelChange)="updateActiveState({chartType: $event})" class="ctrl-select">
-              <option value="bar">Bar Chart</option>
-              <option value="scatter">Scatter Plot</option>
-              <option value="line">Line Plot</option>
-              <option value="boxplot">Boxplot</option>
-            </select>
+            <button type="button" class="ctrl-select type-menu-button" (click)="showTypeMenu = !showTypeMenu">{{ plotName(activePlot.chartType) }} <span>⌄</span></button>
+            <div class="type-menu" *ngIf="showTypeMenu">
+              <span class="type-menu-heading">Common</span>
+              <div class="type-menu-row" *ngFor="let type of commonPlotTypes"><button type="button" (click)="choosePlotType(type)"><span [class.selected-check]="activePlot.chartType === type">{{ activePlot.chartType === type ? '✓' : '' }}</span>{{ plotName(type) }}</button><button type="button" class="row-help" (click)="$event.stopPropagation(); openPlotHelp(type)">?</button></div>
+              <span class="type-menu-heading">Advanced analysis</span>
+              <div class="type-menu-row" *ngFor="let type of advancedPlotTypes"><button type="button" (click)="choosePlotType(type)"><span [class.selected-check]="activePlot.chartType === type">{{ activePlot.chartType === type ? '✓' : '' }}</span>{{ plotName(type) }}</button><button type="button" class="row-help" (click)="$event.stopPropagation(); openPlotHelp(type)">?</button></div>
+            </div>
           </div>
 
           <!-- Journal Theme -->
@@ -122,8 +144,8 @@ interface InlineTextEditorState {
             class="btn-toggle-inspector"
             [class.active]="showInspector"
             (click)="showInspector = !showInspector"
-            title="Toggle sizing & typography controls">
-            Sizing & Bars
+            title="Open publication formatting controls">
+            Customize
           </button>
 
           <!-- Web-Based Direct Export Dropdown (Default PNG) -->
@@ -142,18 +164,30 @@ interface InlineTextEditorState {
         </div>
       </div>
 
-      <!-- Horizontal Compact Inspector Strip (When open) -->
-      <div class="horizontal-inspector-strip" *ngIf="viewMode === 'single' && showInspector">
-        <div class="insp-strip-item">
-          <label>Title Size: <strong>{{ activePlot.fontSizeTitle }}px</strong></label>
-          <input type="range" min="12" max="28" [ngModel]="activePlot.fontSizeTitle" (ngModelChange)="updateActiveState({fontSizeTitle: $event})" />
-        </div>
+      <div class="plot-help-backdrop" *ngIf="plotHelp" (click)="closePlotHelp()">
+        <section class="plot-help-modal" role="dialog" aria-modal="true" [attr.aria-label]="plotHelp.name + ' guide'" (click)="$event.stopPropagation()">
+          <header><div><span class="eyebrow">PLOT GUIDE</span><h2>{{ plotHelp.name }}</h2></div><button type="button" class="modal-close" (click)="closePlotHelp()">×</button></header>
+          <p class="help-use"><strong>When to use it:</strong> {{ plotHelp.use }}</p>
+          <div class="axis-explainer"><div><strong>X axis</strong><span>{{ plotHelp.xMeaning }}</span></div><div><strong>Y axis</strong><span>{{ plotHelp.yMeaning }}</span></div></div>
+          <div class="example-mapping"><strong>Example mapping</strong><span><b>X</b> → {{ plotHelp.plot.xColumn }}</span><span *ngIf="isSingleVariablePlotHelp"><b>Y</b> → calculated automatically</span><span *ngIf="!isSingleVariablePlotHelp"><b>Y</b> → {{ plotHelp.plot.yColumn }}</span><span *ngIf="plotHelp.plot.groupColumn"><b>Group</b> → {{ plotHelp.plot.groupColumn }}</span><span *ngIf="plotHelp.plot.errorColumn"><b>Error bar</b> → {{ plotHelp.plot.errorColumn }}</span><span *ngIf="plotHelp.plot.labelColumn"><b>Label</b> → {{ plotHelp.plot.labelColumn }}</span></div>
+          <div class="help-example-grid"><div class="example-data"><div class="example-heading">Minimal Excel example</div><div class="excel-note">Copy these columns into Excel, then upload or paste them.</div><div class="example-table-wrap"><table><thead><tr><th *ngFor="let column of plotHelp.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of plotHelp.rows | slice:0:6"><td *ngFor="let column of plotHelp.columns">{{ row[column] }}</td></tr></tbody></table></div></div><div class="example-plot"><div class="example-heading">Expected plot</div><app-r-plot-preview [plotState]="plotHelp.plot" [data]="plotHelp.rows"></app-r-plot-preview></div></div>
+          <footer><span>This replaces the current canvas with a small editable example.</span><div class="help-actions"><button type="button" class="download-example-btn" (click)="downloadHelpExample()">Download Excel</button><button type="button" class="load-example-btn" (click)="loadHelpExample()">Load this example</button></div></footer>
+        </section>
+      </div>
 
-        <div class="insp-strip-item">
-          <label>Axis Size: <strong>{{ activePlot.fontSizeAxis }}px</strong></label>
-          <input type="range" min="9" max="20" [ngModel]="activePlot.fontSizeAxis" (ngModelChange)="updateActiveState({fontSizeAxis: $event})" />
-        </div>
+      <!-- Publication controls: a focused modal keeps the canvas workspace uncluttered. -->
+      <div class="customize-backdrop" *ngIf="viewMode === 'single' && showInspector" (click)="showInspector = false">
+      <section class="customize-modal" role="dialog" aria-modal="true" aria-label="Customize plot" (click)="$event.stopPropagation()">
+        <header class="customize-modal-header">
+          <div><span class="eyebrow">FIGURE SETTINGS</span><h2>Customize plot</h2><p>Adjust the figure as a whole, then use the canvas to position and resize individual text elements.</p></div>
+          <button type="button" class="modal-close" (click)="showInspector = false" title="Close customize">×</button>
+        </header>
+      <div class="customize-content">
+      <div class="horizontal-inspector-strip">
+        <div class="inspector-hint">Select a title, axis label, or legend on the canvas. Drag it to move; drag the blue corner handle to resize. Double-click text to edit it.</div>
 
+        <section class="inspector-section">
+          <span class="inspector-section-title">Plot marks</span>
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'bar' || activePlot.chartType === 'boxplot'">
           <label>Bar Width: <strong>{{ activePlot.barWidth }}</strong></label>
           <input type="range" min="0.2" max="0.95" step="0.05" [ngModel]="activePlot.barWidth" (ngModelChange)="updateActiveState({barWidth: $event})" />
@@ -164,19 +198,118 @@ interface InlineTextEditorState {
           <input type="range" min="1" max="10" [ngModel]="activePlot.pointSize" (ngModelChange)="updateActiveState({pointSize: $event})" />
         </div>
 
-        <div class="insp-strip-item">
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'violin' || activePlot.chartType === 'dotplot' || activePlot.chartType === 'boxplot'">
+          <label>Raw points</label>
+          <input type="checkbox" [ngModel]="activePlot.showRawPoints !== false" (ngModelChange)="updateActiveState({showRawPoints: $event})" />
+          <label *ngIf="activePlot.chartType === 'dotplot'">Mean</label>
+          <input *ngIf="activePlot.chartType === 'dotplot'" type="checkbox" [ngModel]="activePlot.showMean === true" (ngModelChange)="updateActiveState({showMean: $event})" />
+        </div>
+
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'scatter'">
+          <label>Fit</label>
+          <input type="checkbox" [ngModel]="activePlot.showTrendLine !== false" (ngModelChange)="updateActiveState({showTrendLine: $event})" />
+          <label>95% CI</label>
+          <input type="checkbox" [ngModel]="activePlot.showConfidenceBand === true" (ngModelChange)="updateActiveState({showConfidenceBand: $event})" />
+        </div>
+
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'histogram'">
+          <label>Bins <strong>{{ activePlot.binCount || 30 }}</strong></label>
+          <input type="range" min="5" max="80" step="1" [ngModel]="activePlot.binCount || 30" (ngModelChange)="updateActiveState({binCount: +$event})" />
+        </div>
+
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'volcano'">
+          <label>|logFC|</label>
+          <input type="number" class="inline-number" min="0" step="0.25" [ngModel]="activePlot.thresholdX || 1" (ngModelChange)="updateActiveState({thresholdX: +$event})" />
+          <label>-log10 FDR</label>
+          <input type="number" class="inline-number" min="0" step="0.1" [ngModel]="activePlot.thresholdY || 1.3" (ngModelChange)="updateActiveState({thresholdY: +$event})" />
+          <label>Label</label>
+          <select class="ctrl-select" [ngModel]="activePlot.labelColumn || ''" (ngModelChange)="updateActiveState({labelColumn: $event})">
+            <option value="">None</option>
+            <option *ngFor="let column of columns" [value]="column">{{ column }}</option>
+          </select>
+        </div>
+        </section>
+
+        <section class="inspector-section">
+          <span class="inspector-section-title">Axes</span>
+        <div class="insp-strip-item" title="Rotates category labels to stop long names overlapping.">
           <label>X Rotation: <strong>{{ activePlot.xRotation }}°</strong></label>
           <input type="range" min="0" max="90" step="15" [ngModel]="activePlot.xRotation" (ngModelChange)="updateActiveState({xRotation: $event})" />
         </div>
 
-        <div class="insp-strip-item chk-strip-item">
-          <label class="chk-label">
-            <input type="checkbox" [ngModel]="activePlot.showErrorBars" (ngModelChange)="updateActiveState({showErrorBars: $event})" />
-            Show Error Bars
-          </label>
+        <div class="insp-strip-item" title="Set the visible Y-axis range. Leave empty to calculate it from your data.">
+          <label>Y min <span class="field-help" title="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span></label>
+          <input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" />
+          <label>max</label>
+          <input type="number" class="inline-number" [ngModel]="activePlot.yMax" (ngModelChange)="updateActiveState({yMax: $event === '' ? null : +$event})" placeholder="Auto" />
+        </div>
+        </section>
+
+        <section class="inspector-section">
+          <span class="inspector-section-title">Canvas & export</span>
+        <div class="insp-strip-item">
+          <label>Width</label>
+          <input type="number" min="2" max="14" step="0.1" [ngModel]="figureWidthIn" (ngModelChange)="updateActiveState({figureWidthIn: +$event})" />
+          <span class="unit-label">in</span>
         </div>
 
-        <button type="button" class="btn-close-strip" (click)="showInspector = false" title="Hide inspector">x</button>
+        <div class="insp-strip-item">
+          <label>Height</label>
+          <input type="number" min="2" max="12" step="0.1" [ngModel]="figureHeightIn" (ngModelChange)="updateActiveState({figureHeightIn: +$event})" />
+          <span class="unit-label">in</span>
+        </div>
+
+        <div class="insp-strip-item">
+          <label>DPI</label>
+          <select class="ctrl-select" [ngModel]="exportDpi" (ngModelChange)="updateActiveState({exportDpi: +$event})">
+            <option [ngValue]="300">300</option>
+            <option [ngValue]="600">600</option>
+          </select>
+          <label>Background</label>
+          <select class="ctrl-select" [ngModel]="activePlot.background || 'white'" (ngModelChange)="updateActiveState({background: $event})">
+            <option value="white">White</option>
+            <option value="transparent">Transparent</option>
+          </select>
+        </div>
+        </section>
+
+        <section class="inspector-section">
+          <span class="inspector-section-title">Appearance</span>
+        <div class="insp-strip-item palette-strip">
+          <label>Palette</label>
+          <select class="ctrl-select" [ngModel]="palettePreset" (ngModelChange)="applyPalette($event)">
+            <option value="publication">Publication</option>
+            <option value="colorblind">Color-blind safe</option>
+            <option value="viridis">Viridis-inspired</option>
+            <option value="mono">Monochrome</option>
+            <option value="custom">Custom</option>
+          </select>
+          <input *ngFor="let color of activePlot.palette; let index = index" type="color" [ngModel]="color" (ngModelChange)="updatePaletteColor(index, $event)" [attr.aria-label]="'Palette color ' + (index + 1)" />
+        </div>
+
+        <div class="insp-strip-item chk-strip-item">
+          <label class="chk-label">
+            <input type="checkbox" [disabled]="!canUseErrorBars" [ngModel]="activePlot.showErrorBars" (ngModelChange)="updateActiveState({showErrorBars: $event})" />
+            Show Error Bars
+          </label>
+          <label class="chk-label">
+            <input type="checkbox" [ngModel]="activePlot.showGrid !== false" (ngModelChange)="updateActiveState({showGrid: $event})" />
+            Major grid
+          </label>
+          <label class="chk-label">
+            <input type="checkbox" [disabled]="activePlot.showGrid === false" [ngModel]="activePlot.showMinorGrid === true" (ngModelChange)="updateActiveState({showMinorGrid: $event})" />
+            Minor grid
+          </label>
+        </div>
+        </section>
+
+      </div>
+      <aside class="customize-preview" aria-label="Live plot preview">
+        <div class="customize-preview-heading"><span>LIVE PREVIEW</span><small>Changes update instantly</small></div>
+        <app-r-plot-preview [plotState]="activePlot" [data]="data"></app-r-plot-preview>
+      </aside>
+      </div>
+      </section>
       </div>
 
       <!-- Main Canvas Area -->
@@ -187,6 +320,7 @@ interface InlineTextEditorState {
         *ngIf="viewMode === 'single'"
         (wheel)="onWheelZoom($event)"
         (mousedown)="startPan($event)"
+        (click)="clearSelectionIfBackground($event)"
         (mousemove)="onPan($event)"
         (mouseup)="endPan()"
         (mouseleave)="endPan()"
@@ -208,20 +342,17 @@ interface InlineTextEditorState {
             <rect x="0" y="0" [attr.width]="svgWidth" [attr.height]="svgHeight" [attr.fill]="getThemeBg()" />
 
             <!-- Figure Panel Tag & Title (Non-overlapping) -->
-            <text *ngIf="activePlot.figureTag"
-                  [attr.x]="tagX"
-                  [attr.y]="titleY"
-                  [attr.font-family]="activePlot.fontFamily"
-                  font-size="18"
-                  font-weight="bold"
-                  [attr.fill]="getThemeText()">
-              {{ activePlot.figureTag }}
-            </text>
+            <g *ngIf="activePlot.figureTag" class="editable-group draggable-element" [class.selected]="selectedElement === 'tag'" (mousedown)="beginElementDrag('tag', $event)" (dblclick)="onEditableClick('figureTag', 'Figure tag', activePlot.figureTag)">
+              <rect *ngIf="selectedElement === 'tag'" class="selection-box" [attr.x]="tagX + (activePlot.tagOffsetX || 0) - 7" [attr.y]="titleY + (activePlot.tagOffsetY || 0) - (activePlot.fontSizeTag || 18)" [attr.width]="textHandleWidth(activePlot.figureTag, activePlot.fontSizeTag || 18)" [attr.height]="(activePlot.fontSizeTag || 18) + 10" />
+              <text [attr.x]="tagX + (activePlot.tagOffsetX || 0)" [attr.y]="titleY + (activePlot.tagOffsetY || 0)" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeTag || 18" font-weight="bold" [attr.fill]="getThemeText()" class="clickable-text">{{ activePlot.figureTag }}</text>
+              <circle *ngIf="selectedElement === 'tag'" [attr.cx]="tagX + (activePlot.tagOffsetX || 0) + textHandleWidth(activePlot.figureTag, activePlot.fontSizeTag || 18) - 2" [attr.cy]="titleY + (activePlot.tagOffsetY || 0) + 8" r="5" class="resize-handle" (mousedown)="beginElementResize('tag', $event)" />
+            </g>
 
             <!-- Editable Title -->
-            <g class="editable-group" (click)="openInlineEditor('title', 'Figure Title', activePlot.title)">
-              <text [attr.x]="titleX"
-                    [attr.y]="titleY"
+            <g class="editable-group draggable-element" [class.selected]="selectedElement === 'title'" (mousedown)="beginElementDrag('title', $event)" (dblclick)="onEditableClick('title', 'Figure Title', activePlot.title)">
+              <rect *ngIf="selectedElement === 'title'" class="selection-box" [attr.x]="titleX + (activePlot.titleOffsetX || 0) - 7" [attr.y]="titleY + (activePlot.titleOffsetY || 0) - activePlot.fontSizeTitle" [attr.width]="textHandleWidth(activePlot.title || 'Figure 1', activePlot.fontSizeTitle)" [attr.height]="activePlot.fontSizeTitle + 10" />
+              <text [attr.x]="titleX + (activePlot.titleOffsetX || 0)"
+                    [attr.y]="titleY + (activePlot.titleOffsetY || 0)"
                     [attr.font-family]="activePlot.fontFamily"
                     [attr.font-size]="activePlot.fontSizeTitle"
                     font-weight="bold"
@@ -229,27 +360,33 @@ interface InlineTextEditorState {
                     class="clickable-text">
                 {{ activePlot.title || 'Figure 1' }}
               </text>
+              <circle *ngIf="selectedElement === 'title'" [attr.cx]="titleX + (activePlot.titleOffsetX || 0) + textHandleWidth(activePlot.title || 'Figure 1', activePlot.fontSizeTitle) - 2" [attr.cy]="titleY + (activePlot.titleOffsetY || 0) + 8" r="5" class="resize-handle" (mousedown)="beginElementResize('title', $event)" />
             </g>
 
             <!-- Editable Subtitle -->
-            <g *ngIf="activePlot.subtitle" class="editable-group" (click)="openInlineEditor('subtitle', 'Figure Subtitle', activePlot.subtitle)">
-              <text [attr.x]="titleX"
-                    [attr.y]="subtitleY"
+            <g *ngIf="activePlot.subtitle" class="editable-group draggable-element" [class.selected]="selectedElement === 'subtitle'" (mousedown)="beginElementDrag('subtitle', $event)" (dblclick)="onEditableClick('subtitle', 'Figure Subtitle', activePlot.subtitle)">
+              <rect *ngIf="selectedElement === 'subtitle'" class="selection-box" [attr.x]="titleX + (activePlot.subtitleOffsetX || 0) - 7" [attr.y]="subtitleY + (activePlot.subtitleOffsetY || 0) - subtitleFontSize" [attr.width]="textHandleWidth(activePlot.subtitle, subtitleFontSize)" [attr.height]="subtitleFontSize + 10" />
+              <text [attr.x]="titleX + (activePlot.subtitleOffsetX || 0)"
+                    [attr.y]="subtitleY + (activePlot.subtitleOffsetY || 0)"
                     [attr.font-family]="activePlot.fontFamily"
-                    [attr.font-size]="activePlot.fontSizeTitle * 0.75"
+                    [attr.font-size]="subtitleFontSize"
                     [attr.fill]="getSubtitleColor()"
                     class="clickable-text">
                 {{ activePlot.subtitle }}
               </text>
+              <circle *ngIf="selectedElement === 'subtitle'" [attr.cx]="titleX + (activePlot.subtitleOffsetX || 0) + textHandleWidth(activePlot.subtitle, subtitleFontSize) - 2" [attr.cy]="subtitleY + (activePlot.subtitleOffsetY || 0) + 8" r="5" class="resize-handle" (mousedown)="beginElementResize('subtitle', $event)" />
             </g>
 
             <!-- Grid Lines -->
-            <g *ngIf="activePlot.theme !== 'classic'" class="grid-lines" [attr.stroke]="getGridLineColor()" stroke-width="0.8" stroke-dasharray="3 3">
+            <g *ngIf="activePlot.showGrid !== false && activePlot.chartType !== 'heatmap'" class="grid-lines" [attr.stroke]="getGridLineColor()" stroke-width="0.8" stroke-dasharray="3 3">
               <line *ngFor="let tick of yTicks"
                     [attr.x1]="margin.left"
                     [attr.y1]="tick.y"
                     [attr.x2]="margin.left + plotWidth"
                     [attr.y2]="tick.y" />
+            </g>
+            <g *ngIf="activePlot.showGrid !== false && activePlot.showMinorGrid === true && activePlot.chartType !== 'heatmap'" class="minor-grid-lines" [attr.stroke]="getGridLineColor()" stroke-width="0.55" stroke-dasharray="2 4" opacity=".72">
+              <line *ngFor="let y of minorGridYs" [attr.x1]="margin.left" [attr.y1]="y" [attr.x2]="margin.left + plotWidth" [attr.y2]="y" />
             </g>
 
             <!-- Y Axis -->
@@ -262,6 +399,7 @@ interface InlineTextEditorState {
                 [attr.stroke]="getAxisLineColor()"
                 stroke-width="1.2"
               />
+              <g *ngIf="activePlot.chartType !== 'heatmap'" >
               <g *ngFor="let tick of yTicks">
                 <line
                   [attr.x1]="margin.left - 5"
@@ -281,21 +419,29 @@ interface InlineTextEditorState {
                   {{ tick.val }}
                 </text>
               </g>
+              </g>
+              <g *ngIf="activePlot.chartType === 'heatmap'">
+                <g *ngFor="let row of heatmapRows">
+                  <line [attr.x1]="margin.left - 5" [attr.y1]="row.y" [attr.x2]="margin.left" [attr.y2]="row.y" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
+                  <text [attr.x]="margin.left - 10" [attr.y]="row.y + 4" text-anchor="end" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeAxis * 0.85" [attr.fill]="getThemeText()">{{ row.label }}</text>
+                </g>
+              </g>
             </g>
 
             <!-- Editable Y Axis Label -->
-            <g class="editable-group" (click)="openInlineEditor('yLabel', 'Y-Axis Label', activePlot.yLabel)">
-              <text [attr.x]="-(margin.top + (plotHeight / 2))"
-                    [attr.y]="Math.max(14, margin.left - 45)"
-                    transform="rotate(-90)"
+            <g class="editable-group draggable-element" [class.selected]="selectedElement === 'yLabel'" (mousedown)="beginElementDrag('yLabel', $event)" (dblclick)="onEditableClick('yLabel', 'Y-Axis Label', activePlot.yLabel)" transform="rotate(-90)">
+              <rect *ngIf="selectedElement === 'yLabel'" class="selection-box" [attr.x]="yLabelLocalX - textHandleWidth(activePlot.yLabel, yLabelFontSize) / 2 - 7" [attr.y]="yLabelLocalY - yLabelFontSize" [attr.width]="textHandleWidth(activePlot.yLabel, yLabelFontSize) + 14" [attr.height]="yLabelFontSize + 10" />
+              <text [attr.x]="yLabelLocalX"
+                    [attr.y]="yLabelLocalY"
                     text-anchor="middle"
                     [attr.font-family]="activePlot.fontFamily"
-                    [attr.font-size]="activePlot.fontSizeAxis"
+                    [attr.font-size]="yLabelFontSize"
                     font-weight="bold"
                     [attr.fill]="getThemeText()"
                     class="clickable-text">
                 {{ activePlot.yLabel }}
               </text>
+              <circle *ngIf="selectedElement === 'yLabel'" [attr.cx]="yLabelLocalX + textHandleWidth(activePlot.yLabel, yLabelFontSize) / 2 + 5" [attr.cy]="yLabelLocalY + 8" r="5" class="resize-handle" (mousedown)="beginElementResize('yLabel', $event)" />
             </g>
 
             <!-- X Axis -->
@@ -330,22 +476,24 @@ interface InlineTextEditorState {
             </g>
 
             <!-- Editable X Axis Label -->
-            <g class="editable-group" (click)="openInlineEditor('xLabel', 'X-Axis Label', activePlot.xLabel)">
-              <text [attr.x]="margin.left + (plotWidth / 2)"
-                    [attr.y]="svgHeight - 12"
+            <g class="editable-group draggable-element" [class.selected]="selectedElement === 'xLabel'" (mousedown)="beginElementDrag('xLabel', $event)" (dblclick)="onEditableClick('xLabel', 'X-Axis Label', activePlot.xLabel)">
+              <rect *ngIf="selectedElement === 'xLabel'" class="selection-box" [attr.x]="xLabelX - textHandleWidth(activePlot.xLabel, xLabelFontSize) / 2 - 7" [attr.y]="xLabelY - xLabelFontSize" [attr.width]="textHandleWidth(activePlot.xLabel, xLabelFontSize) + 14" [attr.height]="xLabelFontSize + 10" />
+              <text [attr.x]="xLabelX"
+                    [attr.y]="xLabelY"
                     text-anchor="middle"
                     [attr.font-family]="activePlot.fontFamily"
-                    [attr.font-size]="activePlot.fontSizeAxis"
+                    [attr.font-size]="xLabelFontSize"
                     font-weight="bold"
                     [attr.fill]="getThemeText()"
                     class="clickable-text">
                 {{ activePlot.xLabel }}
               </text>
+              <circle *ngIf="selectedElement === 'xLabel'" [attr.cx]="xLabelX + textHandleWidth(activePlot.xLabel, xLabelFontSize) / 2 + 5" [attr.cy]="xLabelY + 8" r="5" class="resize-handle" (mousedown)="beginElementResize('xLabel', $event)" />
             </g>
 
             <!-- Geometry Renderings -->
             <!-- 1. Bar Chart -->
-            <g *ngIf="activePlot.chartType === 'bar'">
+            <g *ngIf="activePlot.chartType === 'bar' || activePlot.chartType === 'histogram'">
               <g *ngFor="let item of renderItems">
                 <rect [attr.x]="item.x"
                       [attr.y]="item.y"
@@ -365,7 +513,7 @@ interface InlineTextEditorState {
             </g>
 
             <!-- 2. Scatter Plot -->
-            <g *ngIf="activePlot.chartType === 'scatter'">
+            <g *ngIf="activePlot.chartType === 'scatter' || activePlot.chartType === 'dotplot' || activePlot.chartType === 'volcano'">
               <circle *ngFor="let item of renderItems"
                       [attr.cx]="item.centerX"
                       [attr.cy]="item.y"
@@ -377,7 +525,7 @@ interface InlineTextEditorState {
             </g>
 
             <!-- 3. Line Plot -->
-            <g *ngIf="activePlot.chartType === 'line'">
+            <g *ngIf="activePlot.chartType === 'line' || activePlot.chartType === 'density'">
               <g *ngFor="let lineGroup of lineSeries">
                 <polyline [attr.points]="lineGroup.pointsStr"
                           [attr.stroke]="lineGroup.color"
@@ -409,11 +557,37 @@ interface InlineTextEditorState {
               </g>
             </g>
 
+            <!-- 5. Violin plot: distribution silhouette, median, and optional raw observations. -->
+            <g *ngIf="activePlot.chartType === 'violin'">
+              <g *ngFor="let item of renderItems">
+                <ellipse [attr.cx]="item.centerX" [attr.cy]="item.centerY" [attr.rx]="item.width / 2" [attr.ry]="Math.max(8, item.height / 2)" [attr.fill]="item.color" fill-opacity=".62" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
+                <circle *ngFor="let point of item.points" [attr.cx]="point.x" [attr.cy]="point.y" [attr.r]="activePlot.showRawPoints !== false ? 3 : 0" [attr.fill]="getThemeText()" fill-opacity=".72" />
+                <line [attr.x1]="item.centerX - item.width / 2" [attr.x2]="item.centerX + item.width / 2" [attr.y1]="item.medianY" [attr.y2]="item.medianY" [attr.stroke]="getThemeText()" stroke-width="2" />
+              </g>
+            </g>
+
+            <!-- Heatmaps use x categories and groups as their two discrete axes. -->
+            <g *ngIf="activePlot.chartType === 'heatmap'">
+              <rect *ngFor="let item of renderItems"
+                    [attr.x]="item.x" [attr.y]="item.y"
+                    [attr.width]="item.width" [attr.height]="item.height"
+                    [attr.fill]="item.color" stroke="#ffffff" stroke-width="1" />
+            </g>
+            <g *ngIf="activePlot.chartType === 'heatmap'" class="heatmap-scale">
+              <defs><linearGradient id="heatmap-value-scale" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" [attr.stop-color]="heatmapLowColor" /><stop offset="50%" [attr.stop-color]="heatmapMidColor" /><stop offset="100%" [attr.stop-color]="heatmapHighColor" /></linearGradient></defs>
+              <text [attr.x]="heatmapLegendX" [attr.y]="margin.top - 8" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeAxis * .75" font-weight="bold" [attr.fill]="getThemeText()">{{ heatmapValueLabel }}</text>
+              <rect [attr.x]="heatmapLegendX" [attr.y]="margin.top" width="13" [attr.height]="plotHeight" fill="url(#heatmap-value-scale)" [attr.stroke]="getAxisLineColor()" stroke-width=".5" />
+              <text [attr.x]="heatmapLegendX + 19" [attr.y]="margin.top + 4" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeAxis * .72" [attr.fill]="getThemeText()">{{ formatHeatValue(heatmapColorMax) }}</text>
+              <text *ngIf="heatmapIsDiverging" [attr.x]="heatmapLegendX + 19" [attr.y]="margin.top + plotHeight / 2 + 4" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeAxis * .72" [attr.fill]="getThemeText()">0</text>
+              <text [attr.x]="heatmapLegendX + 19" [attr.y]="margin.top + plotHeight" [attr.font-family]="activePlot.fontFamily" [attr.font-size]="activePlot.fontSizeAxis * .72" [attr.fill]="getThemeText()">{{ formatHeatValue(heatmapColorMin) }}</text>
+            </g>
+
             <!-- Legend (Non-overlapping) -->
-            <g *ngIf="activePlot.legendPosition !== 'none' && legendItems.length > 0" class="legend-box" (click)="openInlineEditor('legendTitle', 'Legend Title', activePlot.legendTitle)">
+            <g *ngIf="activePlot.legendPosition !== 'none' && legendItems.length > 0" class="legend-box draggable-element" [class.selected]="selectedElement === 'legend'" (mousedown)="beginElementDrag('legend', $event)" (dblclick)="onEditableClick('legendTitle', 'Legend Title', activePlot.legendTitle)">
+              <rect *ngIf="selectedElement === 'legend'" class="selection-box" [attr.x]="legendBounds.x" [attr.y]="legendBounds.y" [attr.width]="legendBounds.width" [attr.height]="legendBounds.height" />
               <g *ngIf="activePlot.legendPosition === 'right' || activePlot.legendPosition === 'left'">
-                <text [attr.x]="legendX"
-                      [attr.y]="legendY"
+                <text [attr.x]="legendX + (activePlot.legendOffsetX || 0)"
+                      [attr.y]="legendY + (activePlot.legendOffsetY || 0)"
                       [attr.font-family]="activePlot.fontFamily"
                       [attr.font-size]="activePlot.fontSizeLegend"
                       font-weight="bold"
@@ -422,14 +596,14 @@ interface InlineTextEditorState {
                   {{ activePlot.legendTitle || 'Legend' }}
                 </text>
                 <g *ngFor="let leg of legendItems; let lIdx = index">
-                  <rect [attr.x]="legendX"
-                        [attr.y]="legendY + 10 + (lIdx * 20)"
-                        width="14" height="14" rx="2"
+                  <rect [attr.x]="legendX + (activePlot.legendOffsetX || 0)"
+                        [attr.y]="legendY + (activePlot.legendOffsetY || 0) + (10 * legendScale) + (lIdx * 20 * legendScale)"
+                        [attr.width]="14 * legendScale" [attr.height]="14 * legendScale" rx="2"
                         [attr.fill]="leg.color"
                         [attr.stroke]="getBarBorderColor()"
                         stroke-width="0.5" />
-                  <text [attr.x]="legendX + 20"
-                        [attr.y]="legendY + 22 + (lIdx * 20)"
+                  <text [attr.x]="legendX + (activePlot.legendOffsetX || 0) + (20 * legendScale)"
+                        [attr.y]="legendY + (activePlot.legendOffsetY || 0) + (22 * legendScale) + (lIdx * 20 * legendScale)"
                         [attr.font-family]="activePlot.fontFamily"
                         [attr.font-size]="activePlot.fontSizeLegend * 0.9"
                         [attr.fill]="getThemeText()">
@@ -440,14 +614,14 @@ interface InlineTextEditorState {
 
               <g *ngIf="activePlot.legendPosition === 'top' || activePlot.legendPosition === 'bottom'">
                 <g *ngFor="let leg of legendItems; let lIdx = index">
-                  <rect [attr.x]="legendX + (lIdx * 110)"
-                        [attr.y]="legendY - 10"
-                        width="12" height="12" rx="2"
+                  <rect [attr.x]="legendX + (activePlot.legendOffsetX || 0) + (lIdx * 110 * legendScale)"
+                        [attr.y]="legendY + (activePlot.legendOffsetY || 0) - (10 * legendScale)"
+                        [attr.width]="12 * legendScale" [attr.height]="12 * legendScale" rx="2"
                         [attr.fill]="leg.color"
                         [attr.stroke]="getBarBorderColor()"
                         stroke-width="0.5" />
-                  <text [attr.x]="legendX + (lIdx * 110) + 16"
-                        [attr.y]="legendY"
+                  <text [attr.x]="legendX + (activePlot.legendOffsetX || 0) + (lIdx * 110 * legendScale) + (16 * legendScale)"
+                        [attr.y]="legendY + (activePlot.legendOffsetY || 0)"
                         [attr.font-family]="activePlot.fontFamily"
                         [attr.font-size]="activePlot.fontSizeLegend * 0.9"
                         [attr.fill]="getThemeText()">
@@ -455,6 +629,7 @@ interface InlineTextEditorState {
                   </text>
                 </g>
               </g>
+              <circle *ngIf="selectedElement === 'legend'" [attr.cx]="legendBounds.x + legendBounds.width - 2" [attr.cy]="legendBounds.y + legendBounds.height - 2" r="5" class="resize-handle" (mousedown)="beginElementResize('legend', $event)" />
             </g>
 
           </svg>
@@ -713,9 +888,17 @@ interface InlineTextEditorState {
       border-color: #2563eb;
     }
 
+    .type-menu-wrap { position: relative; }.type-menu-button { min-width: 155px; display: inline-flex; justify-content: space-between; align-items: center; cursor: pointer; }.type-menu { position: absolute; z-index: 100; top: 28px; left: 38px; width: 230px; padding: 7px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; box-shadow: 0 10px 24px rgba(15,23,42,.18); }.type-menu-heading { display: block; padding: 6px 8px 3px; color: #94a3b8; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }.type-menu-row { display: grid; grid-template-columns: 1fr 24px; align-items: center; border-radius: 5px; }.type-menu-row:hover { background: #f1f5f9; }.type-menu-row > button:first-child { min-width: 0; padding: 6px 8px; border: none; background: transparent; color: #334155; text-align: left; font-size: 11px; cursor: pointer; }.selected-check { display: inline-block; width: 15px; color: #2563eb; font-weight: 800; }.row-help { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 800; font-size: 10px; cursor: pointer; }.row-help:hover { border-color: #2563eb; color: #ffffff; background: #2563eb; }
+
     .ctrl-input-tag {
       width: 55px;
       text-align: center;
+    }
+
+    .output-size-control {
+      margin-left: 4px;
+      padding-left: 8px;
+      border-left: 1px solid #dbe3ef;
     }
 
     .btn-toggle-inspector {
@@ -736,6 +919,56 @@ interface InlineTextEditorState {
       color: #2563eb;
       border-color: #3b82f6;
     }
+
+    .plot-help-trigger, .gallery-help {
+      display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0;
+      border-radius: 50%; border: 1px solid #94a3b8; background: #ffffff; color: #475569;
+      font-size: 11px; font-weight: 800; cursor: pointer;
+    }
+    .editable-group.selected .clickable-text, .legend-box.selected { filter: drop-shadow(0 0 1px #2563eb); }
+    .selection-box { fill: rgba(37, 99, 235, .035); stroke: #2563eb; stroke-width: 1.3; stroke-dasharray: 4 3; pointer-events: none; }
+    .resize-handle { fill: #2563eb; stroke: #ffffff; stroke-width: 2; cursor: nwse-resize; }
+    .plot-help-trigger:hover, .gallery-help:hover { background: #2563eb; color: #ffffff; border-color: #2563eb; }
+
+    .plot-gallery {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.5fr) repeat(6, minmax(112px, 1fr));
+      gap: 7px;
+      padding: 10px 14px;
+      background: #ffffff;
+      border-bottom: 1px solid #dbe3ef;
+    }
+
+    .plot-gallery-copy { display: grid; gap: 2px; align-content: center; color: #475569; font-size: 10px; }
+    .plot-gallery-copy strong { color: #1e293b; font-size: 11px; }
+    .gallery-card { position: relative; }
+    .plot-gallery .gallery-card > button:first-child {
+      width: 100%; min-height: 50px;
+      text-align: left; background: #f8fafc; border: 1px solid #dbe3ef; border-radius: 6px;
+      padding: 6px 8px; color: #1e293b; font-size: 10.5px; font-weight: 700; cursor: pointer;
+    }
+    .plot-gallery button small { color: #64748b; font-size: 9px; font-weight: 500; }
+    .plot-gallery .gallery-card > button:first-child:hover, .plot-gallery .gallery-card.active > button:first-child { background: #eff6ff; border-color: #60a5fa; color: #1d4ed8; }
+    .gallery-help { position: absolute; top: 5px; right: 5px; background: #ffffff; }
+    @media (max-width: 1100px) { .plot-gallery { grid-template-columns: repeat(3, minmax(130px, 1fr)); } .plot-gallery-copy { grid-column: 1 / -1; } }
+
+    .plot-help-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 18px; background: rgba(15, 23, 42, 0.52); }
+    .plot-help-modal { width: min(980px, 96vw); max-height: min(760px, 92vh); overflow: auto; border-radius: 14px; background: #ffffff; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35); color: #1e293b; }
+    .plot-help-modal header { display: flex; justify-content: space-between; gap: 18px; align-items: start; padding: 21px 24px 14px; border-bottom: 1px solid #e2e8f0; }
+    .eyebrow { display: block; color: #2563eb; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .plot-help-modal h2 { margin: 3px 0 0; font-size: 22px; }
+    .modal-close { border: none; background: #f1f5f9; color: #475569; border-radius: 50%; width: 30px; height: 30px; font-size: 22px; cursor: pointer; }
+    .help-use { margin: 16px 24px; font-size: 13px; line-height: 1.55; color: #475569; }
+    .axis-explainer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 24px 16px; }
+    .axis-explainer div { display: grid; gap: 3px; border: 1px solid #dbe3ef; border-radius: 8px; padding: 10px 12px; background: #f8fafc; }
+    .axis-explainer strong { font-size: 11px; color: #0f766e; text-transform: uppercase; letter-spacing: .04em; }.axis-explainer span { font-size: 12px; color: #475569; }
+    .example-mapping { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0 24px 16px; font-size: 11px; color: #475569; }.example-mapping > strong { color: #1e293b; margin-right: 4px; }.example-mapping span { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 999px; padding: 4px 8px; }.example-mapping b { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+    .help-example-grid { display: grid; grid-template-columns: minmax(260px, .9fr) minmax(340px, 1.1fr); gap: 16px; padding: 0 24px 20px; }
+    .example-heading { font-size: 12px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }.excel-note { font-size: 10px; color: #64748b; margin-bottom: 8px; }
+    .example-table-wrap { overflow: auto; border: 1px solid #dbe3ef; border-radius: 8px; }.example-table-wrap table { width: 100%; border-collapse: collapse; font-size: 10px; }.example-table-wrap th { background: #eff6ff; color: #1e40af; }.example-table-wrap th,.example-table-wrap td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }.example-table-wrap tr:last-child td { border-bottom: none; }
+    .example-plot app-r-plot-preview { display: block; border: 1px solid #dbe3ef; border-radius: 8px; overflow: hidden; }
+    .plot-help-modal footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 24px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 11px; }.help-actions { display: flex; gap: 7px; }.load-example-btn,.download-example-btn { border: none; border-radius: 7px; padding: 8px 12px; font-weight: 700; cursor: pointer; }.load-example-btn { background: #2563eb; color: #ffffff; }.download-example-btn { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    @media (max-width: 720px) { .axis-explainer,.help-example-grid { grid-template-columns: 1fr; }.plot-help-modal footer { align-items: stretch; flex-direction: column; } }
 
     .export-actions {
       display: flex;
@@ -780,18 +1013,57 @@ interface InlineTextEditorState {
       cursor: pointer;
     }
 
-    /* HORIZONTAL INSPECTOR STRIP */
+    /* Customization modal: settings stay out of the canvas workspace. */
+    .customize-backdrop { position: fixed; inset: 0; z-index: 10001; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .52); }
+    .customize-modal { width: min(1280px, 96vw); max-height: min(760px, 90vh); overflow: auto; border: 1px solid #dbe3ef; border-radius: 14px; background: #f8fafc; box-shadow: 0 24px 70px rgba(15, 23, 42, .35); color: #1e293b; }
+    .customize-modal-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding: 20px 24px 15px; background: #ffffff; border-bottom: 1px solid #dbe3ef; }
+    .customize-modal-header h2 { margin: 3px 0 4px; font-size: 23px; }
+    .customize-modal-header p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.45; }
+    .customize-content { display: grid; grid-template-columns: minmax(520px, 1.15fr) minmax(360px, .85fr); align-items: stretch; }
+    .customize-preview { display: flex; flex-direction: column; gap: 9px; min-height: 390px; padding: 18px; background: #ffffff; border-left: 1px solid #dbe3ef; }
+    .customize-preview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #64748b; }.customize-preview-heading span { color: #475569; font-size: 10px; font-weight: 800; letter-spacing: .09em; }.customize-preview-heading small { font-size: 10px; }
+    .customize-preview app-r-plot-preview { display: block; flex: 1; min-height: 300px; border: 1px solid #dbe3ef; border-radius: 9px; overflow: hidden; background: #ffffff; }
+
     .horizontal-inspector-strip {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-      align-items: center;
-      column-gap: 12px;
-      row-gap: 6px;
-      padding: 6px 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      gap: 12px;
+      padding: 18px 22px 22px;
       background: #f1f5f9;
-      border-bottom: 1.5px solid #e2e8f0;
-      overflow: hidden;
     }
+
+    .inspector-hint {
+      grid-column: 1 / -1;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 0 2px 2px;
+    }
+
+    .inspector-section {
+      display: flex;
+      align-content: start;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-height: 122px;
+      padding: 14px;
+      border: 1px solid #dbe3ef;
+      border-radius: 10px;
+      background: #ffffff;
+    }
+    .inspector-section .insp-strip-item { flex-wrap: wrap; }
+    .unit-label { color: #64748b; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .inspector-section-title {
+      width: 100%;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .field-help { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: #e2e8f0; color: #475569; font-size: 9px; font-weight: 800; cursor: help; }
 
     .insp-strip-item {
       display: flex;
@@ -800,6 +1072,7 @@ interface InlineTextEditorState {
       font-size: 10px;
       color: #334155;
       min-width: 0;
+      flex-wrap: wrap;
     }
 
     .insp-strip-item label {
@@ -810,7 +1083,7 @@ interface InlineTextEditorState {
     }
 
     .insp-strip-item input[type="range"] {
-      width: 70px;
+      width: min(138px, 100%);
       accent-color: #2563eb;
       margin: 0;
       padding: 0;
@@ -819,6 +1092,35 @@ interface InlineTextEditorState {
       height: 14px;
       background: transparent;
     }
+
+    .insp-strip-item input[type="number"], .inline-number {
+      width: 68px;
+      min-width: 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 3px 5px;
+      background: #ffffff;
+      color: #0f172a;
+      font-size: 11px;
+    }
+
+    .palette-strip input[type="color"] {
+      width: 20px;
+      height: 20px;
+      padding: 1px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .horizontal-inspector-strip .ctrl-select {
+      max-width: 180px;
+    }
+
+    .palette-strip { width: 100%; }
+    @media (max-width: 920px) { .customize-content { grid-template-columns: 1fr; } .customize-preview { border-left: none; border-top: 1px solid #dbe3ef; min-height: 320px; } }
+    @media (max-width: 720px) { .horizontal-inspector-strip { grid-template-columns: 1fr; padding: 14px; } .customize-backdrop { padding: 10px; } .customize-modal { width: 100%; max-height: 94vh; } .customize-modal-header { padding: 16px; } }
 
     .insp-strip-item input[type="range"]::-webkit-slider-runnable-track {
       width: 100%;
@@ -854,10 +1156,7 @@ interface InlineTextEditorState {
       cursor: pointer;
     }
 
-    .chk-strip-item {
-      grid-column: 1 / span 2;
-      margin-left: 0;
-    }
+    .chk-strip-item { width: 100%; margin-left: 0; }
 
     .chk-label {
       display: flex;
@@ -872,10 +1171,22 @@ interface InlineTextEditorState {
       white-space: nowrap;
     }
 
+    .draggable-element {
+      cursor: grab;
+    }
+
+    .draggable-element:active {
+      cursor: grabbing;
+    }
+
+    .draggable-element:hover .clickable-text, .legend-box:hover text {
+      filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.35));
+    }
+
     .btn-close-strip {
-      grid-column: 3;
-      grid-row: 1;
-      margin-left: 0;
+      position: absolute;
+      right: 7px;
+      top: 6px;
       background: transparent;
       border: none;
       color: #64748b;
@@ -978,6 +1289,8 @@ interface InlineTextEditorState {
       background: #e2e8f0;
       color: #0f172a;
     }
+    .chk-label:has(input:disabled) { color: #94a3b8; cursor: not-allowed; }
+    .chk-label input:disabled { cursor: not-allowed; opacity: .55; }
 
     .canvas-viewport {
       flex: 1;
@@ -1334,8 +1647,15 @@ export class RPlotCanvasComponent implements OnInit {
   columns: string[] = [];
 
   showInspector = false;
+  showTypeMenu = false;
+  plotHelp: PlotHelpCard | null = null;
+  readonly advancedPlotTypes: PlotType[] = ['violin', 'dotplot', 'histogram', 'density', 'volcano', 'heatmap'];
+  readonly commonPlotTypes: PlotType[] = ['bar', 'line', 'scatter', 'boxplot'];
   showZoomPopover = false;
   selectedExportFormat: 'png' | 'pdf' | 'svg' = 'png';
+  private elementDrag: ElementDragState | null = null;
+  private suppressEditorClick = false;
+  selectedElement: DraggableElement | null = null;
 
   zoomScale = 1.0;
   panX = 0;
@@ -1358,9 +1678,19 @@ export class RPlotCanvasComponent implements OnInit {
   renderItems: Array<any> = [];
   lineSeries: Array<{ color: string; pointsStr: string; points: Array<{ x: number; y: number }> }> = [];
   legendItems: Array<{ label: string; color: string }> = [];
+  heatmapRows: Array<{ label: string; y: number }> = [];
+  heatmapColorMin = 0;
+  heatmapColorMax = 1;
+  heatmapIsDiverging = false;
+  private heatmapPalette: string[] = ['#2563EB', '#EF4444'];
 
   legendX = 600;
   legendY = 80;
+  private yDomainMin = 0;
+  private yDomainMax = 10;
+  private xDomainMin = 0;
+  private xDomainMax = 10;
+  private continuousX = false;
 
   textEditor: InlineTextEditorState = {
     isOpen: false,
@@ -1402,6 +1732,20 @@ export class RPlotCanvasComponent implements OnInit {
     return list[Math.max(0, idx)] || list[0];
   }
 
+  get figureWidthIn(): number { return Number(this.activePlot?.figureWidthIn) || 6.5; }
+  get figureHeightIn(): number { return Number(this.activePlot?.figureHeightIn) || 4.5; }
+  get exportDpi(): number { return Number(this.activePlot?.exportDpi) || 300; }
+
+  get publicationPreset(): string {
+    const width = this.figureWidthIn;
+    const height = this.figureHeightIn;
+    if (Math.abs(width - 3.5) < 0.05 && Math.abs(height - 2.7) < 0.05) return 'journal-single';
+    if (Math.abs(width - 7.2) < 0.05 && Math.abs(height - 4.8) < 0.05) return 'journal-double';
+    if (Math.abs(width - 5) < 0.05 && Math.abs(height - 5) < 0.05) return 'square';
+    if (Math.abs(width - 10) < 0.05 && Math.abs(height - 5.625) < 0.05) return 'slide';
+    return 'custom';
+  }
+
   get plotWidth(): number {
     return Math.max(10, this.svgWidth - this.margin.left - this.margin.right);
   }
@@ -1410,8 +1754,115 @@ export class RPlotCanvasComponent implements OnInit {
     return Math.max(10, this.svgHeight - this.margin.top - this.margin.bottom);
   }
 
+  private valueToY(value: number): number {
+    const range = Math.max(0.000001, this.yDomainMax - this.yDomainMin);
+    return this.svgHeight - this.margin.bottom - (((value - this.yDomainMin) / range) * this.plotHeight);
+  }
+
+  private valueToX(value: number): number {
+    const range = Math.max(0.000001, this.xDomainMax - this.xDomainMin);
+    return this.margin.left + (((value - this.xDomainMin) / range) * this.plotWidth);
+  }
+
+  /** Interpolate all selected palette stops so heatmaps honor Appearance > Palette. */
+  private heatColor(value: number, min: number, max: number, palette: string[]): string {
+    const low = palette[0] || '#2166AC';
+    const high = palette[1] || palette[palette.length - 1] || '#B2182B';
+    if (min < 0 && max > 0) {
+      return value <= 0
+        ? this.blendColors(low, '#ffffff', (value - min) / Math.max(0.000001, -min))
+        : this.blendColors('#ffffff', high, value / Math.max(0.000001, max));
+    }
+    return this.blendColors(min < 0 ? low : '#ffffff', max > 0 ? high : '#ffffff', (value - min) / Math.max(0.000001, max - min));
+  }
+
+  private blendColors(from: string, to: string, amount: number): string {
+    const mix = Math.max(0, Math.min(1, amount));
+    const lower = this.hexToRgb(from);
+    const upper = this.hexToRgb(to);
+    return `rgb(${Math.round(lower.r + ((upper.r - lower.r) * mix))}, ${Math.round(lower.g + ((upper.g - lower.g) * mix))}, ${Math.round(lower.b + ((upper.b - lower.b) * mix))})`;
+  }
+
+  private hexToRgb(color: string): { r: number; g: number; b: number } {
+    const hex = color.replace('#', '');
+    const normalized = hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex;
+    const value = Number.parseInt(normalized, 16);
+    return Number.isFinite(value)
+      ? { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 }
+      : { r: 33, g: 102, b: 172 };
+  }
+
+  get heatmapLowColor(): string { return this.heatmapPalette[0] || '#2166AC'; }
+  get heatmapMidColor(): string { return '#ffffff'; }
+  get heatmapHighColor(): string { return this.heatmapPalette[1] || this.heatmapPalette[this.heatmapPalette.length - 1] || '#B2182B'; }
+  get heatmapLegendX(): number { return this.margin.left + this.plotWidth + 24; }
+  get heatmapValueLabel(): string { return this.activePlot?.yColumn || 'Value'; }
+  formatHeatValue(value: number): string { return Number(value.toFixed(2)).toString(); }
+
   selectPlotTab(idx: number) {
     this.rSyncService.setActivePlotIndex(idx);
+  }
+
+  choosePlotType(type: PlotType) {
+    const defaults: Partial<PlotState> = {
+      chartType: type,
+      showRawPoints: true,
+      showTrendLine: type === 'scatter',
+      showConfidenceBand: false,
+      binCount: 30,
+      xScale: 'linear',
+      yScale: 'linear',
+      // A plot type change starts with data-driven limits; fixed values are
+      // deliberate per-figure overrides, never defaults carried across types.
+      yMin: null,
+      yMax: null
+    };
+    if (type === 'volcano') {
+      Object.assign(defaults, { xLabel: 'log2 fold change', yLabel: '-log10 adjusted P value', thresholdX: 1, thresholdY: 1.3, legendPosition: 'none' });
+    }
+    this.updateActiveState(defaults);
+    this.showTypeMenu = false;
+  }
+
+  plotName(type: PlotType): string {
+    return ({ bar: 'Bar chart', line: 'Line plot', scatter: 'Scatter plot', boxplot: 'Boxplot', violin: 'Violin plot', dotplot: 'Dot plot', histogram: 'Histogram', density: 'Density plot', volcano: 'Volcano plot', heatmap: 'Heatmap' } as Record<PlotType, string>)[type];
+  }
+
+  plotSummary(type: PlotType): string {
+    return ({ bar: 'group means and error bars', line: 'time course or kinetics', scatter: 'association or standard curve', boxplot: 'quartile summary', violin: 'distribution + raw data', dotplot: 'paired / replicate values', histogram: 'one numeric variable', density: 'distribution comparison', volcano: 'logFC vs -log10 FDR', heatmap: 'matrix / grouped values' } as Record<PlotType, string>)[type];
+  }
+
+  openPlotHelp(type: PlotType) {
+    const copy: Record<PlotType, Omit<PlotHelpCard, 'type' | 'columns' | 'rows' | 'plot'>> = {
+      bar: { name: 'Bar chart', use: 'Compare summarized group values, especially when each bar is a mean with SD, SEM, or confidence-interval error bars.', xMeaning: 'Experimental condition or category.', yMeaning: 'A summarized measurement such as mean expression or activity.' },
+      line: { name: 'Line / time-course plot', use: 'Show how a measurement changes over ordered time points, doses, or other continuous conditions; use a group column for multiple trajectories.', xMeaning: 'Ordered time, dose, or measurement interval.', yMeaning: 'Response measured at each interval.' },
+      scatter: { name: 'Scatter / regression plot', use: 'Show the relationship between two continuous variables, such as a standard curve, concentration-response association, or correlation.', xMeaning: 'First continuous measurement or predictor.', yMeaning: 'Second continuous measurement or response.' },
+      boxplot: { name: 'Boxplot', use: 'Compare distributions across groups when showing medians, interquartile ranges, and potential outliers matters more than just a mean.', xMeaning: 'Experimental group or category.', yMeaning: 'Individual replicate measurement.' },
+      violin: { name: 'Violin plot', use: 'Show the shape and spread of replicate-level data, while retaining a compact statistical summary and raw points.', xMeaning: 'Experimental group or category.', yMeaning: 'Individual replicate measurement.' },
+      dotplot: { name: 'Dot plot', use: 'Show every observation directly. This is often preferable for small biological replicate counts and paired measurements.', xMeaning: 'Experimental group or paired condition.', yMeaning: 'Individual replicate measurement.' },
+      histogram: { name: 'Histogram', use: 'Inspect the frequency distribution of one continuous variable before choosing tests or identifying unusual values.', xMeaning: 'Numeric measurement divided into bins.', yMeaning: 'Number of observations in each bin.' },
+      density: { name: 'Density plot', use: 'Compare the smoothed distribution of one continuous variable, especially with many observations.', xMeaning: 'Numeric measurement.', yMeaning: 'Estimated relative density, not a raw count.' },
+      volcano: { name: 'Volcano plot', use: 'Prioritize differential-expression or screening results by displaying effect size and statistical significance together.', xMeaning: 'log2 fold change; left is lower and right is higher relative to the reference.', yMeaning: '-log10 adjusted P value; higher means stronger statistical evidence.' },
+      heatmap: { name: 'Heatmap', use: 'Show a numeric matrix such as scaled expression values across genes and samples or conditions.', xMeaning: 'Samples, conditions, or features across columns.', yMeaning: 'Rows/groups such as genes, pathways, or markers; color encodes the numeric value.' }
+    };
+    const example = this.rSyncService.getPlotExample(type);
+    this.plotHelp = { type, ...copy[type], ...example };
+  }
+
+  closePlotHelp() { this.plotHelp = null; }
+
+  loadHelpExample() {
+    if (!this.plotHelp) return;
+    this.rSyncService.loadPlotExample(this.plotHelp.type);
+    this.closePlotHelp();
+  }
+
+  downloadHelpExample() {
+    if (!this.plotHelp) return;
+    const worksheet = XLSX.utils.json_to_sheet(this.plotHelp.rows, { header: this.plotHelp.columns });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Example data');
+    XLSX.writeFile(workbook, `${this.plotHelp.type}-plot-example.xlsx`);
   }
 
   addPlotTab() {
@@ -1447,8 +1898,44 @@ export class RPlotCanvasComponent implements OnInit {
     }
   }
 
+  applyPublicationPreset(preset: string) {
+    const presets: Record<string, Partial<PlotState>> = {
+      'journal-single': { figureWidthIn: 3.5, figureHeightIn: 2.7, exportDpi: 600 },
+      'journal-double': { figureWidthIn: 7.2, figureHeightIn: 4.8, exportDpi: 600 },
+      square: { figureWidthIn: 5, figureHeightIn: 5, exportDpi: 300 },
+      slide: { figureWidthIn: 10, figureHeightIn: 5.625, exportDpi: 300 }
+    };
+    if (presets[preset]) this.updateActiveState(presets[preset]);
+  }
+
+  get palettePreset(): string {
+    const palette = (this.activePlot?.palette || []).map(color => color.toLowerCase()).join(',');
+    if (palette === ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'].join(',')) return 'publication';
+    if (palette === ['#0072b2', '#e69f00', '#009e73', '#cc79a7', '#56b4e9'].join(',')) return 'colorblind';
+    if (palette === ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'].join(',')) return 'viridis';
+    if (palette === ['#111827', '#4b5563', '#9ca3af', '#d1d5db', '#e5e7eb'].join(',')) return 'mono';
+    return 'custom';
+  }
+
+  applyPalette(preset: string) {
+    const palettes: Record<string, string[]> = {
+      publication: ['#2563EB', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'],
+      colorblind: ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9'],
+      viridis: ['#440154', '#3B528B', '#21918C', '#5EC962', '#FDE725'],
+      mono: ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#E5E7EB']
+    };
+    if (palettes[preset]) this.updateActiveState({ palette: palettes[preset] });
+  }
+
+  updatePaletteColor(index: number, color: string) {
+    const palette = [...(this.activePlot.palette || [])];
+    palette[index] = color;
+    this.updateActiveState({ palette });
+  }
+
   getThemeBg(): string {
     if (this.activePlot?.theme === 'dark') return '#0f172a';
+    if (this.activePlot?.background === 'transparent') return 'transparent';
     return '#ffffff';
   }
 
@@ -1477,13 +1964,114 @@ export class RPlotCanvasComponent implements OnInit {
     return '#1e293b';
   }
 
-  openInlineEditor(field: 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legendTitle', label: string, currentVal: string) {
+  openInlineEditor(field: 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legendTitle' | 'figureTag', label: string, currentVal: string) {
     this.textEditor = {
       isOpen: true,
       field,
       label,
       value: currentVal || ''
     };
+  }
+
+  onEditableClick(field: 'title' | 'subtitle' | 'xLabel' | 'yLabel' | 'legendTitle' | 'figureTag', label: string, currentVal: string) {
+    if (this.suppressEditorClick) {
+      this.suppressEditorClick = false;
+      return;
+    }
+    this.openInlineEditor(field, label, currentVal);
+  }
+
+  beginElementDrag(element: DraggableElement, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.selectedElement = element;
+    this.elementDrag = { element, mode: 'move', x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, startSize: this.elementFontSize(element) };
+  }
+
+  beginElementResize(element: DraggableElement, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.selectedElement = element;
+    this.elementDrag = { element, mode: 'resize', x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, startSize: this.elementFontSize(element) };
+  }
+
+  private elementFontSize(element: DraggableElement): number {
+    if (element === 'title') return this.activePlot.fontSizeTitle || 16;
+    if (element === 'subtitle') return this.subtitleFontSize;
+    if (element === 'tag') return this.activePlot.fontSizeTag || 18;
+    if (element === 'legend') return this.activePlot.fontSizeLegend || 11;
+    return element === 'xLabel' ? this.xLabelFontSize : this.yLabelFontSize;
+  }
+
+  textHandleWidth(text: string, fontSize: number): number {
+    // Latin glyphs are roughly 0.6em wide; CJK/Korean glyphs are close to a
+    // full em.  This keeps the selection frame and handle aligned for both.
+    const size = Math.max(9, fontSize);
+    const width = Array.from(String(text || '')).reduce((sum, character) => {
+      return sum + size * (character.charCodeAt(0) > 0x7f ? 1.02 : 0.6);
+    }, 0);
+    return Math.max(12, width + 12);
+  }
+
+  get subtitleFontSize(): number {
+    return this.activePlot?.fontSizeSubtitle || Math.round((this.activePlot?.fontSizeTitle || 16) * 0.75);
+  }
+
+  get xLabelFontSize(): number {
+    return this.activePlot?.fontSizeXAxis || this.activePlot?.fontSizeAxis || 12;
+  }
+
+  get yLabelFontSize(): number {
+    return this.activePlot?.fontSizeYAxis || this.activePlot?.fontSizeAxis || 12;
+  }
+
+  get minorGridYs(): number[] {
+    if (!this.activePlot?.showMinorGrid || this.yTicks.length < 2) return [];
+    return this.yTicks.slice(0, -1).map((tick, index) => (tick.y + this.yTicks[index + 1].y) / 2);
+  }
+
+  get canUseErrorBars(): boolean {
+    // Error bars need an assigned numeric error column and are only rendered
+    // by the summary-style plots that support them in the canvas/R script.
+    return !!this.activePlot?.errorColumn
+      && ['bar', 'line'].includes(this.activePlot.chartType);
+  }
+
+  get isSingleVariablePlotHelp(): boolean {
+    return this.plotHelp?.type === 'histogram' || this.plotHelp?.type === 'density';
+  }
+
+  get xLabelX(): number {
+    return this.margin.left + (this.plotWidth / 2) + (this.activePlot?.xLabelOffsetX ?? this.activePlot?.xLabelOffset ?? 0);
+  }
+
+  get xLabelY(): number {
+    return this.svgHeight - 12 + (this.activePlot?.xLabelOffsetY || 0);
+  }
+
+  get yLabelLocalX(): number {
+    // The local x axis becomes screen Y after rotate(-90), so invert screen Y.
+    return -(this.margin.top + (this.plotHeight / 2)) - (this.activePlot?.yLabelOffsetY || 0);
+  }
+
+  get yLabelLocalY(): number {
+    // The local y axis becomes screen X after rotate(-90).
+    return Math.max(14, this.margin.left - 45) + (this.activePlot?.yLabelOffsetX ?? this.activePlot?.yLabelOffset ?? 0);
+  }
+
+  get legendBounds(): { x: number; y: number; width: number; height: number } {
+    const x = this.legendX + (this.activePlot?.legendOffsetX || 0) - 7;
+    const y = this.legendY + (this.activePlot?.legendOffsetY || 0) - (this.activePlot?.fontSizeLegend || 11) - 4;
+    const horizontal = this.activePlot?.legendPosition === 'top' || this.activePlot?.legendPosition === 'bottom';
+    const titleWidth = this.textHandleWidth(this.activePlot?.legendTitle || 'Legend', this.activePlot?.fontSizeLegend || 11);
+    const rowWidth = Math.max(0, ...this.legendItems.map(item => (20 * this.legendScale) + this.textHandleWidth(item.label, (this.activePlot?.fontSizeLegend || 11) * 0.9)));
+    const width = horizontal ? Math.max(titleWidth, 20, this.legendItems.length * 110 * this.legendScale) : Math.max(titleWidth, rowWidth) + 10;
+    const height = horizontal ? Math.max(30, 26 * this.legendScale) : Math.max(28, (18 + this.legendItems.length * 20) * this.legendScale);
+    return { x, y, width, height };
+  }
+
+  get legendScale(): number {
+    return Math.max(0.7, Math.min(2.55, (this.activePlot?.fontSizeLegend || 11) / 11));
   }
 
   closeInlineEditor() {
@@ -1499,6 +2087,9 @@ export class RPlotCanvasComponent implements OnInit {
     const s = this.activePlot;
     if (!s) return;
 
+    // Keep the on-screen artboard in the same aspect ratio as the exported R figure.
+    this.svgHeight = Math.max(300, Math.min(760, Math.round(this.svgWidth * this.figureHeightIn / this.figureWidthIn)));
+
     const activeData = (this.data && this.data.length > 0)
       ? this.data
       : [
@@ -1511,21 +2102,43 @@ export class RPlotCanvasComponent implements OnInit {
     const yCol = s.yColumn || Object.keys(activeData[0])[1] || Object.keys(activeData[0])[0];
     const grpCol = s.groupColumn;
     const errCol = s.errorColumn;
+    const densityValues = s.chartType === 'density'
+      ? activeData.map(row => Number(row[xCol])).filter(value => Number.isFinite(value))
+      : [];
 
     // 1. Calculate Y Min / Max & Ticks
-    let maxVal = 0;
+    let maxVal = Number.NEGATIVE_INFINITY;
+    let minVal = Number.POSITIVE_INFINITY;
     activeData.forEach(r => {
       const v = Number(r[yCol]) || 0;
       const err = errCol ? (Number(r[errCol]) || 0) : 0;
       if (v + err > maxVal) maxVal = v + err;
+      if (v - err < minVal) minVal = v - err;
     });
-    if (maxVal === 0) maxVal = 10;
+    if (s.chartType === 'density' && densityValues.length) {
+      const rawMin = Math.min(...densityValues);
+      const rawMax = Math.max(...densityValues);
+      const span = Math.max(0.00001, rawMax - rawMin);
+      const bandwidth = Math.max(0.00001, (span * 1.12) / 12);
+      const densityPeak = Math.max(...Array.from({ length: 48 }, (_, index) => {
+        const value = rawMin - (span * 0.06) + ((span * 1.12) * index / 47);
+        return densityValues.reduce((sum, current) => sum + Math.exp(-0.5 * Math.pow((value - current) / bandwidth, 2)), 0) / densityValues.length;
+      }));
+      minVal = 0;
+      maxVal = Math.max(0.01, densityPeak);
+    }
+    if (!Number.isFinite(maxVal) || maxVal === 0) maxVal = 10;
+    if (!Number.isFinite(minVal)) minVal = 0;
 
-    const yCeil = Math.ceil(maxVal * 1.15);
+    const defaultFloor = s.chartType === 'bar' ? 0 : Math.min(0, Math.floor(minVal * 1.08));
+    this.yDomainMin = s.yMin === null || s.yMin === undefined ? defaultFloor : Number(s.yMin);
+    this.yDomainMax = s.yMax === null || s.yMax === undefined ? Math.ceil(maxVal * 1.15) : Number(s.yMax);
+    if (this.yDomainMax <= this.yDomainMin) this.yDomainMax = this.yDomainMin + 1;
+    const yRange = this.yDomainMax - this.yDomainMin;
     const tickCount = 5;
     this.yTicks = [];
     for (let i = 0; i <= tickCount; i++) {
-      const val = Math.round((yCeil / tickCount) * i * 10) / 10;
+      const val = Math.round((this.yDomainMin + ((yRange / tickCount) * i)) * 100) / 100;
       this.yTicks.push({ val, y: 0 });
     }
 
@@ -1537,7 +2150,7 @@ export class RPlotCanvasComponent implements OnInit {
     const hasTag = !!s.figureTag && s.figureTag.trim() !== '';
     const hasSubtitle = !!s.subtitle && s.subtitle.trim() !== '';
     this.tagX = 18;
-    this.titleX = hasTag ? 48 : 18;
+    this.titleX = hasTag ? this.tagX + this.textHandleWidth(s.figureTag, s.fontSizeTag || 18) + 10 : 18;
     this.titleY = 24;
     this.subtitleY = 40;
 
@@ -1562,13 +2175,26 @@ export class RPlotCanvasComponent implements OnInit {
     } else { // 'none'
       this.margin = { top: hasSubtitle ? 56 : 40, right: 35, bottom: 65, left: baseLeftMargin };
     }
+    // A heatmap has a numeric fill scale, even when the categorical legend is hidden.
+    if (s.chartType === 'heatmap') this.margin.right = Math.max(this.margin.right, 112);
 
     // Recompute tick Y positions
     this.yTicks.forEach(t => {
-      t.y = this.svgHeight - this.margin.bottom - ((t.val / yCeil) * this.plotHeight);
+      t.y = this.valueToY(t.val);
     });
 
-    // 4. Groups & Categories
+    // 4. Groups & Categories. Scatter, volcano and distribution plots need a
+    // continuous X scale when the selected spreadsheet column is numeric.
+    const xValues = activeData.map(r => Number(r[xCol]));
+    this.continuousX = ['scatter', 'volcano', 'histogram', 'density'].includes(s.chartType)
+      && xValues.length > 0 && xValues.every(value => Number.isFinite(value));
+    if (this.continuousX) {
+      const rawMin = Math.min(...xValues);
+      const rawMax = Math.max(...xValues);
+      const padding = rawMax === rawMin ? 1 : (rawMax - rawMin) * 0.06;
+      this.xDomainMin = rawMin - padding;
+      this.xDomainMax = rawMax + padding;
+    }
     const xCategories = Array.from(new Set(activeData.map(r => String(r[xCol] ?? '')))).filter(c => c.trim() !== '');
     const groups = grpCol ? Array.from(new Set(activeData.map(r => String(r[grpCol] ?? '')))).filter(g => g.trim() !== '') : ['Default'];
 
@@ -1580,20 +2206,26 @@ export class RPlotCanvasComponent implements OnInit {
       palette = ['#1F2937', '#4B5563', '#9CA3AF', '#D1D5DB', '#E5E7EB'];
     }
 
-    this.legendItems = groups.map((g, idx) => ({
+    this.legendItems = s.chartType === 'heatmap' ? [] : groups.map((g, idx) => ({
       label: g,
       color: palette[idx % palette.length]
     }));
 
     const numCategories = Math.max(1, xCategories.length);
     const categoryWidth = this.plotWidth / numCategories;
-    this.chartGroups = xCategories.map((cat, idx) => ({
-      label: cat,
-      x: this.margin.left + (idx * categoryWidth) + (categoryWidth / 2)
-    }));
+    this.chartGroups = this.continuousX
+      ? Array.from({ length: 6 }, (_, index) => {
+          const value = this.xDomainMin + ((this.xDomainMax - this.xDomainMin) * index / 5);
+          return { label: Number(value.toFixed(2)).toString(), x: this.valueToX(value) };
+        })
+      : xCategories.map((cat, idx) => ({
+          label: cat,
+          x: this.margin.left + (idx * categoryWidth) + (categoryWidth / 2)
+        }));
 
     this.renderItems = [];
     this.lineSeries = [];
+    this.heatmapRows = [];
 
     if (s.chartType === 'bar' || s.chartType === 'boxplot') {
       xCategories.forEach((cat, xIdx) => {
@@ -1610,17 +2242,17 @@ export class RPlotCanvasComponent implements OnInit {
             const val = Number(row[yCol]) || 0;
             const err = (errCol && row[errCol] !== undefined) ? (Number(row[errCol]) || 0) : 0;
 
-            const height = Math.max(0, (val / yCeil) * this.plotHeight);
+            const height = Math.max(0, this.valueToY(this.yDomainMin) - this.valueToY(val));
             const x = startX + (gIdx * subBarWidth);
-            const y = this.svgHeight - this.margin.bottom - height;
+            const y = this.valueToY(val);
             const centerX = x + (subBarWidth / 2);
             const color = palette[gIdx % palette.length];
 
             let errYMin: number | undefined = undefined;
             let errYMax: number | undefined = undefined;
             if (err > 0 && s.showErrorBars) {
-              errYMin = Math.max(this.margin.top, this.svgHeight - this.margin.bottom - (((val + err) / yCeil) * this.plotHeight));
-              errYMax = Math.min(this.svgHeight - this.margin.bottom, this.svgHeight - this.margin.bottom - (((Math.max(0, val - err)) / yCeil) * this.plotHeight));
+              errYMin = Math.max(this.margin.top, this.valueToY(val + err));
+              errYMax = Math.min(this.svgHeight - this.margin.bottom, this.valueToY(Math.max(this.yDomainMin, val - err)));
             }
 
             this.renderItems.push({
@@ -1634,14 +2266,14 @@ export class RPlotCanvasComponent implements OnInit {
           if (!row) return;
           const val = Number(row[yCol]) || 0;
           const err = (errCol && row[errCol] !== undefined) ? (Number(row[errCol]) || 0) : 0;
-          const height = Math.max(0, (val / yCeil) * this.plotHeight);
-          const y = this.svgHeight - this.margin.bottom - height;
+          const height = Math.max(0, this.valueToY(this.yDomainMin) - this.valueToY(val));
+          const y = this.valueToY(val);
 
           let errYMin: number | undefined = undefined;
           let errYMax: number | undefined = undefined;
           if (err > 0 && s.showErrorBars) {
-            errYMin = Math.max(this.margin.top, this.svgHeight - this.margin.bottom - (((val + err) / yCeil) * this.plotHeight));
-            errYMax = Math.min(this.svgHeight - this.margin.bottom, this.svgHeight - this.margin.bottom - (((Math.max(0, val - err)) / yCeil) * this.plotHeight));
+            errYMin = Math.max(this.margin.top, this.valueToY(val + err));
+            errYMax = Math.min(this.svgHeight - this.margin.bottom, this.valueToY(Math.max(this.yDomainMin, val - err)));
           }
 
           this.renderItems.push({
@@ -1649,21 +2281,51 @@ export class RPlotCanvasComponent implements OnInit {
           });
         }
       });
-    } else if (s.chartType === 'scatter') {
+    } else if (s.chartType === 'violin') {
+      xCategories.forEach((cat, xIdx) => {
+        const values = activeData.filter(row => String(row[xCol]) === cat).map(row => Number(row[yCol])).filter(value => Number.isFinite(value)).sort((a, b) => a - b);
+        if (!values.length) return;
+        const centerX = this.margin.left + (xIdx * categoryWidth) + (categoryWidth / 2);
+        const topY = this.valueToY(values[values.length - 1]);
+        const bottomY = this.valueToY(values[0]);
+        const medianY = this.valueToY(values[Math.floor(values.length / 2)]);
+        const width = Math.min(92, categoryWidth * Math.max(0.25, s.barWidth));
+        this.renderItems.push({
+          centerX, centerY: (topY + bottomY) / 2, width, height: Math.max(18, bottomY - topY), medianY,
+          color: palette[xIdx % palette.length],
+          points: values.map((value, index) => ({ x: centerX + ((index % 3) - 1) * 8, y: this.valueToY(value) }))
+        });
+      });
+    } else if (s.chartType === 'scatter' || s.chartType === 'dotplot' || s.chartType === 'volcano') {
       activeData.forEach(r => {
         const catIndex = xCategories.indexOf(String(r[xCol]));
-        const catCenterX = catIndex >= 0
-          ? this.margin.left + (catIndex * categoryWidth) + (categoryWidth / 2)
-          : this.margin.left + (Number(r[xCol]) || 0);
+        const numericX = Number(r[xCol]);
+        const dotJitter = s.chartType === 'dotplot' ? ((Math.random() - 0.5) * Math.min(18, categoryWidth * 0.25)) : 0;
+        const catCenterX = this.continuousX && Number.isFinite(numericX)
+          ? this.valueToX(numericX)
+          : (catIndex >= 0 ? this.margin.left + (catIndex * categoryWidth) + (categoryWidth / 2) + dotJitter : this.margin.left);
 
         const val = Number(r[yCol]) || 0;
-        const y = this.svgHeight - this.margin.bottom - ((val / yCeil) * this.plotHeight);
+        const y = this.valueToY(val);
         const gIdx = grpCol ? groups.indexOf(String(r[grpCol])) : 0;
         const color = palette[Math.max(0, gIdx) % palette.length];
 
         this.renderItems.push({ centerX: catCenterX, y, color });
       });
-    } else if (s.chartType === 'line') {
+    } else if (s.chartType === 'line' || s.chartType === 'density') {
+      if (s.chartType === 'density') {
+        const values = densityValues;
+        const bins = Math.max(20, Math.min(70, Number(s.binCount) || 35));
+        const span = Math.max(0.00001, this.xDomainMax - this.xDomainMin);
+        const bandwidth = span / 12;
+        const points = Array.from({ length: bins }, (_, index) => {
+          const value = this.xDomainMin + (span * index / (bins - 1));
+          const density = values.reduce((sum, current) => sum + Math.exp(-0.5 * Math.pow((value - current) / bandwidth, 2)), 0) / Math.max(1, values.length);
+          return { x: this.valueToX(value), y: this.valueToY(density) };
+        });
+        this.lineSeries.push({ color: palette[0], pointsStr: points.map(point => `${point.x},${point.y}`).join(' '), points });
+        return;
+      }
       groups.forEach((g, gIdx) => {
         const color = palette[gIdx % palette.length];
         const points: Array<{ x: number; y: number }> = [];
@@ -1673,13 +2335,66 @@ export class RPlotCanvasComponent implements OnInit {
           const row = activeData.find(r => String(r[xCol]) === cat && (!grpCol || String(r[grpCol]) === g));
           if (row) {
             const val = Number(row[yCol]) || 0;
-            const y = this.svgHeight - this.margin.bottom - ((val / yCeil) * this.plotHeight);
+            const y = this.valueToY(val);
             points.push({ x: catCenterX, y });
           }
         });
 
         const pointsStr = points.map(pt => `${pt.x},${pt.y}`).join(' ');
         this.lineSeries.push({ color, pointsStr, points });
+      });
+    } else if (s.chartType === 'histogram') {
+      const values = activeData.map(row => Number(row[xCol])).filter(value => Number.isFinite(value));
+      const bins = Math.max(5, Math.min(80, Number(s.binCount) || 30));
+      const span = Math.max(0.00001, this.xDomainMax - this.xDomainMin);
+      const binWidth = span / bins;
+      const counts = Array.from({ length: bins }, () => 0);
+      values.forEach(value => {
+        const index = Math.max(0, Math.min(bins - 1, Math.floor((value - this.xDomainMin) / binWidth)));
+        counts[index]++;
+      });
+      const maxCount = Math.max(1, ...counts);
+      this.yDomainMin = 0;
+      this.yDomainMax = Math.max(1, maxCount * 1.15);
+      this.yTicks = Array.from({ length: 6 }, (_, index) => {
+        const val = Math.round((this.yDomainMax * index / 5) * 100) / 100;
+        return { val, y: this.valueToY(val) };
+      });
+      counts.forEach((count, index) => {
+        const leftValue = this.xDomainMin + (index * binWidth);
+        const rightValue = leftValue + binWidth;
+        const x = this.valueToX(leftValue) + 1;
+        const width = Math.max(1, this.valueToX(rightValue) - this.valueToX(leftValue) - 2);
+        const y = this.valueToY(count);
+        this.renderItems.push({ x, y, width, height: this.valueToY(0) - y, centerX: x + width / 2, color: palette[0] });
+      });
+    } else if (s.chartType === 'heatmap') {
+      const rowGroups = grpCol ? groups : ['Value'];
+      const values = activeData.map(row => Number(row[yCol])).filter(value => Number.isFinite(value));
+      const rawMin = values.length ? Math.min(...values) : 0;
+      const rawMax = values.length ? Math.max(...values) : 1;
+      const diverging = rawMin < 0 && rawMax > 0;
+      const min = diverging ? Math.min(rawMin, 0) : rawMin;
+      const max = diverging ? Math.max(rawMax, 0) : rawMax;
+      const cellHeight = this.plotHeight / Math.max(1, rowGroups.length);
+      this.heatmapRows = rowGroups.map((label, index) => ({ label, y: this.margin.top + ((index + 0.5) * cellHeight) }));
+      this.heatmapColorMin = min;
+      this.heatmapColorMax = max;
+      this.heatmapIsDiverging = diverging;
+      this.heatmapPalette = [...palette];
+      xCategories.forEach((category, xIndex) => {
+        rowGroups.forEach((group, groupIndex) => {
+          const row = activeData.find(candidate => String(candidate[xCol]) === category && (!grpCol || String(candidate[grpCol]) === group));
+          if (!row) return;
+          const value = Number(row[yCol]) || 0;
+          this.renderItems.push({
+            x: this.margin.left + xIndex * categoryWidth,
+            y: this.margin.top + groupIndex * cellHeight,
+            width: categoryWidth,
+            height: cellHeight,
+            color: this.heatColor(value, min, max, palette)
+          });
+        });
       });
     }
   }
@@ -1714,13 +2429,76 @@ export class RPlotCanvasComponent implements OnInit {
     this.panStartY = event.clientY - this.panY;
   }
 
+  clearSelectionIfBackground(event: MouseEvent) {
+    const target = event.target as Element;
+    // Text/legend selection lives inside a draggable group.  Everything else
+    // on the paper behaves as a neutral background and clears the selection.
+    if (target.closest('.draggable-element') || target.closest('.inline-editor-popover')) return;
+    this.selectedElement = null;
+  }
+
   onPan(event: MouseEvent) {
+    if (this.elementDrag) {
+      const drag = this.elementDrag;
+      const svgEl = this.plotSvg?.nativeElement;
+      const rect = svgEl?.getBoundingClientRect();
+      const scaleX = rect ? this.svgWidth / Math.max(1, rect.width) : 1;
+      const scaleY = rect ? this.svgHeight / Math.max(1, rect.height) : 1;
+      const dx = (event.clientX - drag.x) * scaleX;
+      const dy = (event.clientY - drag.y) * scaleY;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      this.suppressEditorClick = true;
+
+      if (drag.mode === 'resize') {
+        // Calculate from the original pointer/size, not the last re-rendered
+        // handle position. This prevents jitter and compounding size jumps.
+        const totalDx = (event.clientX - drag.startX) * scaleX;
+        const totalDy = (event.clientY - drag.startY) * scaleY;
+        // All handles sit at the visible lower-right corner.  For the rotated
+        // Y label that direction is right/up in screen space, hence dx - dy.
+        const amount = (drag.element === 'yLabel' ? totalDx - totalDy : totalDx + totalDy) / 16;
+        if (drag.element === 'title') {
+          this.updateActiveState({ fontSizeTitle: Math.max(10, Math.min(42, Math.round(drag.startSize + amount))) });
+        } else if (drag.element === 'subtitle') {
+          this.updateActiveState({ fontSizeSubtitle: Math.max(8, Math.min(34, Math.round(drag.startSize + amount))) });
+        } else if (drag.element === 'tag') {
+          this.updateActiveState({ fontSizeTag: Math.max(8, Math.min(34, Math.round(drag.startSize + amount))) });
+        } else if (drag.element === 'legend') {
+          this.updateActiveState({ fontSizeLegend: Math.max(8, Math.min(28, Math.round(drag.startSize + amount))) });
+        } else if (drag.element === 'xLabel') {
+          this.updateActiveState({ fontSizeXAxis: Math.max(8, Math.min(28, Math.round(drag.startSize + amount))) });
+        } else {
+          this.updateActiveState({ fontSizeYAxis: Math.max(8, Math.min(28, Math.round(drag.startSize + amount))) });
+        }
+        return;
+      }
+
+      if (drag.element === 'tag') {
+        this.updateActiveState({ tagOffsetX: (this.activePlot.tagOffsetX || 0) + dx, tagOffsetY: (this.activePlot.tagOffsetY || 0) + dy });
+      } else if (drag.element === 'title') {
+        this.updateActiveState({ titleOffsetX: (this.activePlot.titleOffsetX || 0) + dx, titleOffsetY: (this.activePlot.titleOffsetY || 0) + dy });
+      } else if (drag.element === 'subtitle') {
+        this.updateActiveState({ subtitleOffsetX: (this.activePlot.subtitleOffsetX || 0) + dx, subtitleOffsetY: (this.activePlot.subtitleOffsetY || 0) + dy });
+      } else if (drag.element === 'legend') {
+        this.updateActiveState({ legendOffsetX: (this.activePlot.legendOffsetX || 0) + dx, legendOffsetY: (this.activePlot.legendOffsetY || 0) + dy });
+      } else if (drag.element === 'xLabel') {
+        this.updateActiveState({ xLabelOffsetX: (this.activePlot.xLabelOffsetX ?? this.activePlot.xLabelOffset ?? 0) + dx, xLabelOffsetY: (this.activePlot.xLabelOffsetY || 0) + dy });
+      } else {
+        this.updateActiveState({ yLabelOffsetX: (this.activePlot.yLabelOffsetX ?? this.activePlot.yLabelOffset ?? 0) + dx, yLabelOffsetY: (this.activePlot.yLabelOffsetY || 0) + dy });
+      }
+      return;
+    }
     if (!this.isPanning) return;
     this.panX = event.clientX - this.panStartX;
     this.panY = event.clientY - this.panStartY;
   }
 
   endPan() {
+    if (this.elementDrag) {
+      this.elementDrag = null;
+      return;
+    }
     this.isPanning = false;
   }
 
@@ -1745,19 +2523,20 @@ export class RPlotCanvasComponent implements OnInit {
     const image = new Image();
     image.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = this.svgWidth * 2;
-      canvas.height = this.svgHeight * 2;
+      const outputWidth = Math.round(this.figureWidthIn * this.exportDpi);
+      const outputHeight = Math.round(this.figureHeightIn * this.exportDpi);
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
       const context = canvas.getContext('2d');
       if (context) {
-        context.scale(2, 2);
-        context.drawImage(image, 0, 0);
+        context.drawImage(image, 0, 0, outputWidth, outputHeight);
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
           orientation: 'landscape',
-          unit: 'px',
-          format: [this.svgWidth, this.svgHeight]
+          unit: 'in',
+          format: [this.figureWidthIn, this.figureHeightIn]
         });
-        pdf.addImage(imgData, 'PNG', 0, 0, this.svgWidth, this.svgHeight);
+        pdf.addImage(imgData, 'PNG', 0, 0, this.figureWidthIn, this.figureHeightIn);
         pdf.save(`${this.activePlot.figureTag ? this.activePlot.figureTag.replace(/[^a-zA-Z0-9]/g, '') + '_' : ''}publication_figure.pdf`);
       }
     };
@@ -1775,12 +2554,11 @@ export class RPlotCanvasComponent implements OnInit {
     const image = new Image();
     image.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = this.svgWidth * 3;
-      canvas.height = this.svgHeight * 3;
+      canvas.width = Math.round(this.figureWidthIn * this.exportDpi);
+      canvas.height = Math.round(this.figureHeightIn * this.exportDpi);
       const context = canvas.getContext('2d');
       if (context) {
-        context.scale(3, 3);
-        context.drawImage(image, 0, 0);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
         const png = canvas.toDataURL('image/png');
         const downloadLink = document.createElement('a');
         downloadLink.href = png;
