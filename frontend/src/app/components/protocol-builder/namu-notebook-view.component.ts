@@ -487,9 +487,12 @@ export class NamuNotebookViewComponent implements OnChanges {
         // already asynchronous and yields between captures.
         const canvas = await this.capturePdfSheet(html2canvas, sheet);
         if (index > 0) pdf.addPage('a4', 'landscape');
-        // Pass the canvas directly: converting every sheet to a base64 string
-        // retains a large duplicate in memory and can stall the last sheet.
-        pdf.addImage(canvas, 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+        // Freeze the completed bitmap before giving it to jsPDF. Passing the
+        // live canvas directly can let WebKit reuse its drawing buffer while
+        // jsPDF is assembling the blob, which produces overlapping glyphs on
+        // a later preview even though the source page initially looked fine.
+        const imageData = canvas.toDataURL('image/jpeg', 0.94);
+        pdf.addImage(imageData, 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
         canvas.width = 1;
         canvas.height = 1;
         await new Promise<void>(resolve => setTimeout(resolve, 0));
@@ -520,7 +523,7 @@ export class NamuNotebookViewComponent implements OnChanges {
 
   private capturePdfSheet(html2canvas: typeof import('html2canvas').default, sheet: HTMLElement): Promise<HTMLCanvasElement> {
     const capture = html2canvas(sheet, {
-      backgroundColor: '#ffffff', scale: 1, useCORS: true, logging: false, width: 1120, height: 788
+      backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: 1120, height: 788
     });
     const timeout = new Promise<never>((_, reject) => {
       window.setTimeout(() => reject(new Error('This PDF sheet took too long to render.')), 30000);
