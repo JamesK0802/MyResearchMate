@@ -481,10 +481,18 @@ export class NamuNotebookViewComponent implements OnChanges {
         const sheet = sheets[index];
         this.pdfProgress = `Rendering sheet ${index + 1} of ${sheets.length}…`;
         this.cdr.detectChanges();
-        await this.waitForPaint();
-        const canvas = await html2canvas(sheet, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: 1120, height: 788 });
+        // Do not wait for another requestAnimationFrame here. WebKit can stop
+        // delivering that follow-up frame after several off-screen captures,
+        // leaving the final sheet permanently on "Rendering". html2canvas is
+        // already asynchronous and yields between captures.
+        const canvas = await this.capturePdfSheet(html2canvas, sheet);
         if (index > 0) pdf.addPage('a4', 'landscape');
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+        // Pass the canvas directly: converting every sheet to a base64 string
+        // retains a large duplicate in memory and can stall the last sheet.
+        pdf.addImage(canvas, 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+        canvas.width = 1;
+        canvas.height = 1;
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
       this.closePdfPreview();
       this.pdfFileName = `${this.tree.name || 'protocol-notebook'}.pdf`;
@@ -502,6 +510,16 @@ export class NamuNotebookViewComponent implements OnChanges {
 
   private waitForPaint(): Promise<void> {
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  }
+
+  private capturePdfSheet(html2canvas: typeof import('html2canvas').default, sheet: HTMLElement): Promise<HTMLCanvasElement> {
+    const capture = html2canvas(sheet, {
+      backgroundColor: '#ffffff', scale: 1, useCORS: true, logging: false, width: 1120, height: 788
+    });
+    const timeout = new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('This PDF sheet took too long to render.')), 30000);
+    });
+    return Promise.race([capture, timeout]);
   }
 
   downloadPdf() {
