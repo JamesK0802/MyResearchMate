@@ -559,9 +559,7 @@
 }
 
 .protocol-manager-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 24px 17px; border-bottom: 1px solid #e2e8f0; }
-.protocol-manager-header span { display: block; margin-bottom: 5px; color: #2563eb; font-size: .66rem; font-weight: 800; letter-spacing: .1em; }
 .protocol-manager-header h2 { margin: 0; color: #0f172a; font-size: 1.25rem; }
-.protocol-manager-header p { margin: 6px 0 0; color: #64748b; font-size: .82rem; line-height: 1.45; }
 .protocol-manager-close { width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f5f9; color: #475569; font-size: 21px; line-height: 1; cursor: pointer; }
 .protocol-manager-close:hover { background: #e2e8f0; }
 
@@ -570,9 +568,7 @@
 .protocol-manager-tabs button.active { border-bottom-color: #2563eb; color: #1d4ed8; }
 
 .protocol-manager-body { min-height: 0; overflow: auto; padding: 20px 24px; }
-.protocol-manager-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
-.protocol-manager-intro strong { display: block; color: #1e293b; font-size: .9rem; }
-.protocol-manager-intro span { display: block; margin-top: 3px; color: #64748b; font-size: .78rem; }
+.protocol-manager-intro { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .protocol-manager-file { flex: 0 0 auto; border: 1px solid #bfdbfe; border-radius: 6px; padding: 7px 10px; background: #eff6ff; color: #1d4ed8; font: 700 .76rem inherit; cursor: pointer; }
 .protocol-manager-file:hover { background: #dbeafe; }
 .protocol-manager-state { margin: 16px 0; color: #64748b; font-size: .83rem; }
@@ -596,7 +592,7 @@
 .split-remove-option.disabled { color: #94a3b8; cursor: not-allowed; }
 .split-remove-option input { width: 15px; height: 15px; margin: 0; accent-color: #2563eb; }
 
-.protocol-manager-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; font-size: .78rem; }
+.protocol-manager-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; font-size: .78rem; }
 .protocol-manager-footer > div { display: flex; gap: 8px; }
 .protocol-manager-footer button { border-radius: 6px; padding: 8px 11px; font: 700 .78rem inherit; cursor: pointer; }
 .protocol-manager-cancel { border: 1px solid #cbd5e1; background: #fff; color: #475569; }
