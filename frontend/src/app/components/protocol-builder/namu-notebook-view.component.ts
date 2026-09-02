@@ -32,11 +32,12 @@ interface NotebookPage {
           </select>
           <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
           <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
-          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Building PDF…' : 'Print PDF' }}</button>
+          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Preparing PDF ' + pdfProgress + '…' : 'Download PDF to Print' }}</button>
         </div>
       </header>
 
       <p class="notebook-empty" *ngIf="!tree.nodes.length">This tree has no nodes.</p>
+      <p class="notebook-pdf-error" *ngIf="pdfError">{{ pdfError }}</p>
 
       <div class="screen-notebook"
         [class.screen-spread]="layout === 'spread'"
@@ -234,6 +235,7 @@ interface NotebookPage {
     .inline-delete:hover, .add-step:hover, .add-note:hover { color:#5c1c18; background:transparent; }
     .add-step, .add-note { color:#3b5c7b; font-size:.76rem; line-height:var(--rule); }
     .notebook-empty { text-align:center; color:#625d55; }
+    .notebook-pdf-error { max-width:1260px; margin:0 auto 12px; color:#9f1239; font:600 .8rem Arial,sans-serif; }
     .print-notebook { display:none; }
     /* PDF capture uses a fixed off-screen A4 artboard. This removes all
        browser print-layout differences before a user ever opens Print. */
@@ -311,6 +313,8 @@ export class NamuNotebookViewComponent implements OnChanges {
   printing = false;
   pdfRendering = false;
   generatingPdf = false;
+  pdfProgress = '';
+  pdfError = '';
   @ViewChild('pdfNotebook') private pdfNotebook?: ElementRef<HTMLElement>;
 
   cachedPages: NotebookPage[] = [];
@@ -423,9 +427,8 @@ export class NamuNotebookViewComponent implements OnChanges {
   async printNotebook() {
     if (this.generatingPdf || !this.tree.nodes.length) return;
     this.generatingPdf = true;
-    // Open synchronously so popup blockers do not prevent the finished PDF
-    // from being presented for printing.
-    const printWindow = window.open('', '_blank');
+    this.pdfError = '';
+    this.pdfProgress = '';
     try {
       this.pdfRendering = true;
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -438,22 +441,19 @@ export class NamuNotebookViewComponent implements OnChanges {
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
       for (let index = 0; index < sheets.length; index += 1) {
         const sheet = sheets[index];
-        const canvas = await html2canvas(sheet, { backgroundColor: '#ffffff', scale: 3, useCORS: true, logging: false, width: 1120, height: 788 });
+        this.pdfProgress = `${index + 1}/${sheets.length}`;
+        const canvas = await html2canvas(sheet, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: 1120, height: 788 });
         if (index > 0) pdf.addPage('a4', 'landscape');
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210, undefined, 'FAST');
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
       }
-      const url = URL.createObjectURL(pdf.output('blob'));
-      if (printWindow) {
-        printWindow.location.href = url;
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      } else {
-        pdf.save(`${this.tree.name || 'protocol-notebook'}.pdf`);
-        URL.revokeObjectURL(url);
-      }
+      pdf.save(`${this.tree.name || 'protocol-notebook'}.pdf`);
+    } catch (error) {
+      console.error('Protocol PDF generation failed', error);
+      this.pdfError = 'PDF could not be created. Please try again; the detailed error is available in the browser console.';
     } finally {
       this.pdfRendering = false;
       this.generatingPdf = false;
-      if (printWindow && !printWindow.location.href) printWindow.close();
+      this.pdfProgress = '';
     }
   }
   private turnPage() { this.turning = false; requestAnimationFrame(() => { this.turning = true; setTimeout(() => this.turning = false, 380); }); }
