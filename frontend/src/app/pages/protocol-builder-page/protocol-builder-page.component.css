@@ -534,3 +534,80 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+/* ── Protocol tree management ── */
+.protocol-manager-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .56);
+}
+
+.protocol-manager-modal {
+  display: grid;
+  grid-template-rows: auto auto minmax(260px, 1fr) auto;
+  width: min(760px, 94vw);
+  max-height: min(760px, 90vh);
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .35);
+}
+
+.protocol-manager-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 24px 17px; border-bottom: 1px solid #e2e8f0; }
+.protocol-manager-header span { display: block; margin-bottom: 5px; color: #2563eb; font-size: .66rem; font-weight: 800; letter-spacing: .1em; }
+.protocol-manager-header h2 { margin: 0; color: #0f172a; font-size: 1.25rem; }
+.protocol-manager-header p { margin: 6px 0 0; color: #64748b; font-size: .82rem; line-height: 1.45; }
+.protocol-manager-close { width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f5f9; color: #475569; font-size: 21px; line-height: 1; cursor: pointer; }
+.protocol-manager-close:hover { background: #e2e8f0; }
+
+.protocol-manager-tabs { display: flex; gap: 4px; padding: 10px 24px 0; border-bottom: 1px solid #e2e8f0; }
+.protocol-manager-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 9px 12px; background: transparent; color: #64748b; font: 700 .82rem inherit; cursor: pointer; }
+.protocol-manager-tabs button.active { border-bottom-color: #2563eb; color: #1d4ed8; }
+
+.protocol-manager-body { min-height: 0; overflow: auto; padding: 20px 24px; }
+.protocol-manager-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
+.protocol-manager-intro strong { display: block; color: #1e293b; font-size: .9rem; }
+.protocol-manager-intro span { display: block; margin-top: 3px; color: #64748b; font-size: .78rem; }
+.protocol-manager-file { flex: 0 0 auto; border: 1px solid #bfdbfe; border-radius: 6px; padding: 7px 10px; background: #eff6ff; color: #1d4ed8; font: 700 .76rem inherit; cursor: pointer; }
+.protocol-manager-file:hover { background: #dbeafe; }
+.protocol-manager-state { margin: 16px 0; color: #64748b; font-size: .83rem; }
+
+.saved-protocol-list { display: grid; gap: 10px; }
+.saved-protocol-card { overflow: hidden; border: 1px solid #dbe3ee; border-radius: 9px; }
+.saved-protocol-title { padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.saved-protocol-title strong { display: block; color: #1e293b; font-size: .86rem; }
+.saved-protocol-title span { display: block; margin-top: 3px; color: #64748b; font-size: .72rem; }
+.saved-tree-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 10px 12px; color: #334155; border-top: 1px solid #f1f5f9; font-size: .84rem; cursor: pointer; }
+.saved-tree-option:first-of-type { border-top: 0; }
+.saved-tree-option:hover { background: #f8fbff; }
+.saved-tree-option input { width: 15px; height: 15px; accent-color: #2563eb; }
+.saved-tree-option small { color: #94a3b8; font-size: .72rem; }
+
+.split-manager > p { margin: 0 0 18px; color: #64748b; font-size: .83rem; line-height: 1.5; }
+.split-manager > label { display: grid; gap: 6px; margin: 12px 0; }
+.split-manager > label > span { color: #475569; font-size: .76rem; font-weight: 700; }
+.split-manager select, .split-manager input[type='text'] { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 9px 10px; color: #1e293b; background: #fff; font: .85rem inherit; }
+.split-remove-option { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 8px; margin-top: 18px !important; color: #475569; font-size: .8rem; cursor: pointer; }
+.split-remove-option.disabled { color: #94a3b8; cursor: not-allowed; }
+.split-remove-option input { width: 15px; height: 15px; margin: 0; accent-color: #2563eb; }
+
+.protocol-manager-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; font-size: .78rem; }
+.protocol-manager-footer > div { display: flex; gap: 8px; }
+.protocol-manager-footer button { border-radius: 6px; padding: 8px 11px; font: 700 .78rem inherit; cursor: pointer; }
+.protocol-manager-cancel { border: 1px solid #cbd5e1; background: #fff; color: #475569; }
+.protocol-manager-confirm { border: 1px solid #2563eb; background: #2563eb; color: #fff; }
+.protocol-manager-confirm:disabled { border-color: #bfdbfe; background: #bfdbfe; cursor: not-allowed; }
+
+@media (max-width: 620px) {
+  .protocol-manager-backdrop { padding: 10px; }
+  .protocol-manager-modal { width: 100%; max-height: 94vh; }
+  .protocol-manager-header, .protocol-manager-body { padding-left: 16px; padding-right: 16px; }
+  .protocol-manager-tabs { padding-left: 16px; }
+  .protocol-manager-footer { align-items: flex-start; flex-direction: column; padding: 12px 16px; }
+  .protocol-manager-intro { align-items: flex-start; flex-direction: column; }
+}

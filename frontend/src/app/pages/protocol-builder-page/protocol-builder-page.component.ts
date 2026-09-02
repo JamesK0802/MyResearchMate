@@ -7,7 +7,7 @@ import { NamuDocument, NamuTree } from '../../models/namu.model';
 import { NamuStorageService } from '../../services/namu-storage.service';
 import { NamuFlowViewComponent } from '../../components/protocol-builder/namu-flow-view.component';
 import { NamuNotebookViewComponent } from '../../components/protocol-builder/namu-notebook-view.component';
-import { ProtocolTreeService } from '../../services/protocol-tree.service';
+import { ProtocolTreeRecord, ProtocolTreeService } from '../../services/protocol-tree.service';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -83,7 +83,7 @@ import { AuthService } from '../../services/auth.service';
           <div class="toolbar-left">
             <span class="plain-file-title">{{ doc?.title || openedFileName }}</span>
             <button type="button" class="btn-tool-action" (click)="renameProtocol()">Rename protocol</button>
-            <button type="button" class="btn-tool-action" (click)="mergeProtocolFiles()" title="Import every tree from other Tree Protocol files into this file">Merge protocols</button>
+            <button type="button" class="btn-tool-action" (click)="openProtocolManager()" title="Merge or split protocol trees">Merge protocols</button>
           </div>
 
           <div class="toolbar-right">
@@ -176,6 +176,81 @@ import { AuthService } from '../../services/auth.service';
         </div>
       </div>
 
+      <div class="protocol-manager-backdrop" *ngIf="showProtocolManager" (click)="closeProtocolManager()">
+        <section class="protocol-manager-modal" role="dialog" aria-modal="true" aria-label="Manage protocol trees" (click)="$event.stopPropagation()">
+          <header class="protocol-manager-header">
+            <div>
+              <span>PROTOCOL MANAGEMENT</span>
+              <h2>Manage trees</h2>
+              <p>Bring selected trees into this protocol, or save one tree as a separate protocol.</p>
+            </div>
+            <button type="button" class="protocol-manager-close" (click)="closeProtocolManager()" aria-label="Close">×</button>
+          </header>
+
+          <nav class="protocol-manager-tabs" aria-label="Protocol management options">
+            <button type="button" [class.active]="protocolManagerTab === 'merge'" (click)="protocolManagerTab = 'merge'">Merge trees</button>
+            <button type="button" [class.active]="protocolManagerTab === 'split'" (click)="protocolManagerTab = 'split'">Split tree</button>
+          </nav>
+
+          <div class="protocol-manager-body" *ngIf="protocolManagerTab === 'merge'">
+            <div class="protocol-manager-intro">
+              <div>
+                <strong>From My Data</strong>
+                <span>Select only the trees you want to add. Existing trees will not be changed.</span>
+              </div>
+              <button type="button" class="protocol-manager-file" (click)="mergeProtocolFiles()">Import files instead</button>
+            </div>
+
+            <p class="protocol-manager-state" *ngIf="loadingSavedProtocols">Loading saved protocols…</p>
+            <p class="protocol-manager-state" *ngIf="!auth.isLoggedIn">Sign in to select protocols saved in My Data. You can still import a local file.</p>
+            <p class="protocol-manager-state" *ngIf="auth.isLoggedIn && !loadingSavedProtocols && !savedProtocols.length">No other Tree Protocol files are saved in My Data yet.</p>
+
+            <div class="saved-protocol-list" *ngIf="savedProtocols.length">
+              <article class="saved-protocol-card" *ngFor="let record of savedProtocols">
+                <div class="saved-protocol-title">
+                  <strong>{{ record.title }}</strong>
+                  <span>{{ record.document_json.trees.length }} tree{{ record.document_json.trees.length === 1 ? '' : 's' }} · Updated {{ record.updated_at | date:'mediumDate' }}</span>
+                </div>
+                <label class="saved-tree-option" *ngFor="let tree of record.document_json.trees">
+                  <input type="checkbox" [checked]="isSourceTreeSelected(record.id, tree.id)" (change)="toggleSourceTree(record.id, tree.id, $any($event.target).checked)">
+                  <span>{{ tree.name }}</span>
+                  <small>{{ tree.nodes.length }} nodes</small>
+                </label>
+              </article>
+            </div>
+          </div>
+
+          <div class="protocol-manager-body split-manager" *ngIf="protocolManagerTab === 'split'">
+            <p>Save one of this protocol’s trees as its own My Data protocol. The current protocol remains unchanged unless you choose to remove the tree after saving.</p>
+            <label>
+              <span>Tree to separate</span>
+              <select [(ngModel)]="splitTreeId" (ngModelChange)="syncSplitTitle()">
+                <option *ngFor="let tree of doc?.trees || []" [value]="tree.id">{{ tree.name }} ({{ tree.nodes.length }} nodes)</option>
+              </select>
+            </label>
+            <label>
+              <span>New protocol name</span>
+              <input type="text" [(ngModel)]="splitProtocolTitle" placeholder="Protocol name">
+            </label>
+            <label class="split-remove-option" [class.disabled]="(doc?.trees?.length || 0) <= 1">
+              <input type="checkbox" [(ngModel)]="removeSplitTree" [disabled]="(doc?.trees?.length || 0) <= 1">
+              <span>Remove this tree from the current working copy after saving</span>
+            </label>
+            <p class="protocol-manager-state" *ngIf="!auth.isLoggedIn">Sign in to save a separate protocol in My Data.</p>
+          </div>
+
+          <footer class="protocol-manager-footer">
+            <span *ngIf="protocolManagerTab === 'merge'">{{ selectedSourceTreeCount }} tree{{ selectedSourceTreeCount === 1 ? '' : 's' }} selected</span>
+            <span *ngIf="protocolManagerTab === 'split'">A new My Data record will be created.</span>
+            <div>
+              <button type="button" class="protocol-manager-cancel" (click)="closeProtocolManager()">Cancel</button>
+              <button type="button" class="protocol-manager-confirm" *ngIf="protocolManagerTab === 'merge'" [disabled]="!selectedSourceTreeCount" (click)="mergeSelectedSavedTrees()">Add selected trees</button>
+              <button type="button" class="protocol-manager-confirm" *ngIf="protocolManagerTab === 'split'" [disabled]="!auth.isLoggedIn || !splitTreeId || !splitProtocolTitle.trim() || splittingTree" (click)="splitTreeToMyData()">{{ splittingTree ? 'Saving…' : 'Save separate protocol' }}</button>
+            </div>
+          </footer>
+        </section>
+      </div>
+
     </div>
   `,
   styleUrl: './protocol-builder-page.component.css'
@@ -192,6 +267,15 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   connectionEditMode = false;
   viewMode: 'canvas' | 'notebook' = 'canvas';
   showSaveMenu = false;
+  showProtocolManager = false;
+  protocolManagerTab: 'merge' | 'split' = 'merge';
+  loadingSavedProtocols = false;
+  savedProtocols: ProtocolTreeRecord[] = [];
+  selectedSourceTrees: Record<string, boolean> = {};
+  splitTreeId = '';
+  splitProtocolTitle = '';
+  removeSplitTree = false;
+  splittingTree = false;
 
   private sub = new Subscription();
 
@@ -341,8 +425,88 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     if (newTitle?.trim()) this.namuStorageService.renameDocument(newTitle.trim());
   }
 
+  async openProtocolManager() {
+    this.showProtocolManager = true;
+    this.protocolManagerTab = 'merge';
+    this.selectedSourceTrees = {};
+    this.splitTreeId = this.activeTree?.id || this.doc?.trees[0]?.id || '';
+    this.syncSplitTitle();
+    this.removeSplitTree = false;
+    this.savedProtocols = [];
+    if (!this.auth.isLoggedIn) return;
+    this.loadingSavedProtocols = true;
+    try {
+      const currentRecordId = this.namuStorageService.currentMyDataRecordId;
+      this.savedProtocols = (await this.protocolTreeService.getTrees('my'))
+        .filter(record => record.id !== currentRecordId && Array.isArray(record.document_json?.trees));
+    } catch (error) {
+      console.error('Failed to load saved protocols', error);
+      alert('Could not load your saved protocols. You can still import a local protocol file.');
+    } finally {
+      this.loadingSavedProtocols = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  closeProtocolManager() {
+    this.showProtocolManager = false;
+  }
+
   mergeProtocolFiles() {
+    this.closeProtocolManager();
     this.mergeFileInput?.nativeElement.click();
+  }
+
+  isSourceTreeSelected(recordId: string, treeId: string): boolean {
+    return !!this.selectedSourceTrees[`${recordId}:${treeId}`];
+  }
+
+  toggleSourceTree(recordId: string, treeId: string, selected: boolean) {
+    const key = `${recordId}:${treeId}`;
+    this.selectedSourceTrees = { ...this.selectedSourceTrees, [key]: selected };
+  }
+
+  get selectedSourceTreeCount(): number {
+    return Object.values(this.selectedSourceTrees).filter(Boolean).length;
+  }
+
+  async mergeSelectedSavedTrees() {
+    const selectedDocuments = this.savedProtocols.map(record => ({
+      ...record.document_json,
+      trees: record.document_json.trees.filter(tree => this.isSourceTreeSelected(record.id, tree.id))
+    })).filter(document => document.trees.length);
+    if (!selectedDocuments.length) return;
+    const count = this.namuStorageService.mergeDocuments(selectedDocuments);
+    this.closeProtocolManager();
+    alert(`${count} tree${count === 1 ? '' : 's'} added to this protocol.`);
+  }
+
+  syncSplitTitle() {
+    const tree = this.doc?.trees.find(candidate => candidate.id === this.splitTreeId);
+    this.splitProtocolTitle = tree?.name || '';
+  }
+
+  async splitTreeToMyData() {
+    const tree = this.doc?.trees.find(candidate => candidate.id === this.splitTreeId);
+    const title = this.splitProtocolTitle.trim();
+    if (!tree || !title || !this.auth.isLoggedIn) return;
+    this.splittingTree = true;
+    try {
+      const copiedTree = JSON.parse(JSON.stringify(tree)) as NamuTree;
+      const separateDocument: NamuDocument = { version: '1.0', title, trees: [copiedTree], activeTreeId: copiedTree.id };
+      await this.protocolTreeService.saveTree(title, separateDocument);
+      if (this.removeSplitTree && (this.doc?.trees.length || 0) > 1) {
+        this.namuStorageService.deleteTree(tree.id);
+      }
+      this.closeProtocolManager();
+      alert(`"${title}" was saved as a separate protocol in My Data.`);
+    } catch (error) {
+      console.error('Failed to split protocol tree', error);
+      alert('Could not save the separate protocol. Please try again.');
+    } finally {
+      this.splittingTree = false;
+      this.cdr.detectChanges();
+    }
   }
 
   async importProtocolTrees(event: Event) {

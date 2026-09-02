@@ -143,7 +143,6 @@ export interface ConnectionPath {
                     {{ node.leaves.length }} {{ node.leaves.length === 1 ? 'Note' : 'Notes' }}
                   </span>
                   <div class="node-card-actions">
-                    <button type="button" class="btn-node-copy" (mousedown)="$event.stopPropagation()" (click)="copyNode(node); $event.stopPropagation()" title="Copy node">Copy</button>
                     <button type="button" class="btn-action-del" (mousedown)="$event.stopPropagation()" (click)="deleteNode(node, t); $event.stopPropagation()" title="Delete node">✕</button>
                   </div>
                 </div>
