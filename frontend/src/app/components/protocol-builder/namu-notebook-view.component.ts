@@ -498,13 +498,19 @@ export class NamuNotebookViewComponent implements OnChanges {
       this.pdfFileName = `${this.tree.name || 'protocol-notebook'}.pdf`;
       this.pdfBlobUrl = URL.createObjectURL(pdf.output('blob'));
       this.pdfPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfBlobUrl);
+      // html2canvas resolves outside Angular's normal event path in some
+      // browsers. Render the completed state now rather than waiting for the
+      // next click, navigation, or other unrelated browser event.
+      this.cdr.detectChanges();
     } catch (error) {
       console.error('Protocol PDF generation failed', error);
       this.pdfError = 'PDF could not be created. Please try again; the detailed error is available in the browser console.';
+      this.cdr.detectChanges();
     } finally {
       this.pdfRendering = false;
       this.generatingPdf = false;
       this.pdfProgress = '';
+      this.cdr.detectChanges();
     }
   }
 
