@@ -1,6 +1,7 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { jsPDF } from 'jspdf';
 import { NamuLeafNote, NamuNode, NamuTree } from '../../models/namu.model';
 import { NamuStorageService } from '../../services/namu-storage.service';
@@ -32,7 +33,7 @@ interface NotebookPage {
           </select>
           <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
           <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
-          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Preparing PDF ' + pdfProgress + '…' : 'Download PDF to Print' }}</button>
+          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Preparing PDF ' + pdfProgress + '…' : 'Preview PDF' }}</button>
         </div>
       </header>
 
@@ -111,6 +112,14 @@ interface NotebookPage {
             </div>
           </section>
         </ng-container>
+      </div>
+
+      <div class="pdf-preview-backdrop" *ngIf="pdfPreviewUrl" (click)="closePdfPreview()">
+        <section class="pdf-preview-modal" role="dialog" aria-modal="true" aria-label="Protocol PDF preview" (click)="$event.stopPropagation()">
+          <header><div><span>PDF PREVIEW</span><strong>{{ pdfFileName }}</strong></div><button type="button" (click)="closePdfPreview()" aria-label="Close PDF preview">×</button></header>
+          <iframe [src]="pdfPreviewUrl" title="Protocol PDF preview"></iframe>
+          <footer><span>Review the finished A4 PDF, then download or print it from your PDF viewer.</span><button type="button" (click)="downloadPdf()">Download PDF</button></footer>
+        </section>
       </div>
 
       <ng-template #blankPage><article class="notebook-page right-page blank-page">End of notebook</article></ng-template>
@@ -236,6 +245,9 @@ interface NotebookPage {
     .add-step, .add-note { color:#3b5c7b; font-size:.76rem; line-height:var(--rule); }
     .notebook-empty { text-align:center; color:#625d55; }
     .notebook-pdf-error { max-width:1260px; margin:0 auto 12px; color:#9f1239; font:600 .8rem Arial,sans-serif; }
+    .pdf-preview-backdrop { position:fixed; inset:0; z-index:3000; display:grid; place-items:center; padding:18px; background:rgba(15,23,42,.58); }
+    .pdf-preview-modal { display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(1120px, 96vw); height:min(820px, 92vh); overflow:hidden; border-radius:12px; background:#fff; box-shadow:0 26px 72px rgba(15,23,42,.45); }
+    .pdf-preview-modal header,.pdf-preview-modal footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid #dbe3ef; background:#fff; }.pdf-preview-modal footer { border-top:1px solid #dbe3ef; border-bottom:0; color:#64748b; font:500 .76rem Arial,sans-serif; }.pdf-preview-modal header div { display:grid; gap:2px; }.pdf-preview-modal header span { color:#2563eb; font:800 .64rem Arial,sans-serif; letter-spacing:.09em; }.pdf-preview-modal header strong { color:#1e293b; font:700 .9rem Arial,sans-serif; }.pdf-preview-modal header button { border:0; border-radius:50%; width:28px; height:28px; padding:0; background:#f1f5f9; color:#475569; font-size:21px; }.pdf-preview-modal footer button { border:0; background:#2563eb; color:#fff; border-radius:6px; padding:8px 12px; font:700 .78rem Arial,sans-serif; }.pdf-preview-modal iframe { width:100%; height:100%; border:0; background:#52525b; }
     .print-notebook { display:none; }
     /* PDF capture uses a fixed off-screen A4 artboard. This removes all
        browser print-layout differences before a user ever opens Print. */
@@ -315,12 +327,15 @@ export class NamuNotebookViewComponent implements OnChanges {
   generatingPdf = false;
   pdfProgress = '';
   pdfError = '';
+  pdfPreviewUrl: SafeResourceUrl | null = null;
+  private pdfBlobUrl = '';
+  pdfFileName = 'protocol-notebook.pdf';
   @ViewChild('pdfNotebook') private pdfNotebook?: ElementRef<HTMLElement>;
 
   cachedPages: NotebookPage[] = [];
   private currentTreeId = '';
 
-  constructor(private namuStorageService: NamuStorageService) {}
+  constructor(private namuStorageService: NamuStorageService, private sanitizer: DomSanitizer) {}
 
   ngOnChanges(changes: SimpleChanges) {
     const treeIdChanged = !this.currentTreeId || (this.tree && this.currentTreeId !== this.tree.id);
@@ -446,7 +461,10 @@ export class NamuNotebookViewComponent implements OnChanges {
         if (index > 0) pdf.addPage('a4', 'landscape');
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
       }
-      pdf.save(`${this.tree.name || 'protocol-notebook'}.pdf`);
+      this.closePdfPreview();
+      this.pdfFileName = `${this.tree.name || 'protocol-notebook'}.pdf`;
+      this.pdfBlobUrl = URL.createObjectURL(pdf.output('blob'));
+      this.pdfPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfBlobUrl);
     } catch (error) {
       console.error('Protocol PDF generation failed', error);
       this.pdfError = 'PDF could not be created. Please try again; the detailed error is available in the browser console.';
@@ -455,6 +473,20 @@ export class NamuNotebookViewComponent implements OnChanges {
       this.generatingPdf = false;
       this.pdfProgress = '';
     }
+  }
+
+  downloadPdf() {
+    if (!this.pdfBlobUrl) return;
+    const link = document.createElement('a');
+    link.href = this.pdfBlobUrl;
+    link.download = this.pdfFileName;
+    link.click();
+  }
+
+  closePdfPreview() {
+    if (this.pdfBlobUrl) URL.revokeObjectURL(this.pdfBlobUrl);
+    this.pdfBlobUrl = '';
+    this.pdfPreviewUrl = null;
   }
   private turnPage() { this.turning = false; requestAnimationFrame(() => { this.turning = true; setTimeout(() => this.turning = false, 380); }); }
 
