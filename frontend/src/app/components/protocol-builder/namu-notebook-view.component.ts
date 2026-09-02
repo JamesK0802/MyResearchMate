@@ -1,6 +1,7 @@
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { jsPDF } from 'jspdf';
 import { NamuLeafNote, NamuNode, NamuTree } from '../../models/namu.model';
 import { NamuStorageService } from '../../services/namu-storage.service';
 
@@ -31,7 +32,7 @@ interface NotebookPage {
           </select>
           <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
           <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
-          <button type="button" (click)="printNotebook()">Print</button>
+          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Building PDF…' : 'Print PDF' }}</button>
         </div>
       </header>
 
@@ -79,7 +80,7 @@ interface NotebookPage {
       </div>
 
       <!-- Created only while printing -->
-      <div class="print-notebook" *ngIf="printing && tree.nodes.length">
+      <div #pdfNotebook class="print-notebook" [class.pdf-rendering]="pdfRendering" *ngIf="(printing || pdfRendering) && tree.nodes.length">
         <ng-container *ngIf="layout === 'spread'">
           <section class="notebook-spread print-spread" *ngFor="let pair of printSpreads; trackBy: trackByIndex">
             <div class="notebook-spine" aria-hidden="true"></div>
@@ -234,49 +235,64 @@ interface NotebookPage {
     .add-step, .add-note { color:#3b5c7b; font-size:.76rem; line-height:var(--rule); }
     .notebook-empty { text-align:center; color:#625d55; }
     .print-notebook { display:none; }
+    /* PDF capture uses a fixed off-screen A4 artboard. This removes all
+       browser print-layout differences before a user ever opens Print. */
+    .print-notebook.pdf-rendering { display:block !important; position:fixed; z-index:-1; top:0; left:-12000px; width:1120px; margin:0; padding:0; background:#fff; }
+    .pdf-rendering .print-spread { display:grid; grid-template-columns:1fr 1fr; width:1120px; height:788px; padding:23px 30px; margin:0; overflow:hidden; box-sizing:border-box; filter:none; box-shadow:none; }
+    .pdf-rendering .print-spread .notebook-page { --rule:27px; min-height:0; height:100%; box-sizing:border-box; border:1px solid #c8c0b2; }
+    .pdf-rendering .print-spread .left-page { display:flex; border-radius:8px 0 0 8px; padding:0 52px 0 36px; }
+    .pdf-rendering .print-spread .right-page { display:flex; border-radius:0 8px 8px 0; padding:0 36px 0 52px; }
+    .pdf-rendering .print-spread .notebook-spine { display:block; }
+    .pdf-rendering .print-overview-sheet { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-rows:repeat(2, minmax(0, 1fr)); gap:15px 19px; width:1120px; height:788px; padding:15px 23px; margin:0; overflow:hidden; box-sizing:border-box; background:#fff; }
+    .pdf-rendering .print-overview-cell { position:relative; min-width:0; min-height:0; overflow:hidden; box-sizing:border-box; border-radius:4px; }
+    .pdf-rendering .print-overview-spread { display:grid; grid-template-columns:1fr 1fr; position:absolute; top:0; left:0; width:200%; height:200%; max-width:none; min-height:0; margin:0; transform:scale(.5); transform-origin:top left; box-sizing:border-box; filter:none; box-shadow:none; }
+    .pdf-rendering .print-overview-spread .notebook-page { --rule:32px; min-height:0; height:100%; box-sizing:border-box; border:1.5px solid #bbb2a4; }
+    .pdf-rendering .print-overview-spread .left-page { display:flex; border-radius:6px 0 0 6px; padding-right:56px; }
+    .pdf-rendering .print-overview-spread .right-page { display:flex; border-radius:0 6px 6px 0; padding-left:56px; }
+    .pdf-rendering .print-overview-spread .notebook-spine { display:block; }
     @keyframes page-turn { from { opacity:.25; transform:perspective(1200px) rotateY(-11deg); transform-origin:left center; } to { opacity:1; transform:none; } }
     @media (max-width:900px) { .notebook-spread { grid-template-columns:1fr; } .notebook-spine, .right-page { display:none; } .left-page { border-radius:8px; padding-right:48px; } .notebook-overview { grid-template-columns:1fr; } }
     @media print {
       @page {
         size: A4 landscape;
-        size: 297mm 210mm;
-        size: landscape;
         margin: 0;
       }
-      :host { display:block; height:auto; overflow:visible; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      /* Safari rounds physical CSS lengths differently from Chromium. Keep the
+         printable sheet just inside A4 so a sub-pixel overflow cannot become
+         a second, blank page. */
+      :host { display:block; width:296mm !important; height:auto; overflow:visible; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .notebook-shell { min-height:0; padding:0; margin:0; }
       .notebook-controls, .screen-notebook { display:none !important; }
-      .print-notebook { display:block !important; width:100%; margin:0; padding:0; }
+      .print-notebook { display:block !important; width:296mm !important; margin:0 !important; padding:0 !important; }
       .print-notebook .notebook-spread { display:grid !important; grid-template-columns:1fr 1fr !important; filter:none !important; box-shadow:none !important; }
       .print-notebook .left-page { display:flex !important; border-radius:8px 0 0 8px !important; padding:0 52px 0 36px !important; }
       .print-notebook .right-page { display:flex !important; border-radius:0 8px 8px 0 !important; padding:0 36px 0 52px !important; }
       .print-notebook .notebook-spine { display:block !important; }
 
       /* 2-page spread print: 1 spread per A4 landscape sheet */
-      .print-spread { display:grid !important; grid-template-columns:1fr 1fr !important; width:297mm !important; height:210mm !important; padding:6mm 8mm !important; margin:0 auto !important; overflow:hidden !important; box-sizing:border-box !important; page-break-inside:avoid !important; break-inside:avoid !important; page-break-after:always !important; break-after:page !important; }
-      .print-spread:last-child { break-after:auto !important; page-break-after:auto !important; }
+      .print-spread { display:grid !important; grid-template-columns:1fr 1fr !important; width:296mm !important; height:208mm !important; padding:6mm 8mm !important; margin:0 !important; overflow:hidden !important; box-sizing:border-box !important; page-break-inside:avoid !important; break-inside:avoid !important; break-after:page !important; }
+      .print-spread:last-child { break-after:auto !important; }
       .print-spread .notebook-page { --rule:27px !important; min-height:0 !important; height:100% !important; box-sizing:border-box !important; border:1px solid #c8c0b2 !important; }
 
       /* 8-page overview print: 4 spreads (2x2) per A4 landscape sheet */
       .print-overview-sheet {
         display: grid !important;
-        grid-template-columns: 140mm 140mm !important;
-        grid-template-rows: 99mm 99mm !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
         gap: 4mm 5mm !important;
-        width: 297mm !important;
-        height: 210mm !important;
+        width: 296mm !important;
+        height: 208mm !important;
         padding: 4mm 6mm !important;
-        margin: 0 auto !important;
+        margin: 0 !important;
         overflow: hidden !important;
         box-sizing: border-box !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
-        page-break-after: always !important;
         break-after: page !important;
       }
-      .print-overview-sheet:last-child { break-after:auto !important; page-break-after:auto !important; }
-      .print-overview-cell { position:relative !important; width:140mm !important; height:99mm !important; min-width:0 !important; min-height:0; overflow:hidden !important; box-sizing:border-box !important; border-radius:4px !important; }
-      .print-overview-spread { display:grid !important; grid-template-columns:1fr 1fr !important; position:absolute !important; top:0 !important; left:0 !important; width:280mm !important; height:198mm !important; max-width:none !important; min-height:0 !important; margin:0 !important; transform:scale(0.5) !important; transform-origin:top left !important; box-sizing:border-box !important; }
+      .print-overview-sheet:last-child { break-after:auto !important; }
+      .print-overview-cell { position:relative !important; width:auto !important; height:auto !important; min-width:0 !important; min-height:0 !important; overflow:hidden !important; box-sizing:border-box !important; border-radius:4px !important; }
+      .print-overview-spread { display:grid !important; grid-template-columns:1fr 1fr !important; position:absolute !important; top:0 !important; left:0 !important; width:200% !important; height:200% !important; max-width:none !important; min-height:0 !important; margin:0 !important; transform:scale(0.5) !important; transform-origin:top left !important; box-sizing:border-box !important; }
       .print-overview-spread .notebook-page { --rule:32px !important; min-height:0 !important; height:100% !important; box-sizing:border-box !important; border:1.5px solid #bbb2a4 !important; }
       .print-overview-spread .left-page { border-radius:6px 0 0 6px !important; padding-right:56px !important; }
       .print-overview-spread .right-page { border-radius:0 6px 6px 0 !important; padding-left:56px !important; }
@@ -293,6 +309,9 @@ export class NamuNotebookViewComponent implements OnChanges {
   overviewStart = 0;
   turning = false;
   printing = false;
+  pdfRendering = false;
+  generatingPdf = false;
+  @ViewChild('pdfNotebook') private pdfNotebook?: ElementRef<HTMLElement>;
 
   cachedPages: NotebookPage[] = [];
   private currentTreeId = '';
@@ -401,15 +420,41 @@ export class NamuNotebookViewComponent implements OnChanges {
   trackByNoteId(index: number, note: NamuLeafNote): string { return note.id; }
   trackByNodeId(index: number, node: NamuNode): string { return node.id; }
 
-  printNotebook() {
-    this.printing = true;
-    document.body.classList.add('namu-printing');
-    const cleanup = () => {
-      this.printing = false;
-      document.body.classList.remove('namu-printing');
-    };
-    window.addEventListener('afterprint', cleanup, { once: true });
-    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  async printNotebook() {
+    if (this.generatingPdf || !this.tree.nodes.length) return;
+    this.generatingPdf = true;
+    // Open synchronously so popup blockers do not prevent the finished PDF
+    // from being presented for printing.
+    const printWindow = window.open('', '_blank');
+    try {
+      this.pdfRendering = true;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await document.fonts?.ready;
+      const root = this.pdfNotebook?.nativeElement;
+      if (!root) return;
+      const selector = this.layout === 'spread' ? '.print-spread' : '.print-overview-sheet';
+      const sheets = Array.from(root.querySelectorAll<HTMLElement>(selector));
+      const html2canvas = (await import('html2canvas')).default;
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+      for (let index = 0; index < sheets.length; index += 1) {
+        const sheet = sheets[index];
+        const canvas = await html2canvas(sheet, { backgroundColor: '#ffffff', scale: 3, useCORS: true, logging: false, width: 1120, height: 788 });
+        if (index > 0) pdf.addPage('a4', 'landscape');
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210, undefined, 'FAST');
+      }
+      const url = URL.createObjectURL(pdf.output('blob'));
+      if (printWindow) {
+        printWindow.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else {
+        pdf.save(`${this.tree.name || 'protocol-notebook'}.pdf`);
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      this.pdfRendering = false;
+      this.generatingPdf = false;
+      if (printWindow && !printWindow.location.href) printWindow.close();
+    }
   }
   private turnPage() { this.turning = false; requestAnimationFrame(() => { this.turning = true; setTimeout(() => this.turning = false, 380); }); }
 
