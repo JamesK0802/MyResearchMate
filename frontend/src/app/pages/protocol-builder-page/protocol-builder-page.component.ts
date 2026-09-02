@@ -212,6 +212,10 @@ import { AuthService } from '../../services/auth.service';
                 </label>
               </article>
             </div>
+            <label class="split-remove-option" *ngIf="savedProtocols.length">
+              <input type="checkbox" [(ngModel)]="removeMergedSourceTrees">
+              <span>Remove selected trees from source protocols after merging</span>
+            </label>
           </div>
 
           <div class="protocol-manager-body split-manager" *ngIf="protocolManagerTab === 'split'">
@@ -235,7 +239,7 @@ import { AuthService } from '../../services/auth.service';
           <footer class="protocol-manager-footer">
             <div>
               <button type="button" class="protocol-manager-cancel" (click)="closeProtocolManager()">Cancel</button>
-              <button type="button" class="protocol-manager-confirm" *ngIf="protocolManagerTab === 'merge'" [disabled]="!selectedSourceTreeCount" (click)="mergeSelectedSavedTrees()">Merge selected</button>
+              <button type="button" class="protocol-manager-confirm" *ngIf="protocolManagerTab === 'merge'" [disabled]="!selectedSourceTreeCount || mergingTrees" (click)="mergeSelectedSavedTrees()">{{ mergingTrees ? 'Merging…' : 'Merge selected' }}</button>
               <button type="button" class="protocol-manager-confirm" *ngIf="protocolManagerTab === 'split'" [disabled]="!auth.isLoggedIn || !splitTreeId || !splitProtocolTitle.trim() || splittingTree" (click)="splitTreeToMyData()">{{ splittingTree ? 'Saving…' : 'Save' }}</button>
             </div>
           </footer>
@@ -263,6 +267,8 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   loadingSavedProtocols = false;
   savedProtocols: ProtocolTreeRecord[] = [];
   selectedSourceTrees: Record<string, boolean> = {};
+  removeMergedSourceTrees = false;
+  mergingTrees = false;
   splitTreeId = '';
   splitProtocolTitle = '';
   removeSplitTree = false;
@@ -420,6 +426,7 @@ export class NamuPageComponent implements OnInit, OnDestroy {
     this.showProtocolManager = true;
     this.protocolManagerTab = 'merge';
     this.selectedSourceTrees = {};
+    this.removeMergedSourceTrees = false;
     this.splitTreeId = this.activeTree?.id || this.doc?.trees[0]?.id || '';
     this.syncSplitTitle();
     this.removeSplitTree = false;
@@ -467,9 +474,37 @@ export class NamuPageComponent implements OnInit, OnDestroy {
       trees: record.document_json.trees.filter(tree => this.isSourceTreeSelected(record.id, tree.id))
     })).filter(document => document.trees.length);
     if (!selectedDocuments.length) return;
-    const count = this.namuStorageService.mergeDocuments(selectedDocuments);
-    this.closeProtocolManager();
-    alert(`${count} tree${count === 1 ? '' : 's'} added to this protocol.`);
+    this.mergingTrees = true;
+    try {
+      const count = this.namuStorageService.mergeDocuments(selectedDocuments);
+      if (this.removeMergedSourceTrees) {
+        for (const record of this.savedProtocols) {
+          const selectedIds = new Set(record.document_json.trees
+            .filter(tree => this.isSourceTreeSelected(record.id, tree.id))
+            .map(tree => tree.id));
+          if (!selectedIds.size) continue;
+          const remainingTrees = record.document_json.trees.filter(tree => !selectedIds.has(tree.id));
+          if (!remainingTrees.length) {
+            await this.protocolTreeService.deleteTree(record.id);
+          } else {
+            await this.protocolTreeService.updateTree(record.id, record.title, {
+              ...record.document_json,
+              trees: remainingTrees,
+              activeTreeId: remainingTrees.some(tree => tree.id === record.document_json.activeTreeId)
+                ? record.document_json.activeTreeId : remainingTrees[0].id
+            });
+          }
+        }
+      }
+      this.closeProtocolManager();
+      alert(`${count} tree${count === 1 ? '' : 's'} ${this.removeMergedSourceTrees ? 'moved' : 'added'} to this protocol.`);
+    } catch (error) {
+      console.error('Failed to remove merged source trees', error);
+      alert('The selected trees were added, but their source protocol could not be updated.');
+    } finally {
+      this.mergingTrees = false;
+      this.cdr.detectChanges();
+    }
   }
 
   syncSplitTitle() {
