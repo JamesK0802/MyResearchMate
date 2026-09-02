@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -112,6 +112,17 @@ interface NotebookPage {
             </div>
           </section>
         </ng-container>
+      </div>
+
+      <div class="pdf-generating-backdrop" *ngIf="generatingPdf" role="status" aria-live="polite">
+        <section class="pdf-generating-card">
+          <div class="pdf-generating-spinner" aria-hidden="true"></div>
+          <div>
+            <span>PREPARING PDF</span>
+            <strong>{{ pdfProgress || 'Preparing notebook pages…' }}</strong>
+            <p>Keeping the page layout consistent across browsers.</p>
+          </div>
+        </section>
       </div>
 
       <div class="pdf-preview-backdrop" *ngIf="pdfPreviewUrl" (click)="closePdfPreview()">
@@ -245,6 +256,8 @@ interface NotebookPage {
     .add-step, .add-note { color:#3b5c7b; font-size:.76rem; line-height:var(--rule); }
     .notebook-empty { text-align:center; color:#625d55; }
     .notebook-pdf-error { max-width:1260px; margin:0 auto 12px; color:#9f1239; font:600 .8rem Arial,sans-serif; }
+    .pdf-generating-backdrop { position:fixed; inset:0; z-index:3100; display:grid; place-items:center; padding:18px; background:rgba(15,23,42,.54); }
+    .pdf-generating-card { display:flex; align-items:center; gap:15px; width:min(390px, 92vw); padding:22px; border-radius:12px; background:#fff; box-shadow:0 22px 64px rgba(15,23,42,.34); }.pdf-generating-card span { display:block; margin-bottom:5px; color:#2563eb; font:800 .66rem Arial,sans-serif; letter-spacing:.1em; }.pdf-generating-card strong { display:block; color:#1e293b; font:700 .96rem Arial,sans-serif; }.pdf-generating-card p { margin:5px 0 0; color:#64748b; font:500 .78rem Arial,sans-serif; line-height:1.4; }.pdf-generating-spinner { flex:0 0 auto; width:31px; height:31px; border:3px solid #dbeafe; border-top-color:#2563eb; border-radius:50%; animation:pdf-spin .78s linear infinite; } @keyframes pdf-spin { to { transform:rotate(360deg); } }
     .pdf-preview-backdrop { position:fixed; inset:0; z-index:3000; display:grid; place-items:center; padding:18px; background:rgba(15,23,42,.58); }
     .pdf-preview-modal { display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(1120px, 96vw); height:min(820px, 92vh); overflow:hidden; border-radius:12px; background:#fff; box-shadow:0 26px 72px rgba(15,23,42,.45); }
     .pdf-preview-modal header,.pdf-preview-modal footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid #dbe3ef; background:#fff; }.pdf-preview-modal footer { border-top:1px solid #dbe3ef; border-bottom:0; color:#64748b; font:500 .76rem Arial,sans-serif; }.pdf-preview-modal header div { display:grid; gap:2px; }.pdf-preview-modal header span { color:#2563eb; font:800 .64rem Arial,sans-serif; letter-spacing:.09em; }.pdf-preview-modal header strong { color:#1e293b; font:700 .9rem Arial,sans-serif; }.pdf-preview-modal header button { border:0; border-radius:50%; width:28px; height:28px; padding:0; background:#f1f5f9; color:#475569; font-size:21px; }.pdf-preview-modal footer button { border:0; background:#2563eb; color:#fff; border-radius:6px; padding:8px 12px; font:700 .78rem Arial,sans-serif; }.pdf-preview-modal iframe { width:100%; height:100%; border:0; background:#52525b; }
@@ -335,7 +348,11 @@ export class NamuNotebookViewComponent implements OnChanges {
   cachedPages: NotebookPage[] = [];
   private currentTreeId = '';
 
-  constructor(private namuStorageService: NamuStorageService, private sanitizer: DomSanitizer) {}
+  constructor(
+    private namuStorageService: NamuStorageService,
+    private sanitizer: DomSanitizer,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnChanges(changes: SimpleChanges) {
     const treeIdChanged = !this.currentTreeId || (this.tree && this.currentTreeId !== this.tree.id);
@@ -443,10 +460,16 @@ export class NamuNotebookViewComponent implements OnChanges {
     if (this.generatingPdf || !this.tree.nodes.length) return;
     this.generatingPdf = true;
     this.pdfError = '';
-    this.pdfProgress = '';
+    this.pdfProgress = 'Preparing notebook pages…';
+    // Force this status to reach the screen before html2canvas starts its
+    // expensive DOM capture. Without the paint boundary, some browsers keep
+    // the previous UI visible until the first sheet has already finished.
+    this.cdr.detectChanges();
+    await this.waitForPaint();
     try {
       this.pdfRendering = true;
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      this.cdr.detectChanges();
+      await this.waitForPaint();
       await document.fonts?.ready;
       const root = this.pdfNotebook?.nativeElement;
       if (!root) return;
@@ -456,7 +479,9 @@ export class NamuNotebookViewComponent implements OnChanges {
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
       for (let index = 0; index < sheets.length; index += 1) {
         const sheet = sheets[index];
-        this.pdfProgress = `${index + 1}/${sheets.length}`;
+        this.pdfProgress = `Rendering sheet ${index + 1} of ${sheets.length}…`;
+        this.cdr.detectChanges();
+        await this.waitForPaint();
         const canvas = await html2canvas(sheet, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: 1120, height: 788 });
         if (index > 0) pdf.addPage('a4', 'landscape');
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
@@ -473,6 +498,10 @@ export class NamuNotebookViewComponent implements OnChanges {
       this.generatingPdf = false;
       this.pdfProgress = '';
     }
+  }
+
+  private waitForPaint(): Promise<void> {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   }
 
   downloadPdf() {
