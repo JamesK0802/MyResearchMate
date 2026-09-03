@@ -14,8 +14,8 @@ import { AuthService } from '../../services/auth.service';
         <p class="hero-label">Australian National University · RSB</p>
         <h1>Unified Research <span class="highlight">Platform</span></h1>
         <p class="hero-sub">
-          A dedicated platform for pooled CRISPR analysis, lab notebooks, facility booking,
-          and team-based research records.
+          A practical workspace for pooled CRISPR sequencing analysis, lab notebooks,
+          facility booking, and team-based research records.
         </p>
         <div class="hero-cta">
           <a *ngIf="!auth.isLoggedIn" routerLink="/login" class="cta-fill">Get Started</a>
@@ -32,12 +32,12 @@ import { AuthService } from '../../services/auth.service';
             <a routerLink="/crispr" class="tool-card">
               <div class="card-body">
                 <h3>Crispr Analysis</h3>
-                <p>Run pooled CRISPR editing analysis from FASTQ files, define multiple genes and targets, review annotations, and save or export finished results.</p>
+                <p>Analyse pooled CRISPR reads from single-read or paired-end FASTQ files, review confident and ambiguous assignments, then save or export clear editing summaries.</p>
                 <div class="tag-row">
-                  <span>FASTQ Analysis</span>
-                  <span>Multi-reference</span>
-                  <span>Benchmarking</span>
-                  <span>Result Viewer</span>
+                  <span>Illumina R1 / R2</span>
+                  <span>Nanopore reads</span>
+                  <span>Ambiguity-aware</span>
+                  <span>Local processing</span>
                 </div>
               </div>
             </a>
@@ -193,33 +193,33 @@ import { AuthService } from '../../services/auth.service';
             <div class="mech-title-wrap">
               <span class="m-badge">TECHNICAL CORE</span>
               <h2>How Crispr Analysis Works</h2>
-              <p class="m-intro">The CRISPR workflow is the main analysis engine: it converts pooled sequencing reads into target-level editing summaries while keeping ambiguous reads visible.</p>
+              <p class="m-intro">Turn pooled sequencing reads into target-level editing summaries, while keeping uncertain assignments visible instead of silently forcing them into a result.</p>
             </div>
           </div>
 
           <div class="dual-cards">
             <div class="d-card challenge">
               <span class="d-label">THE CHALLENGE</span>
-              <p>Pooled CRISPR experiments often include related references, repeated target neighborhoods, and multiple guide sites in the same run. A read can look plausible for more than one target, so forced single-reference assignment can inflate or distort editing estimates.</p>
+              <p>Pooled CRISPR experiments can contain related references, repeated target regions, and several guide sites in the same run. A read may fit more than one reference, so forcing a single answer can distort editing estimates.</p>
             </div>
             <div class="d-card solution">
               <span class="d-label">OUR SOLUTION</span>
-              <p>The tool evaluates reads against configured candidate windows, checks orientation and quality, separates confident assignments from ambiguous cases, then summarizes mutation classes only within the selected target context.</p>
+              <p>The tool checks read quality and orientation, compares each read with the configured target windows, separates clear assignments from uncertain cases, and only then summarises edits for each target.</p>
             </div>
           </div>
 
           <div class="crispr-feature-grid">
             <div>
               <span>Input</span>
-              <strong>FASTQ reads plus reference/target definitions</strong>
+              <strong>Single reads or Illumina R1/R2 pairs, plus references and guides</strong>
             </div>
             <div>
               <span>Assignment</span>
-              <strong>Multi-gene, multi-target comparison with ambiguity handling</strong>
+              <strong>Reference-aware matching with an explicit ambiguous-read path</strong>
             </div>
             <div>
               <span>Output</span>
-              <strong>Annotated read groups, editing metrics, saved results, and Excel export</strong>
+              <strong>Editing summaries, diagnostics, curated views, and Excel export</strong>
             </div>
           </div>
 
@@ -227,51 +227,51 @@ import { AuthService } from '../../services/auth.service';
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">01</span>
-                <h3>Input Model and References</h3>
+                <h3>Set up references and targets</h3>
               </div>
-              <p>Users upload FASTQ reads and define genes, reference sequences, target names, and guide sequences. These inputs describe the candidate targets that can compete for each read.</p>
+              <p>Upload FASTQ files and define each reference, target name, and guide sequence. These settings tell the tool which editing sites and candidate references to look for.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">02</span>
-                <h3>Target Window Construction</h3>
+                <h3>Prepare each sequencing input</h3>
               </div>
-              <p>For each target, the tool builds a comparison window around the guide/PAM context when available, or uses the submitted reference sequence directly when no guide window is defined.</p>
+              <p>Nanopore reads can be analysed directly. For Illumina data, R1 and R2 mates are matched, oriented, and combined where the evidence supports a reliable molecule.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">03</span>
-                <h3>Orientation and Quality Checks</h3>
+                <h3>Focus on the editing region</h3>
               </div>
-              <p>Reads are evaluated in original and reverse-complement orientation. Candidate matches must pass usability checks before they can contribute to assignment or mutation analysis.</p>
+              <p>For every target, the tool builds a short window around the expected cut site. It checks orientation, local coverage, anchors, and observed-base quality before a read can be used.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">04</span>
-                <h3>Competitive Similarity Scoring</h3>
+                <h3>Assign only when the match is clear</h3>
               </div>
-              <p>Each usable read is compared against eligible target windows. The best candidate must be sufficiently separated from competing candidates before the read is assigned.</p>
+              <p>Each usable read is compared with the eligible reference windows. A read is assigned only when the best match is clearly ahead of competing references by your selected margin.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">05</span>
-                <h3>Ambiguous Read Handling</h3>
+                <h3>Keep uncertain reads separate</h3>
               </div>
-              <p>Reads that pass basic checks but cannot be assigned cleanly are reported separately. This keeps the primary result conservative while still showing how much signal was excluded as ambiguous.</p>
+              <p>Reads that pass quality checks but do not have a clear winner remain visible as ambiguous. They do not alter the primary result, and can be reviewed or rescued separately when useful.</p>
             </div>
             <div class="step-card">
               <div class="s-header">
                 <span class="s-num">06</span>
-                <h3>Mutation Grouping</h3>
+                <h3>Summarise edits per target</h3>
               </div>
-              <p>Assigned reads are grouped by observed sequence pattern within each target window. The dashboard keeps these groups inspectable so common edited and unedited read classes can be reviewed.</p>
+              <p>Assigned reads are evaluated independently for every target on that reference. The dashboard groups observed sequence patterns and labels unedited, substitution, in-frame, and out-of-frame outcomes.</p>
             </div>
             <div class="step-card step-card-wide">
               <div class="s-header">
                 <span class="s-num">07</span>
-                <h3>Editing Summary, Review, and Export</h3>
+                <h3>Review, curate, and export</h3>
               </div>
-              <p>Groups are summarized as unmodified, substitution, in-frame indel, or out-of-frame indel. Results can be inspected in the dashboard, reopened through the result viewer, saved to My Data, or exported to Excel.</p>
+              <p>Inspect retention and assignment diagnostics alongside the editing summary. You can create a curated view without overwriting the original result, then save it to My Data or export it to Excel. Analysis stays in your browser.</p>
             </div>
           </div>
         </section>
