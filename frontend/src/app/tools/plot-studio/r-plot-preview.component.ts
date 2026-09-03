@@ -186,9 +186,11 @@ import { PlotState } from '../../services/r-plot-sync.service';
         <!-- 4. Boxplot -->
         <g *ngIf="plotState?.chartType === 'boxplot'">
           <g *ngFor="let item of renderItems">
-            <line [attr.x1]="item.centerX" [attr.y1]="item.y - 10" [attr.x2]="item.centerX" [attr.y2]="item.y + item.height + 10" [attr.stroke]="getAxisLineColor()" stroke-width="1" />
+            <line [attr.x1]="item.centerX" [attr.y1]="item.whiskerHighY" [attr.x2]="item.centerX" [attr.y2]="item.whiskerLowY" [attr.stroke]="getAxisLineColor()" stroke-width="1" />
+            <line [attr.x1]="item.x + item.width * .22" [attr.y1]="item.whiskerHighY" [attr.x2]="item.x + item.width * .78" [attr.y2]="item.whiskerHighY" [attr.stroke]="getAxisLineColor()" stroke-width="1" />
+            <line [attr.x1]="item.x + item.width * .22" [attr.y1]="item.whiskerLowY" [attr.x2]="item.x + item.width * .78" [attr.y2]="item.whiskerLowY" [attr.stroke]="getAxisLineColor()" stroke-width="1" />
             <rect [attr.x]="item.x" [attr.y]="item.y" [attr.width]="Math.max(1, item.width)" [attr.height]="Math.max(0, item.height)" [attr.fill]="item.color" [attr.stroke]="getAxisLineColor()" stroke-width="1" rx="1" />
-            <line [attr.x1]="item.x" [attr.y1]="item.y + (item.height / 2)" [attr.x2]="item.x + item.width" [attr.y2]="item.y + (item.height / 2)" [attr.stroke]="getThemeText()" stroke-width="1.8" />
+            <line [attr.x1]="item.x" [attr.y1]="item.medianY" [attr.x2]="item.x + item.width" [attr.y2]="item.medianY" [attr.stroke]="getThemeText()" stroke-width="1.8" />
           </g>
         </g>
 
@@ -206,7 +208,7 @@ import { PlotState } from '../../services/r-plot-sync.service';
           <rect *ngFor="let item of renderItems" [attr.x]="item.x" [attr.y]="item.y" [attr.width]="item.width" [attr.height]="item.height" [attr.fill]="item.color" stroke="#ffffff" stroke-width="1" />
         </g>
         <g *ngIf="plotState?.chartType === 'heatmap'">
-          <defs><linearGradient id="preview-heatmap-value-scale" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" [attr.stop-color]="heatmapLowColor" /><stop offset="50%" stop-color="#ffffff" /><stop offset="100%" [attr.stop-color]="heatmapHighColor" /></linearGradient></defs>
+          <defs><linearGradient id="preview-heatmap-value-scale" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" [attr.stop-color]="heatmapLowColor" /><stop offset="50%" [attr.stop-color]="heatmapMidColor" /><stop offset="100%" [attr.stop-color]="heatmapHighColor" /></linearGradient></defs>
           <text [attr.x]="heatmapLegendX" [attr.y]="margin.top - 6" [attr.font-family]="plotState?.fontFamily" font-size="7.5" font-weight="bold" [attr.fill]="getThemeText()">{{ heatmapValueLabel }}</text>
           <rect [attr.x]="heatmapLegendX" [attr.y]="margin.top" width="9" [attr.height]="plotHeight" fill="url(#preview-heatmap-value-scale)" [attr.stroke]="getAxisLineColor()" stroke-width=".4" />
           <text [attr.x]="heatmapLegendX + 13" [attr.y]="margin.top + 3" [attr.font-family]="plotState?.fontFamily" font-size="7" [attr.fill]="getThemeText()">{{ formatHeatValue(heatmapColorMax) }}</text>
@@ -312,6 +314,11 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
 
   get heatmapLowColor(): string { return this.heatmapPalette[0] || '#2166AC'; }
   get heatmapHighColor(): string { return this.heatmapPalette[1] || this.heatmapPalette[this.heatmapPalette.length - 1] || '#B2182B'; }
+  get heatmapMidColor(): string {
+    return this.heatmapIsDiverging
+      ? '#ffffff'
+      : this.blendColors(this.heatmapLowColor, this.heatmapHighColor, .5);
+  }
   get heatmapLegendX(): number { return this.margin.left + this.plotWidth + 15; }
   get heatmapValueLabel(): string { return this.plotState?.yColumn || 'Value'; }
   formatHeatValue(value: number): string { return Number(value.toFixed(2)).toString(); }
@@ -355,7 +362,9 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
         ? this.blendColors(low, '#ffffff', (value - min) / Math.max(0.000001, -min))
         : this.blendColors('#ffffff', high, value / Math.max(0.000001, max));
     }
-    return this.blendColors(min < 0 ? low : '#ffffff', max > 0 ? high : '#ffffff', (value - min) / Math.max(0.000001, max - min));
+    // Keep the guided preview on the same low → high palette scale as the
+    // canvas and its legend; white is only the diverging midpoint.
+    return this.blendColors(low, high, (value - min) / Math.max(0.000001, max - min));
   }
 
   private blendColors(from: string, to: string, amount: number): string {
@@ -499,7 +508,7 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
     this.lineSeries = [];
     this.heatmapRows = [];
 
-    if (s.chartType === 'bar' || s.chartType === 'boxplot') {
+    if (s.chartType === 'bar') {
       xCategories.forEach((cat, xIdx) => {
         const catCenterX = this.margin.left + (xIdx * categoryWidth) + (categoryWidth / 2);
         const catRows = activeData.filter(r => String(r[xCol]) === cat);
@@ -552,6 +561,37 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
             x, y, width: barWidthPx, height, centerX: catCenterX, color: palette[0], errorYMin: errYMin, errorYMax: errYMax
           });
         }
+      });
+    } else if (s.chartType === 'boxplot') {
+      const quantile = (values: number[], percentile: number) => {
+        const index = (values.length - 1) * percentile;
+        const lower = Math.floor(index);
+        const upper = Math.ceil(index);
+        return lower === upper ? values[lower] : values[lower] + ((values[upper] - values[lower]) * (index - lower));
+      };
+      xCategories.forEach((category, categoryIndex) => {
+        const center = this.margin.left + (categoryIndex * categoryWidth) + (categoryWidth / 2);
+        const boxGroups = grpCol ? groups : ['Default'];
+        const width = Math.max(7, (categoryWidth * s.barWidth) / Math.max(1, boxGroups.length));
+        boxGroups.forEach((group, groupIndex) => {
+          const values = activeData
+            .filter(row => String(row[xCol]) === category && (!grpCol || String(row[grpCol]) === group))
+            .map(row => Number(row[yCol]))
+            .filter(value => Number.isFinite(value))
+            .sort((a, b) => a - b);
+          if (!values.length) return;
+          const q1 = quantile(values, .25);
+          const q3 = quantile(values, .75);
+          const x = center - ((width * boxGroups.length) / 2) + (groupIndex * width);
+          const renderedWidth = Math.max(5, width - 2);
+          const yFor = (value: number) => this.svgHeight - this.margin.bottom - ((value / yCeil) * this.plotHeight);
+          const y = yFor(q3);
+          this.renderItems.push({
+            x, y, width: renderedWidth, height: Math.max(1, yFor(q1) - y), centerX: x + (renderedWidth / 2),
+            medianY: yFor(quantile(values, .5)), whiskerHighY: yFor(values[values.length - 1]), whiskerLowY: yFor(values[0]),
+            color: palette[groupIndex % palette.length]
+          });
+        });
       });
     } else if (s.chartType === 'scatter' || s.chartType === 'dotplot' || s.chartType === 'volcano') {
       activeData.forEach(r => {

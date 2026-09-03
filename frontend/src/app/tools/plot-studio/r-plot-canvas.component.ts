@@ -503,15 +503,25 @@ interface PlotHelpCard extends PlotExample {
             </g>
 
             <!-- 2. Scatter Plot -->
+            <g *ngIf="activePlot.chartType === 'volcano'" class="volcano-guides">
+              <line [attr.x1]="volcanoX(-volcanoThresholdX)" [attr.x2]="volcanoX(-volcanoThresholdX)" [attr.y1]="margin.top" [attr.y2]="svgHeight - margin.bottom" stroke="#9ca3af" stroke-dasharray="4 3" />
+              <line [attr.x1]="volcanoX(volcanoThresholdX)" [attr.x2]="volcanoX(volcanoThresholdX)" [attr.y1]="margin.top" [attr.y2]="svgHeight - margin.bottom" stroke="#9ca3af" stroke-dasharray="4 3" />
+              <line [attr.x1]="margin.left" [attr.x2]="margin.left + plotWidth" [attr.y1]="volcanoY(volcanoThresholdY)" [attr.y2]="volcanoY(volcanoThresholdY)" stroke="#9ca3af" stroke-dasharray="4 3" />
+            </g>
             <g *ngIf="activePlot.chartType === 'scatter' || activePlot.chartType === 'dotplot' || activePlot.chartType === 'volcano'">
               <circle *ngFor="let item of renderItems"
                       [attr.cx]="item.centerX"
                       [attr.cy]="item.y"
                       [attr.r]="activePlot.pointSize"
-                      [attr.fill]="item.color"
+                      [attr.fill]="activePlot.chartType === 'volcano' ? volcanoPointColor(item) : item.color"
                       [attr.stroke]="getThemeBg()"
                       stroke-width="1.2"
                       class="visual-element" />
+              <ng-container *ngIf="activePlot.chartType === 'volcano'">
+                <text *ngFor="let item of renderItems" [attr.x]="item.centerX + 6" [attr.y]="item.y - 6"
+                      [attr.font-family]="activePlot.fontFamily" [attr.font-size]="Math.max(9, activePlot.fontSizeAxis * .72)"
+                      [attr.fill]="getThemeText()" [style.display]="item.label && volcanoIsSignificant(item) ? null : 'none'">{{ item.label }}</text>
+              </ng-container>
             </g>
 
             <!-- 3. Line Plot -->
@@ -534,7 +544,9 @@ interface PlotHelpCard extends PlotExample {
             <!-- 4. Boxplot -->
             <g *ngIf="activePlot.chartType === 'boxplot'">
               <g *ngFor="let item of renderItems">
-                <line [attr.x1]="item.centerX" [attr.y1]="item.y - 12" [attr.x2]="item.centerX" [attr.y2]="item.y + item.height + 12" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
+                <line [attr.x1]="item.centerX" [attr.y1]="item.whiskerHighY" [attr.x2]="item.centerX" [attr.y2]="item.whiskerLowY" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
+                <line [attr.x1]="item.x + item.width * .22" [attr.y1]="item.whiskerHighY" [attr.x2]="item.x + item.width * .78" [attr.y2]="item.whiskerHighY" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
+                <line [attr.x1]="item.x + item.width * .22" [attr.y1]="item.whiskerLowY" [attr.x2]="item.x + item.width * .78" [attr.y2]="item.whiskerLowY" [attr.stroke]="getAxisLineColor()" stroke-width="1.2" />
                 <rect [attr.x]="item.x"
                       [attr.y]="item.y"
                       [attr.width]="Math.max(1, item.width)"
@@ -543,7 +555,7 @@ interface PlotHelpCard extends PlotExample {
                       [attr.stroke]="getAxisLineColor()"
                       stroke-width="1.2"
                       rx="1" />
-                <line [attr.x1]="item.x" [attr.y1]="item.y + (item.height / 2)" [attr.x2]="item.x + item.width" [attr.y2]="item.y + (item.height / 2)" [attr.stroke]="getThemeText()" stroke-width="2" />
+                <line [attr.x1]="item.x" [attr.y1]="item.medianY" [attr.x2]="item.x + item.width" [attr.y2]="item.medianY" [attr.stroke]="getThemeText()" stroke-width="2" />
               </g>
             </g>
 
@@ -1024,7 +1036,9 @@ interface PlotHelpCard extends PlotExample {
 
     .horizontal-inspector-strip {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      /* Plot-specific sections may disappear. Use compact, auto-filled cards
+         so the remaining controls never leave a large empty quadrant. */
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       align-items: start;
       gap: 12px;
       padding: 18px 22px 22px;
@@ -1051,6 +1065,7 @@ interface PlotHelpCard extends PlotExample {
       border-radius: 10px;
       background: #ffffff;
     }
+    .inspector-section:only-child { grid-column: 1 / -1; }
     .inspector-section .insp-strip-item { flex-wrap: wrap; }
     .unit-label { color: #64748b; font-size: 10px; font-weight: 700; white-space: nowrap; }
     .inspector-section-title {
@@ -1774,7 +1789,9 @@ export class RPlotCanvasComponent implements OnInit {
         ? this.blendColors(low, '#ffffff', (value - min) / Math.max(0.000001, -min))
         : this.blendColors('#ffffff', high, value / Math.max(0.000001, max));
     }
-    return this.blendColors(min < 0 ? low : '#ffffff', max > 0 ? high : '#ffffff', (value - min) / Math.max(0.000001, max - min));
+    // A non-diverging heatmap must use the same low → high scale shown in
+    // its legend. White is reserved for the midpoint of diverging data.
+    return this.blendColors(low, high, (value - min) / Math.max(0.000001, max - min));
   }
 
   private blendColors(from: string, to: string, amount: number): string {
@@ -1794,7 +1811,11 @@ export class RPlotCanvasComponent implements OnInit {
   }
 
   get heatmapLowColor(): string { return this.heatmapPalette[0] || '#2166AC'; }
-  get heatmapMidColor(): string { return '#ffffff'; }
+  get heatmapMidColor(): string {
+    return this.heatmapIsDiverging
+      ? '#ffffff'
+      : this.blendColors(this.heatmapLowColor, this.heatmapHighColor, .5);
+  }
   get heatmapHighColor(): string { return this.heatmapPalette[1] || this.heatmapPalette[this.heatmapPalette.length - 1] || '#B2182B'; }
   get heatmapLegendX(): number { return this.margin.left + this.plotWidth + 24; }
   get heatmapValueLabel(): string { return this.activePlot?.yColumn || 'Value'; }
@@ -2089,6 +2110,25 @@ export class RPlotCanvasComponent implements OnInit {
     return this.activePlot?.chartType !== 'heatmap';
   }
 
+  get volcanoThresholdX(): number { return Math.abs(Number(this.activePlot?.thresholdX) || 1); }
+  get volcanoThresholdY(): number { return Math.abs(Number(this.activePlot?.thresholdY) || 1.3); }
+
+  volcanoX(value: number): number {
+    return Math.max(this.margin.left, Math.min(this.margin.left + this.plotWidth, this.valueToX(value)));
+  }
+
+  volcanoY(value: number): number {
+    return Math.max(this.margin.top, Math.min(this.svgHeight - this.margin.bottom, this.valueToY(value)));
+  }
+
+  volcanoIsSignificant(item: any): boolean {
+    return Math.abs(Number(item?.xValue)) >= this.volcanoThresholdX && Number(item?.yValue) >= this.volcanoThresholdY;
+  }
+
+  volcanoPointColor(item: any): string {
+    return this.volcanoIsSignificant(item) ? '#DC2626' : '#B8C0CC';
+  }
+
   get isSingleVariablePlotHelp(): boolean {
     return this.plotHelp?.type === 'histogram' || this.plotHelp?.type === 'density';
   }
@@ -2279,7 +2319,7 @@ export class RPlotCanvasComponent implements OnInit {
     this.lineSeries = [];
     this.heatmapRows = [];
 
-    if (s.chartType === 'bar' || s.chartType === 'boxplot') {
+    if (s.chartType === 'bar') {
       xCategories.forEach((cat, xIdx) => {
         const catCenterX = this.margin.left + (xIdx * categoryWidth) + (categoryWidth / 2);
         const catRows = activeData.filter(r => String(r[xCol]) === cat);
@@ -2333,6 +2373,37 @@ export class RPlotCanvasComponent implements OnInit {
           });
         }
       });
+    } else if (s.chartType === 'boxplot') {
+      const quantile = (values: number[], percentile: number) => {
+        const index = (values.length - 1) * percentile;
+        const lower = Math.floor(index);
+        const upper = Math.ceil(index);
+        return lower === upper ? values[lower] : values[lower] + ((values[upper] - values[lower]) * (index - lower));
+      };
+      xCategories.forEach((category, categoryIndex) => {
+        const center = this.margin.left + (categoryIndex * categoryWidth) + (categoryWidth / 2);
+        const boxGroups = grpCol ? groups : ['Default'];
+        const width = Math.max(8, (categoryWidth * s.barWidth) / Math.max(1, boxGroups.length));
+        boxGroups.forEach((group, groupIndex) => {
+          const values = activeData
+            .filter(row => String(row[xCol]) === category && (!grpCol || String(row[grpCol]) === group))
+            .map(row => Number(row[yCol]))
+            .filter(value => Number.isFinite(value))
+            .sort((a, b) => a - b);
+          if (!values.length) return;
+          const q1 = quantile(values, .25);
+          const median = quantile(values, .5);
+          const q3 = quantile(values, .75);
+          const x = center - ((width * boxGroups.length) / 2) + (groupIndex * width);
+          const y = this.valueToY(q3);
+          this.renderItems.push({
+            x, y, width: Math.max(6, width - 2), height: Math.max(1, this.valueToY(q1) - y),
+            centerX: x + ((Math.max(6, width - 2)) / 2), medianY: this.valueToY(median),
+            whiskerHighY: this.valueToY(values[values.length - 1]), whiskerLowY: this.valueToY(values[0]),
+            color: palette[groupIndex % palette.length]
+          });
+        });
+      });
     } else if (s.chartType === 'violin') {
       xCategories.forEach((cat, xIdx) => {
         const values = activeData.filter(row => String(row[xCol]) === cat).map(row => Number(row[yCol])).filter(value => Number.isFinite(value)).sort((a, b) => a - b);
@@ -2362,7 +2433,7 @@ export class RPlotCanvasComponent implements OnInit {
         const gIdx = grpCol ? groups.indexOf(String(r[grpCol])) : 0;
         const color = palette[Math.max(0, gIdx) % palette.length];
 
-        this.renderItems.push({ centerX: catCenterX, y, color });
+        this.renderItems.push({ centerX: catCenterX, y, color, xValue: numericX, yValue: val, label: s.chartType === 'volcano' && s.labelColumn ? String(r[s.labelColumn] ?? '') : '' });
       });
     } else if (s.chartType === 'line' || s.chartType === 'density') {
       if (s.chartType === 'density') {

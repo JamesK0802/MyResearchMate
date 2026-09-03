@@ -748,26 +748,18 @@ export class RPlotSyncService {
         }
       } else if (s.chartType === 'scatter') {
         code += `  + geom_point(size = ${s.pointSize}, alpha = 0.85)\n`;
-        if (s.showTrendLine !== false) {
-          code += `  + geom_smooth(method = "lm", se = ${s.showConfidenceBand ? 'TRUE' : 'FALSE'}, linetype = "dashed", linewidth = 0.8)\n`;
-        }
       } else if (s.chartType === 'line') {
         const groupAes = s.groupColumn ? `, group = ${groupColumn}` : '';
         code += `  + geom_line(aes(${groupAes.replace(', ', '')}), size = ${s.lineWidth})\n`;
         code += `  + geom_point(size = ${s.pointSize})\n`;
-        if (s.showErrorBars && s.errorColumn) {
-          code += `  + geom_errorbar(aes(ymin = ${yColumn} - ${errorColumn}, ymax = ${yColumn} + ${errorColumn}), width = 0.15, size = 0.5)\n`;
-        }
       } else if (s.chartType === 'boxplot') {
         code += `  + geom_boxplot(alpha = 0.8, width = ${s.barWidth}, outlier.size = 2)\n`;
-        if (s.showRawPoints !== false) code += `  + geom_jitter(width = 0.15, size = ${s.pointSize * 0.6}, alpha = 0.5)\n`;
       } else if (s.chartType === 'violin') {
         code += `  + geom_violin(alpha = 0.72, width = ${s.barWidth}, trim = FALSE)\n`;
         code += `  + geom_boxplot(width = ${Math.min(0.22, s.barWidth * 0.35)}, outlier.shape = NA, alpha = 0.9)\n`;
         if (s.showRawPoints !== false) code += `  + geom_jitter(width = 0.12, size = ${s.pointSize * 0.55}, alpha = 0.48)\n`;
       } else if (s.chartType === 'dotplot') {
         code += `  + geom_jitter(width = 0.16, height = 0, size = ${s.pointSize}, alpha = 0.78)\n`;
-        if (s.showMean) code += `  + stat_summary(fun = mean, geom = "point", shape = 95, size = ${s.pointSize * 2}, color = "#111827")\n`;
       } else if (s.chartType === 'histogram') {
         code += `  + geom_histogram(bins = ${Math.max(5, Number(s.binCount) || 30)}, fill = "${(s.palette || ['#2563EB'])[0]}", color = "white", alpha = 0.86)\n`;
       } else if (s.chartType === 'density') {
@@ -787,7 +779,12 @@ export class RPlotSyncService {
           : (s.palette && s.palette.length ? s.palette : ['#2166AC', '#B2182B']);
         const low = heatmapPalette[0] || '#2166AC';
         const high = heatmapPalette[1] || heatmapPalette[heatmapPalette.length - 1] || '#B2182B';
-        code += `  + scale_fill_gradient2(low = "${low}", mid = "white", high = "${high}", midpoint = 0, name = "${this.rString(s.yColumn || 'Value')}")\n`;
+        const heatValues = rows.map(row => Number(row[s.yColumn])).filter(value => Number.isFinite(value));
+        const divergingHeatmap = heatValues.some(value => value < 0) && heatValues.some(value => value > 0);
+        code += divergingHeatmap
+          ? `  + scale_fill_gradient2(low = "${low}", mid = "white", high = "${high}", midpoint = 0, name = "${this.rString(s.yColumn || 'Value')}")\n`
+          : `  + scale_fill_gradient(low = "${low}", high = "${high}", name = "${this.rString(s.yColumn || 'Value')}")\n`;
+        if (s.showHeatmapValues) code += `  + geom_text(aes(label = ${yColumn}), size = 3, color = "#111827")\n`;
       }
 
       if (s.palette && s.palette.length > 0 && s.chartType !== 'heatmap' && s.chartType !== 'volcano') {
