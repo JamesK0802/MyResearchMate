@@ -249,7 +249,7 @@ interface PaletteDef {
               <div class="mapping-box">
                 <div class="form-field">
                   <label>X-Axis (Horizontal):
-                    <span class="info-bubble" title="Column for the horizontal axis">?</span>
+                    <span class="info-bubble" data-tooltip="Column for the horizontal axis">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.xColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
@@ -258,7 +258,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Y-Axis (Vertical):
-                    <span class="info-bubble" title="Measurement column for vertical axis">?</span>
+                    <span class="info-bubble" data-tooltip="Measurement column for vertical axis">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.yColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of numericColumns" [value]="col">{{ col }} (numeric)</option>
@@ -270,7 +270,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Group / Fill (Subgroups):
-                    <span class="info-bubble" title="Column to group conditions or genotypes side-by-side">?</span>
+                    <span class="info-bubble" data-tooltip="Column to group conditions or genotypes side-by-side">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.groupColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - Single Color)</option>
@@ -280,7 +280,7 @@ interface PaletteDef {
 
                 <div class="form-field" *ngIf="currentPlot.chartType === 'bar' || currentPlot.chartType === 'line'">
                   <label>Error Bar (SD/SE):
-                    <span class="info-bubble" title="Standard Deviation or Standard Error column">?</span>
+                    <span class="info-bubble" data-tooltip="Standard Deviation or Standard Error column">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.errorColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - No Error Bars)</option>
@@ -1077,6 +1077,32 @@ interface PaletteDef {
     }
     .plot-type-row .type-btn:nth-child(even) .info-bubble:hover[data-tooltip]::after,
     .plot-type-row .type-btn:nth-child(even) .info-bubble:hover[data-tooltip]::before {
+      transform: translateY(0);
+    }
+
+    /* Mapping hints use the same instant dark tooltip as plot cards, but open
+       inside the form card and wrap instead of escaping the scrollable panel. */
+    .mapping-box .info-bubble[data-tooltip]::before {
+      top: calc(100% + 2px);
+      bottom: auto;
+      left: auto;
+      right: 3px;
+      transform: translateY(-3px);
+      border-width: 0 5px 5px;
+      border-color: transparent transparent #0f172a;
+    }
+    .mapping-box .info-bubble[data-tooltip]::after {
+      top: calc(100% + 7px);
+      bottom: auto;
+      left: auto;
+      right: 0;
+      width: 220px;
+      box-sizing: border-box;
+      white-space: normal;
+      transform: translateY(-3px);
+    }
+    .mapping-box .info-bubble:hover[data-tooltip]::before,
+    .mapping-box .info-bubble:hover[data-tooltip]::after {
       transform: translateY(0);
     }
 
