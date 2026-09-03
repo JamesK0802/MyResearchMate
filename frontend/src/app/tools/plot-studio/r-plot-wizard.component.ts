@@ -1408,8 +1408,29 @@ export class RPlotWizardComponent implements OnInit {
   }
 
   setChartType(type: PlotType) {
-    this.currentPlot.chartType = type;
-    this.currentPlot = { ...this.currentPlot };
+    // Keep the guided preview and the editor on the same data-driven defaults
+    // when changing plot families. Fixed limits from a previous chart should
+    // never silently distort a new plot type.
+    this.currentPlot = {
+      ...this.currentPlot,
+      chartType: type,
+      showRawPoints: true,
+      showTrendLine: type === 'scatter',
+      showConfidenceBand: false,
+      binCount: this.currentPlot.binCount || 30,
+      yMin: null,
+      yMax: null
+    };
+    if (type === 'volcano') {
+      this.currentPlot = {
+        ...this.currentPlot,
+        xLabel: 'log2 fold change',
+        yLabel: '-log10 adjusted P value',
+        thresholdX: 1,
+        thresholdY: 1.3,
+        legendPosition: 'none'
+      };
+    }
   }
 
   openGuidedHelp(type: PlotType) {

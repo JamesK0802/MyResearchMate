@@ -187,63 +187,51 @@ interface PlotHelpCard extends PlotExample {
       <div class="horizontal-inspector-strip">
         <div class="inspector-hint">Select a title, axis label, or legend on the canvas. Drag it to move; drag the blue corner handle to resize. Double-click text to edit it.</div>
 
-        <section class="inspector-section">
+        <section class="inspector-section" *ngIf="hasPlotMarkControls">
           <span class="inspector-section-title">Plot marks</span>
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'bar' || activePlot.chartType === 'boxplot'">
-          <label>Bar Width: <strong>{{ activePlot.barWidth }}</strong></label>
-          <input type="range" min="0.2" max="0.95" step="0.05" [ngModel]="activePlot.barWidth" (ngModelChange)="updateActiveState({barWidth: $event})" />
+          <label class="control-field">Bar Width: <strong>{{ activePlot.barWidth }}</strong><input type="range" min="0.2" max="0.95" step="0.05" [ngModel]="activePlot.barWidth" (ngModelChange)="updateActiveState({barWidth: $event})" /></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'scatter' || activePlot.chartType === 'line' || activePlot.chartType === 'dotplot'">
-          <label>Point Size: <strong>{{ activePlot.pointSize }}</strong></label>
-          <input type="range" min="1" max="10" [ngModel]="activePlot.pointSize" (ngModelChange)="updateActiveState({pointSize: $event})" />
+          <label class="control-field">Point Size: <strong>{{ activePlot.pointSize }}</strong><input type="range" min="1" max="10" [ngModel]="activePlot.pointSize" (ngModelChange)="updateActiveState({pointSize: $event})" /></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'violin'">
-          <label>Raw points</label>
-          <input type="checkbox" [ngModel]="activePlot.showRawPoints !== false" (ngModelChange)="updateActiveState({showRawPoints: $event})" />
+          <label class="chk-label"><input type="checkbox" [ngModel]="activePlot.showRawPoints !== false" (ngModelChange)="updateActiveState({showRawPoints: $event})" />Raw points</label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'line' || activePlot.chartType === 'density'">
-          <label>Line width: <strong>{{ activePlot.lineWidth }}</strong></label>
-          <input type="range" min="1" max="6" step="0.5" [ngModel]="activePlot.lineWidth" (ngModelChange)="updateActiveState({lineWidth: +$event})" />
+          <label class="control-field">Line width: <strong>{{ activePlot.lineWidth }}</strong><input type="range" min="1" max="6" step="0.5" [ngModel]="activePlot.lineWidth" (ngModelChange)="updateActiveState({lineWidth: +$event})" /></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'histogram'">
-          <label>Bins <strong>{{ activePlot.binCount || 30 }}</strong></label>
-          <input type="range" min="5" max="80" step="1" [ngModel]="activePlot.binCount || 30" (ngModelChange)="updateActiveState({binCount: +$event})" />
+          <label class="control-field">Bins <strong>{{ activePlot.binCount || 30 }}</strong><input type="range" min="5" max="80" step="1" [ngModel]="activePlot.binCount || 30" (ngModelChange)="updateActiveState({binCount: +$event})" /></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'volcano'">
-          <label>|logFC|</label>
-          <input type="number" class="inline-number" min="0" step="0.25" [ngModel]="activePlot.thresholdX || 1" (ngModelChange)="updateActiveState({thresholdX: +$event})" />
-          <label>-log10 FDR</label>
-          <input type="number" class="inline-number" min="0" step="0.1" [ngModel]="activePlot.thresholdY || 1.3" (ngModelChange)="updateActiveState({thresholdY: +$event})" />
-          <label>Label</label>
-          <select class="ctrl-select" [ngModel]="activePlot.labelColumn || ''" (ngModelChange)="updateActiveState({labelColumn: $event})">
+          <label class="control-field">|logFC|<input type="number" class="inline-number" min="0" step="0.25" [ngModel]="activePlot.thresholdX || 1" (ngModelChange)="updateActiveState({thresholdX: +$event})" /></label>
+          <label class="control-field">-log10 FDR<input type="number" class="inline-number" min="0" step="0.1" [ngModel]="activePlot.thresholdY || 1.3" (ngModelChange)="updateActiveState({thresholdY: +$event})" /></label>
+          <label class="control-field">Label<select class="ctrl-select" [ngModel]="activePlot.labelColumn || ''" (ngModelChange)="updateActiveState({labelColumn: $event})">
             <option value="">None</option>
             <option *ngFor="let column of columns" [value]="column">{{ column }}</option>
-          </select>
+          </select></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'heatmap'">
-          <label>Cell values</label>
-          <input type="checkbox" [ngModel]="activePlot.showHeatmapValues === true" (ngModelChange)="updateActiveState({showHeatmapValues: $event})" />
+          <label class="chk-label"><input type="checkbox" [ngModel]="activePlot.showHeatmapValues === true" (ngModelChange)="updateActiveState({showHeatmapValues: $event})" />Cell values</label>
         </div>
         </section>
 
-        <section class="inspector-section">
+        <section class="inspector-section" *ngIf="hasAxisControls">
           <span class="inspector-section-title">Axes</span>
         <div class="insp-strip-item" *ngIf="canRotateXAxis" title="Rotates category labels to stop long names overlapping.">
-          <label>X Rotation: <strong>{{ activePlot.xRotation }}°</strong></label>
-          <input type="range" min="0" max="90" step="15" [ngModel]="activePlot.xRotation" (ngModelChange)="updateActiveState({xRotation: $event})" />
+          <label class="control-field">X Rotation: <strong>{{ activePlot.xRotation }}°</strong><input type="range" min="0" max="90" step="15" [ngModel]="activePlot.xRotation" (ngModelChange)="updateActiveState({xRotation: $event})" /></label>
         </div>
 
         <div class="insp-strip-item" *ngIf="canSetYAxisRange" title="Set the visible Y-axis range. Leave empty to calculate it from your data.">
-          <label>Y min <span class="field-help" title="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span></label>
-          <input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" />
-          <label>max</label>
-          <input type="number" class="inline-number" [ngModel]="activePlot.yMax" (ngModelChange)="updateActiveState({yMax: $event === '' ? null : +$event})" placeholder="Auto" />
+          <label class="control-field">Y min <span class="field-help" title="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span><input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" /></label>
+          <label class="control-field">max<input type="number" class="inline-number" [ngModel]="activePlot.yMax" (ngModelChange)="updateActiveState({yMax: $event === '' ? null : +$event})" placeholder="Auto" /></label>
         </div>
         </section>
 
@@ -1054,10 +1042,10 @@ interface PlotHelpCard extends PlotExample {
     .inspector-section {
       display: flex;
       align-content: start;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
       flex-wrap: wrap;
-      min-height: 122px;
+      min-height: 0;
       padding: 14px;
       border: 1px solid #dbe3ef;
       border-radius: 10px;
@@ -1091,6 +1079,8 @@ interface PlotHelpCard extends PlotExample {
       letter-spacing: 0;
       text-transform: none;
     }
+    .control-field { display: inline-flex; align-items: center; gap: 5px; flex-wrap: nowrap; max-width: 100%; }
+    .control-field .ctrl-select { min-width: 108px; }
 
     .insp-strip-item input[type="range"] {
       width: min(138px, 100%);
@@ -2077,6 +2067,14 @@ export class RPlotCanvasComponent implements OnInit {
     // by the summary-style plots that support them in the canvas/R script.
     return !!this.activePlot?.errorColumn
       && this.activePlot.chartType === 'bar';
+  }
+
+  get hasPlotMarkControls(): boolean {
+    return ['bar', 'boxplot', 'scatter', 'line', 'dotplot', 'violin', 'density', 'histogram', 'volcano', 'heatmap'].includes(this.activePlot?.chartType);
+  }
+
+  get hasAxisControls(): boolean {
+    return this.canRotateXAxis || this.canSetYAxisRange;
   }
 
   get canRotateXAxis(): boolean {

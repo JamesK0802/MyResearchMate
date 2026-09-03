@@ -196,7 +196,7 @@ import { PlotState } from '../../services/r-plot-sync.service';
         <g *ngIf="plotState?.chartType === 'violin'">
           <g *ngFor="let item of renderItems">
             <ellipse [attr.cx]="item.centerX" [attr.cy]="item.centerY" [attr.rx]="item.width / 2" [attr.ry]="Math.max(8, item.height / 2)" [attr.fill]="item.color" fill-opacity=".62" [attr.stroke]="getAxisLineColor()" stroke-width="1" />
-            <circle *ngFor="let point of item.points" [attr.cx]="point.x" [attr.cy]="point.y" r="2.4" [attr.fill]="getThemeText()" fill-opacity=".72" />
+            <circle *ngFor="let point of item.points" [attr.cx]="point.x" [attr.cy]="point.y" [attr.r]="plotState?.showRawPoints !== false ? 2.4 : 0" [attr.fill]="getThemeText()" fill-opacity=".72" />
             <line [attr.x1]="item.centerX - item.width / 2" [attr.x2]="item.centerX + item.width / 2" [attr.y1]="item.medianY" [attr.y2]="item.medianY" [attr.stroke]="getThemeText()" stroke-width="1.6" />
           </g>
         </g>
@@ -617,7 +617,10 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
         this.renderItems.push({ x, y: this.svgHeight - this.margin.bottom - height, width, height, color: palette[0] });
       });
     } else if (s.chartType === 'heatmap') {
-      const rowCategories = Array.from(new Set(activeData.map(row => String(row[grpCol] ?? '')))).filter(Boolean);
+      // Match the canvas: an ungrouped heatmap is still a valid one-row matrix.
+      const rowCategories = grpCol
+        ? Array.from(new Set(activeData.map(row => String(row[grpCol] ?? '')))).filter(Boolean)
+        : ['Value'];
       const values = activeData.map(row => Number(row[yCol])).filter(value => Number.isFinite(value));
       const rawMin = values.length ? Math.min(...values) : 0;
       const rawMax = values.length ? Math.max(...values) : 1;
@@ -633,7 +636,7 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
       this.heatmapPalette = [...palette];
       activeData.forEach(row => {
         const colIndex = xCategories.indexOf(String(row[xCol]));
-        const rowIndex = rowCategories.indexOf(String(row[grpCol]));
+        const rowIndex = grpCol ? rowCategories.indexOf(String(row[grpCol])) : 0;
         const value = Number(row[yCol]) || 0;
         this.renderItems.push({ x: this.margin.left + colIndex * cellWidth, y: this.margin.top + rowIndex * cellHeight, width: cellWidth, height: cellHeight, color: this.heatColor(value, minValue, maxValue, palette) });
       });
