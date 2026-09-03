@@ -1,6 +1,7 @@
 import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { RPlotSyncService, PlotState, PlotType, PlotExample } from '../../services/r-plot-sync.service';
@@ -143,7 +144,7 @@ interface PlotHelpCard extends PlotExample {
             type="button"
             class="btn-toggle-inspector"
             [class.active]="showInspector"
-            (click)="showInspector = !showInspector"
+            (click)="toggleInspector()"
             title="Open publication formatting controls">
             Customize
           </button>
@@ -193,23 +194,19 @@ interface PlotHelpCard extends PlotExample {
           <input type="range" min="0.2" max="0.95" step="0.05" [ngModel]="activePlot.barWidth" (ngModelChange)="updateActiveState({barWidth: $event})" />
         </div>
 
-        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'scatter' || activePlot.chartType === 'line'">
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'scatter' || activePlot.chartType === 'line' || activePlot.chartType === 'dotplot'">
           <label>Point Size: <strong>{{ activePlot.pointSize }}</strong></label>
           <input type="range" min="1" max="10" [ngModel]="activePlot.pointSize" (ngModelChange)="updateActiveState({pointSize: $event})" />
         </div>
 
-        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'violin' || activePlot.chartType === 'dotplot' || activePlot.chartType === 'boxplot'">
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'violin'">
           <label>Raw points</label>
           <input type="checkbox" [ngModel]="activePlot.showRawPoints !== false" (ngModelChange)="updateActiveState({showRawPoints: $event})" />
-          <label *ngIf="activePlot.chartType === 'dotplot'">Mean</label>
-          <input *ngIf="activePlot.chartType === 'dotplot'" type="checkbox" [ngModel]="activePlot.showMean === true" (ngModelChange)="updateActiveState({showMean: $event})" />
         </div>
 
-        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'scatter'">
-          <label>Fit</label>
-          <input type="checkbox" [ngModel]="activePlot.showTrendLine !== false" (ngModelChange)="updateActiveState({showTrendLine: $event})" />
-          <label>95% CI</label>
-          <input type="checkbox" [ngModel]="activePlot.showConfidenceBand === true" (ngModelChange)="updateActiveState({showConfidenceBand: $event})" />
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'line' || activePlot.chartType === 'density'">
+          <label>Line width: <strong>{{ activePlot.lineWidth }}</strong></label>
+          <input type="range" min="1" max="6" step="0.5" [ngModel]="activePlot.lineWidth" (ngModelChange)="updateActiveState({lineWidth: +$event})" />
         </div>
 
         <div class="insp-strip-item" *ngIf="activePlot.chartType === 'histogram'">
@@ -228,16 +225,21 @@ interface PlotHelpCard extends PlotExample {
             <option *ngFor="let column of columns" [value]="column">{{ column }}</option>
           </select>
         </div>
+
+        <div class="insp-strip-item" *ngIf="activePlot.chartType === 'heatmap'">
+          <label>Cell values</label>
+          <input type="checkbox" [ngModel]="activePlot.showHeatmapValues === true" (ngModelChange)="updateActiveState({showHeatmapValues: $event})" />
+        </div>
         </section>
 
         <section class="inspector-section">
           <span class="inspector-section-title">Axes</span>
-        <div class="insp-strip-item" title="Rotates category labels to stop long names overlapping.">
+        <div class="insp-strip-item" *ngIf="canRotateXAxis" title="Rotates category labels to stop long names overlapping.">
           <label>X Rotation: <strong>{{ activePlot.xRotation }}°</strong></label>
           <input type="range" min="0" max="90" step="15" [ngModel]="activePlot.xRotation" (ngModelChange)="updateActiveState({xRotation: $event})" />
         </div>
 
-        <div class="insp-strip-item" title="Set the visible Y-axis range. Leave empty to calculate it from your data.">
+        <div class="insp-strip-item" *ngIf="canSetYAxisRange" title="Set the visible Y-axis range. Leave empty to calculate it from your data.">
           <label>Y min <span class="field-help" title="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span></label>
           <input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" />
           <label>max</label>
@@ -288,15 +290,15 @@ interface PlotHelpCard extends PlotExample {
         </div>
 
         <div class="insp-strip-item chk-strip-item">
-          <label class="chk-label">
-            <input type="checkbox" [disabled]="!canUseErrorBars" [ngModel]="activePlot.showErrorBars" (ngModelChange)="updateActiveState({showErrorBars: $event})" />
+          <label class="chk-label" *ngIf="canUseErrorBars">
+            <input type="checkbox" [ngModel]="activePlot.showErrorBars" (ngModelChange)="updateActiveState({showErrorBars: $event})" />
             Show Error Bars
           </label>
-          <label class="chk-label">
+          <label class="chk-label" *ngIf="canUseGridControls">
             <input type="checkbox" [ngModel]="activePlot.showGrid !== false" (ngModelChange)="updateActiveState({showGrid: $event})" />
             Major grid
           </label>
-          <label class="chk-label">
+          <label class="chk-label" *ngIf="canUseGridControls">
             <input type="checkbox" [disabled]="activePlot.showGrid === false" [ngModel]="activePlot.showMinorGrid === true" (ngModelChange)="updateActiveState({showMinorGrid: $event})" />
             Minor grid
           </label>
@@ -306,7 +308,7 @@ interface PlotHelpCard extends PlotExample {
       </div>
       <aside class="customize-preview" aria-label="Live plot preview">
         <div class="customize-preview-heading"><span>LIVE PREVIEW</span><small>Changes update instantly</small></div>
-        <app-r-plot-preview [plotState]="activePlot" [data]="data"></app-r-plot-preview>
+        <div class="exact-preview" [innerHTML]="previewSvgMarkup"></div>
       </aside>
       </div>
       </section>
@@ -572,6 +574,13 @@ interface PlotHelpCard extends PlotExample {
                     [attr.x]="item.x" [attr.y]="item.y"
                     [attr.width]="item.width" [attr.height]="item.height"
                     [attr.fill]="item.color" stroke="#ffffff" stroke-width="1" />
+              <ng-container *ngIf="activePlot.showHeatmapValues === true">
+                <text *ngFor="let item of renderItems"
+                      [attr.x]="item.x + item.width / 2" [attr.y]="item.y + item.height / 2 + 4"
+                      text-anchor="middle" [attr.font-family]="activePlot.fontFamily"
+                      [attr.font-size]="Math.max(8, activePlot.fontSizeAxis * .72)"
+                      [attr.fill]="getHeatmapCellTextColor(item.color)">{{ formatHeatValue(item.value) }}</text>
+              </ng-container>
             </g>
             <g *ngIf="activePlot.chartType === 'heatmap'" class="heatmap-scale">
               <defs><linearGradient id="heatmap-value-scale" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" [attr.stop-color]="heatmapLowColor" /><stop offset="50%" [attr.stop-color]="heatmapMidColor" /><stop offset="100%" [attr.stop-color]="heatmapHighColor" /></linearGradient></defs>
@@ -1022,7 +1031,8 @@ interface PlotHelpCard extends PlotExample {
     .customize-content { display: grid; grid-template-columns: minmax(520px, 1.15fr) minmax(360px, .85fr); align-items: stretch; }
     .customize-preview { display: flex; flex-direction: column; gap: 9px; min-height: 390px; padding: 18px; background: #ffffff; border-left: 1px solid #dbe3ef; }
     .customize-preview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #64748b; }.customize-preview-heading span { color: #475569; font-size: 10px; font-weight: 800; letter-spacing: .09em; }.customize-preview-heading small { font-size: 10px; }
-    .customize-preview app-r-plot-preview { display: block; flex: 1; min-height: 300px; border: 1px solid #dbe3ef; border-radius: 9px; overflow: hidden; background: #ffffff; }
+    .exact-preview { display: flex; flex: 1; min-height: 300px; border: 1px solid #dbe3ef; border-radius: 9px; overflow: hidden; background: #ffffff; }
+    ::ng-deep .exact-preview svg { width: 100%; height: 100%; display: block; }
 
     .horizontal-inspector-strip {
       display: grid;
@@ -1647,6 +1657,7 @@ export class RPlotCanvasComponent implements OnInit {
   columns: string[] = [];
 
   showInspector = false;
+  previewSvgMarkup: SafeHtml = '';
   showTypeMenu = false;
   plotHelp: PlotHelpCard | null = null;
   readonly advancedPlotTypes: PlotType[] = ['violin', 'dotplot', 'histogram', 'density', 'volcano', 'heatmap'];
@@ -1699,7 +1710,7 @@ export class RPlotCanvasComponent implements OnInit {
     value: ''
   };
 
-  constructor(private rSyncService: RPlotSyncService) {}
+  constructor(private rSyncService: RPlotSyncService, private sanitizer: DomSanitizer) {}
 
   ngOnInit() {
     this.rSyncService.plots$.subscribe(plots => {
@@ -1799,6 +1810,13 @@ export class RPlotCanvasComponent implements OnInit {
   get heatmapValueLabel(): string { return this.activePlot?.yColumn || 'Value'; }
   formatHeatValue(value: number): string { return Number(value.toFixed(2)).toString(); }
 
+  getHeatmapCellTextColor(color: string): string {
+    const channels = String(color).match(/\d+(?:\.\d+)?/g)?.map(Number);
+    if (!channels || channels.length < 3) return '#111827';
+    const luminance = ((channels[0] * 299) + (channels[1] * 587) + (channels[2] * 114)) / 1000;
+    return luminance < 145 ? '#ffffff' : '#111827';
+  }
+
   selectPlotTab(idx: number) {
     this.rSyncService.setActivePlotIndex(idx);
   }
@@ -1888,6 +1906,30 @@ export class RPlotCanvasComponent implements OnInit {
 
   updateActiveState(partial: Partial<PlotState>) {
     this.rSyncService.updateActivePlotState(partial);
+    this.scheduleExactPreview();
+  }
+
+  toggleInspector() {
+    this.showInspector = !this.showInspector;
+    if (this.showInspector) this.scheduleExactPreview();
+  }
+
+  /** The modal deliberately shows a clone of the rendered production SVG.
+   * This avoids a second, slightly different preview layout engine. */
+  private scheduleExactPreview() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const source = this.plotSvg?.nativeElement;
+      if (!source) return;
+      const clone = source.cloneNode(true) as SVGElement;
+      clone.classList.remove('paper-svg');
+      clone.classList.add('customize-preview-svg');
+      clone.querySelectorAll('.selection-box, .resize-handle').forEach(element => element.remove());
+      const originalGradientId = 'heatmap-value-scale';
+      const previewGradientId = 'customize-heatmap-value-scale';
+      clone.querySelectorAll(`[id="${originalGradientId}"]`).forEach(element => element.setAttribute('id', previewGradientId));
+      clone.querySelectorAll(`[fill="url(#${originalGradientId})"]`).forEach(element => element.setAttribute('fill', `url(#${previewGradientId})`));
+      this.previewSvgMarkup = this.sanitizer.bypassSecurityTrustHtml(clone.outerHTML);
+    }));
   }
 
   updatePlotAt(idx: number, partial: Partial<PlotState>) {
@@ -2034,7 +2076,19 @@ export class RPlotCanvasComponent implements OnInit {
     // Error bars need an assigned numeric error column and are only rendered
     // by the summary-style plots that support them in the canvas/R script.
     return !!this.activePlot?.errorColumn
-      && ['bar', 'line'].includes(this.activePlot.chartType);
+      && this.activePlot.chartType === 'bar';
+  }
+
+  get canRotateXAxis(): boolean {
+    return ['bar', 'line', 'boxplot', 'violin', 'dotplot'].includes(this.activePlot?.chartType);
+  }
+
+  get canSetYAxisRange(): boolean {
+    return ['bar', 'line', 'scatter', 'boxplot', 'violin', 'dotplot', 'volcano'].includes(this.activePlot?.chartType);
+  }
+
+  get canUseGridControls(): boolean {
+    return this.activePlot?.chartType !== 'heatmap';
   }
 
   get isSingleVariablePlotHelp(): boolean {
@@ -2392,6 +2446,7 @@ export class RPlotCanvasComponent implements OnInit {
             y: this.margin.top + groupIndex * cellHeight,
             width: categoryWidth,
             height: cellHeight,
+            value,
             color: this.heatColor(value, min, max, palette)
           });
         });

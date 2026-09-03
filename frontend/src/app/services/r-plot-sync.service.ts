@@ -62,6 +62,7 @@ export interface PlotState {
   showTrendLine?: boolean;
   showConfidenceBand?: boolean;
   showMean?: boolean;
+  showHeatmapValues?: boolean;
   binCount?: number;
   xScale?: 'linear' | 'log10';
   yScale?: 'linear' | 'log10';
