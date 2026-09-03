@@ -233,10 +233,23 @@ interface PaletteDef {
                 </button>
               </div>
 
+              <button type="button" class="other-plots-toggle" [attr.aria-expanded]="showOtherPlots" (click)="showOtherPlots = !showOtherPlots">
+                <span>Other plots</span><span>{{ showOtherPlots ? '⌃' : '⌄' }}</span>
+              </button>
+
+              <div class="plot-type-row other-plots" *ngIf="showOtherPlots">
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'violin'" (click)="setChartType('violin')">Violin Plot <span class="info-bubble" data-tooltip="Distribution shape with raw data" (click)="$event.stopPropagation(); openGuidedHelp('violin')">?</span></button>
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'dotplot'" (click)="setChartType('dotplot')">Dot Plot <span class="info-bubble" data-tooltip="Show individual observations" (click)="$event.stopPropagation(); openGuidedHelp('dotplot')">?</span></button>
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'histogram'" (click)="setChartType('histogram')">Histogram <span class="info-bubble" data-tooltip="Frequency of one measurement" (click)="$event.stopPropagation(); openGuidedHelp('histogram')">?</span></button>
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'density'" (click)="setChartType('density')">Density Plot <span class="info-bubble" data-tooltip="Smoothed distribution" (click)="$event.stopPropagation(); openGuidedHelp('density')">?</span></button>
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'volcano'" (click)="setChartType('volcano')">Volcano Plot <span class="info-bubble" data-tooltip="Effect size and significance" (click)="$event.stopPropagation(); openGuidedHelp('volcano')">?</span></button>
+                <button type="button" class="type-btn" [class.active]="currentPlot.chartType === 'heatmap'" (click)="setChartType('heatmap')">Heatmap <span class="info-bubble" data-tooltip="Matrix values encoded by color" (click)="$event.stopPropagation(); openGuidedHelp('heatmap')">?</span></button>
+              </div>
+
               <div class="mapping-box">
                 <div class="form-field">
                   <label>X-Axis (Horizontal):
-                    <span class="info-bubble" data-tooltip="Column for the horizontal axis">?</span>
+                    <span class="info-bubble" title="Column for the horizontal axis">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.xColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
@@ -245,7 +258,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Y-Axis (Vertical):
-                    <span class="info-bubble" data-tooltip="Measurement column for vertical axis">?</span>
+                    <span class="info-bubble" title="Measurement column for vertical axis">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.yColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of numericColumns" [value]="col">{{ col }} (numeric)</option>
@@ -257,7 +270,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Group / Fill (Subgroups):
-                    <span class="info-bubble" data-tooltip="Column to group conditions or genotypes side-by-side">?</span>
+                    <span class="info-bubble" title="Column to group conditions or genotypes side-by-side">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.groupColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - Single Color)</option>
@@ -267,7 +280,7 @@ interface PaletteDef {
 
                 <div class="form-field" *ngIf="currentPlot.chartType === 'bar' || currentPlot.chartType === 'line'">
                   <label>Error Bar (SD/SE):
-                    <span class="info-bubble" data-tooltip="Standard Deviation or Standard Error column">?</span>
+                    <span class="info-bubble" title="Standard Deviation or Standard Error column">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.errorColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - No Error Bars)</option>
@@ -934,6 +947,23 @@ interface PaletteDef {
       gap: 8px;
     }
 
+    .other-plots-toggle {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 2px 2px;
+      border: 0;
+      background: transparent;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .other-plots-toggle:hover { color: #2563eb; }
+    .other-plots { margin-top: -2px; }
+
     .type-btn {
       background: #ffffff;
       border: 1.5px solid #cbd5e1;
@@ -1289,6 +1319,7 @@ export class RPlotWizardComponent implements OnInit {
   guidedHelp: ReturnType<RPlotSyncService['getPlotExample']> | null = null;
   guidedHelpName = '';
   guidedHelpUse = '';
+  showOtherPlots = false;
 
   constructor(
     private rSyncService: RPlotSyncService,
@@ -1355,14 +1386,20 @@ export class RPlotWizardComponent implements OnInit {
     this.currentPlot = { ...this.currentPlot };
   }
 
-  openGuidedHelp(type: Extract<PlotType, 'bar' | 'line' | 'scatter' | 'boxplot'>) {
+  openGuidedHelp(type: PlotType) {
     this.guidedHelp = this.rSyncService.getPlotExample(type);
-    const copy = {
+    const copy: Record<PlotType, [string, string]> = {
       bar: ['Bar chart', 'Compare summarized group values, commonly a mean with SD or SEM error bars.'],
       line: ['Line plot', 'Show change over time, dose, or another ordered variable; use Group for multiple trajectories.'],
       scatter: ['Scatter plot', 'Show the association between two continuous variables, such as a standard curve or correlation.'],
-      boxplot: ['Boxplot', 'Compare the median, spread, and outliers of replicate-level data across groups.']
-    } as const;
+      boxplot: ['Boxplot', 'Compare the median, spread, and outliers of replicate-level data across groups.'],
+      violin: ['Violin plot', 'Show the shape and spread of replicate-level data with raw observations.'],
+      dotplot: ['Dot plot', 'Show every individual observation, especially for small replicate counts.'],
+      histogram: ['Histogram', 'Show the frequency distribution of one continuous measurement.'],
+      density: ['Density plot', 'Show a smoothed distribution of one continuous measurement.'],
+      volcano: ['Volcano plot', 'Compare effect size with statistical significance across features.'],
+      heatmap: ['Heatmap', 'Show numeric matrix values using color across rows and columns.']
+    };
     this.guidedHelpName = copy[type][0];
     this.guidedHelpUse = copy[type][1];
   }
