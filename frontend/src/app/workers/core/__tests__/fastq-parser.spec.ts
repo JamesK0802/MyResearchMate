@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { gzipSync } from 'fflate';
-import { parseFastqFile, parseFastqString } from '../fastq-parser';
+import { parseFastqFile, parseFastqFileInBatches, parseFastqString } from '../fastq-parser';
 
 describe('FastqParser', () => {
   it('should parse a single FASTQ record', () => {
@@ -58,5 +58,15 @@ ACTG
     const reads = await parseFastqFile(file);
     expect(reads).toHaveLength(1);
     expect(reads[0].seq).toBe('ACTG');
+  });
+
+  it('releases parsed records in caller-defined batches', async () => {
+    const file = Object.assign(new Blob(['@one\nACTG\n+\nIIII\n@two\nGATC\n+\n!!!!\n']), { name: 'reads.fastq' }) as File;
+    const batches: string[][] = [];
+    const count = await parseFastqFileInBatches(file, batch => {
+      batches.push(batch.map(read => read.seq));
+    }, 1);
+    expect(count).toBe(2);
+    expect(batches).toEqual([['ACTG'], ['GATC']]);
   });
 });

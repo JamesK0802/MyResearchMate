@@ -91,11 +91,26 @@ export async function readFileAsText(file: File): Promise<string> {
  * Safari keep the compressed file, decompressed text, line array, and parsed
  * reads alive together — enough to reload a tab during multi-file analysis.
  */
-export async function parseFastqFile(file: File): Promise<FastqRead[]> {
-  const reads: FastqRead[] = [];
+export async function parseFastqFileInBatches(
+  file: File,
+  onBatch: (reads: FastqRead[]) => Promise<void> | void,
+  batchSize = 10000,
+): Promise<number> {
   const decoder = new TextDecoder();
   const chunkSize = 1024 * 1024;
   let pending = '';
+  let batch: FastqRead[] = [];
+  let parsedCount = 0;
+  const readyBatches: FastqRead[][] = [];
+
+  const queueBatch = () => {
+    if (!batch.length) return;
+    readyBatches.push(batch);
+    batch = [];
+  };
+  const flushReadyBatches = async () => {
+    while (readyBatches.length) await onBatch(readyBatches.shift()!);
+  };
 
   const consume = (text: string) => {
     pending += text;
@@ -112,7 +127,9 @@ export async function parseFastqFile(file: File): Promise<FastqRead[]> {
       if (seq && quality) {
         const qual = new Uint8Array(quality.length);
         for (let q = 0; q < quality.length; q++) qual[q] = quality.charCodeAt(q) - 33;
-        reads.push({ id: lines[index].trim().replace(/^@/, ''), seq, qual });
+        batch.push({ id: lines[index].trim().replace(/^@/, ''), seq, qual });
+        parsedCount++;
+        if (batch.length >= batchSize) queueBatch();
       }
       index += 4;
     }
@@ -132,7 +149,21 @@ export async function parseFastqFile(file: File): Promise<FastqRead[]> {
     const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
     if (gunzip) gunzip.push(chunk, end === file.size);
     else emit(chunk, end === file.size);
+    await flushReadyBatches();
   }
-  if (pending) reads.push(...parseFastqString(pending));
+  if (pending) {
+    const trailing = parseFastqString(pending);
+    batch.push(...trailing);
+    parsedCount += trailing.length;
+  }
+  queueBatch();
+  await flushReadyBatches();
+  return parsedCount;
+}
+
+/** Parse a FASTQ file when a complete in-memory read list is genuinely needed. */
+export async function parseFastqFile(file: File): Promise<FastqRead[]> {
+  const reads: FastqRead[] = [];
+  await parseFastqFileInBatches(file, batch => { reads.push(...batch); });
   return reads;
 }
