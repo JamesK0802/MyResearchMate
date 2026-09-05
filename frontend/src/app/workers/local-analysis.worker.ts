@@ -28,7 +28,9 @@ import { buildIlluminaPseudoReads, fastqReadsToString, preprocessIlluminaReads, 
 
 let cancelled = false;
 
-const LARGE_FASTQ_BYTES = 250 * 1024 * 1024;
+// Files below this size already run reliably through the normal in-memory
+// path. Switch only genuinely large inputs to batch processing.
+const LARGE_FASTQ_BYTES = 500 * 1024 * 1024;
 
 function addNumericFields(target: Record<string, any>, source: Record<string, any>): void {
   for (const [key, value] of Object.entries(source || {})) {
