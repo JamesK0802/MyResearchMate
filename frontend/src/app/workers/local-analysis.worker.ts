@@ -73,10 +73,10 @@ addEventListener('message', async (event: MessageEvent) => {
             fileProgress: { ...fileProgress },
           });
 
-          const [r1Reads, r2Reads] = await Promise.all([
-            pair.r1 ? parseFastqFile(pair.r1) : Promise.resolve(null),
-            pair.r2 ? parseFastqFile(pair.r2) : Promise.resolve(null),
-          ]);
+          // Read mates one at a time. Parallel parsing doubles the peak memory
+          // for every paired sample and was enough for Safari to reload a tab.
+          const r1Reads = pair.r1 ? await parseFastqFile(pair.r1) : null;
+          const r2Reads = pair.r2 ? await parseFastqFile(pair.r2) : null;
           const normalized = preprocessIlluminaReads(r1Reads, r2Reads, genesPayload, {
             windowSize: params.windowSize,
             phredThreshold: params.phredThreshold,
