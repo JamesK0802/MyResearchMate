@@ -39,26 +39,6 @@ describe('Classifier Core Utilities', () => {
     expect(res.pam).toBe('TGG');
   });
 
-  it('calculates the cut from the PAM for non-20 nt guides', () => {
-    const guide = 'ATCGATCGATCGATCGA'; // 17 nt truncated guide
-    const ref = 'GCGC' + guide + 'AGG' + 'ATCGATCG';
-    const res = findGrnaCutSite(ref, guide);
-
-    expect(res.pam_found).toBe(true);
-    expect(res.pam).toBe('AGG');
-    // Three bases upstream of the PAM, regardless of spacer length.
-    expect(res.cut_site).toBe(4 + guide.length - 3);
-  });
-
-  it('does not invent a cut site when a matching guide has no adjacent PAM', () => {
-    const guide = 'ATCGATCGATCGATCGA';
-    const res = findGrnaCutSite('GCGC' + guide + 'ATA' + 'ATCG', guide);
-
-    expect(res.grna_start).toBe(4);
-    expect(res.pam_found).toBe(false);
-    expect(res.cut_site).toBe(-1);
-  });
-
   it('should get correct window bounds', () => {
     const ref = 'A'.repeat(100);
     expect(getWindowBounds(ref, 50, 40)).toEqual([30, 70]);

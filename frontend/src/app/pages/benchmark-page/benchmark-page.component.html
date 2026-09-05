@@ -180,7 +180,7 @@
                 <div class="window-card" *ngFor="let item of mergeWindows">
                   <div class="window-card-header"><span class="window-target-name">{{ item.geneName }} - {{ item.targetName }}</span><span class="window-length-badge">{{ item.sequence.length }} bp</span></div>
                   <div class="window-meta" *ngIf="item.cutSite >= 0">Cut Site: {{ item.cutSite }} · Strand: {{ item.strand }} · PAM: <code>{{ item.pam }}</code></div>
-                  <div class="window-meta warning" *ngIf="item.cutSite < 0">No adjacent SpCas9 PAM was found; no cut site is assigned.</div>
+                  <div class="window-meta warning" *ngIf="item.cutSite < 0">gRNA not matched in reference (fallback center window shown; preprocessing will reject this target)</div>
                   <div class="ref-map-bar-wrapper">
                     <div class="ref-map-bar" [title]="'Reference: ' + item.referenceLength + ' bp · Window: ' + item.windowStart + '–' + item.windowEnd">
                       <div class="ref-map-win" [style.left.%]="item.windowStart / item.referenceLength * 100" [style.width.%]="(item.windowEnd - item.windowStart) / item.referenceLength * 100"></div>

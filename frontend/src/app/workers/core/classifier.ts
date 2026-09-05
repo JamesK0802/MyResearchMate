@@ -111,11 +111,11 @@ export function findGrnaCutSite(reference: string, grna: string): CutSiteInfo {
   // Fallback
   let idx = refUp.indexOf(grnaUp);
   if (idx !== -1) {
-    return { strand: 'forward', grna_start: idx, grna_end: idx + grnaLen, cut_site: -1, pam: 'NOT_FOUND', pam_found: false };
+    return { strand: 'forward', grna_start: idx, grna_end: idx + grnaLen, cut_site: idx + grnaLen - 3, pam: 'NOT_FOUND', pam_found: false };
   }
   idx = refUp.indexOf(grnaRc);
   if (idx !== -1) {
-    return { strand: 'reverse', grna_start: idx, grna_end: idx + grnaRc.length, cut_site: -1, pam: 'NOT_FOUND', pam_found: false };
+    return { strand: 'reverse', grna_start: idx, grna_end: idx + grnaRc.length, cut_site: idx + 3, pam: 'NOT_FOUND', pam_found: false };
   }
 
   return { strand: 'unknown', grna_start: -1, grna_end: -1, cut_site: Math.floor(refLen / 2), pam: 'N/A', pam_found: false };

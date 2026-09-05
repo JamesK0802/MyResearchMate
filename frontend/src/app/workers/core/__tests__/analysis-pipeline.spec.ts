@@ -5,42 +5,40 @@ import { GenePayload } from '../multi-reference-assigner';
 
 describe('Analysis Pipeline End-to-End', () => {
   it('should run a complete local analysis on a set of mock reads', () => {
-    // References include a validated SpCas9 PAM immediately after each guide.
-    const guideA = 'ATCGATCGATCGATCGATCG';
-    const guideB = 'GGCCGGCCGGCCGGCCGGCC';
-    const refA = 'GCGCATGC' + guideA + 'TGG' + 'ATCG'.repeat(18);
-    const refB = 'TATATATA' + guideB + 'TGG' + 'GGCC'.repeat(18);
+    // 100 bp references
+    const refA = 'ATCG'.repeat(25);
+    const refB = 'GGCC'.repeat(25);
 
     const genesPayload: GenePayload[] = [
       {
         gene: 'GeneA',
         sequence: refA,
         // target cut site is 17
-        targets: [{ target_id: 'targetA', sgrna_seq: guideA, window_size: 40 }]
+        targets: [{ target_id: 'targetA', sgrna_seq: 'ATCGATCGATCGATCGATCG', window_size: 40 }]
       },
       {
         gene: 'GeneB',
         sequence: refB,
         // target cut site is 17
-        targets: [{ target_id: 'targetB', sgrna_seq: guideB, window_size: 40 }]
+        targets: [{ target_id: 'targetB', sgrna_seq: 'GGCCGGCCGGCCGGCCGGCC', window_size: 40 }]
       }
     ];
 
     // Read 1: Perfect match for GeneA target (60bp)
     const read1: FastqRead = {
-      seq: refA.substring(0, 60),
+      seq: 'ATCG'.repeat(15),
       qual: new Array(60).fill(40)
     };
 
     // Read 2: Match for GeneA target but with a 1bp deletion (59bp)
     const read2: FastqRead = {
-      seq: refA.substring(0, 28) + refA.substring(29, 60),
+      seq: 'ATCG'.repeat(7) + 'ATCG'.repeat(8).substring(1),
       qual: new Array(59).fill(40)
     };
 
     // Read 3: Perfect match for GeneB target (60bp)
     const read3: FastqRead = {
-      seq: refB.substring(0, 60),
+      seq: 'GGCC'.repeat(15),
       qual: new Array(60).fill(40)
     };
 

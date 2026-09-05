@@ -282,7 +282,7 @@
                       Cut Site Index: {{ item.cutSiteIndex }} | Strand: {{ item.strand }} | PAM: <code>{{ item.pam }}</code>
                     </div>
                     <div class="window-meta warning" *ngIf="item.cutSiteIndex === -1">
-                      No adjacent SpCas9 PAM was found; no cut site is assigned.
+                      gRNA not matched in reference (fallback center window)
                     </div>
 
                     <!-- Clean Visual Reference Map Bar -->

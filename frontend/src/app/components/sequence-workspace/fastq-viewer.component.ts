@@ -941,10 +941,6 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
       if (!refSeq || !grnaSeq) return;
 
       const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
-      if (!cutInfo.pam_found) {
-        alert('No adjacent SpCas9 PAM (NGG/CCN) was found for this gRNA. A cut site cannot be determined.');
-        return;
-      }
       let cutSite = cutInfo.cut_site;
       if (cutSite < 0 || cutSite >= refSeq.length) {
         cutSite = Math.floor(refSeq.length / 2);
