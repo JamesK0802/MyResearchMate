@@ -220,7 +220,8 @@ export class BenchmarkPageComponent {
         const grna = target.grnaSequence.replace(/\s+/g, '').toUpperCase();
         if (!grna) return;
         const cut = findGrnaCutSite(reference, grna);
-        const cutSite = cut.grna_start >= 0 ? cut.cut_site : Math.floor(reference.length / 2);
+        const hasValidatedCutSite = cut.pam_found;
+        const cutSite = hasValidatedCutSite ? cut.cut_site : Math.floor(reference.length / 2);
         const windowSize = Math.max(1, Number(this.mergeWindow) || 90);
         const windowStart = Math.max(0, cutSite - Math.floor(windowSize / 2));
         const sequence = extractWindow(reference, cutSite, windowSize);
@@ -228,7 +229,7 @@ export class BenchmarkPageComponent {
           geneName: gene.geneName.trim() || `Gene ${geneIndex + 1}`,
           targetName: target.targetName.trim() || `T${targetIndex + 1}`,
           sequence,
-          cutSite: cut.grna_start >= 0 ? cut.cut_site : -1,
+          cutSite: hasValidatedCutSite ? cut.cut_site : -1,
           strand: cut.strand,
           pam: cut.pam,
           referenceLength: reference.length,

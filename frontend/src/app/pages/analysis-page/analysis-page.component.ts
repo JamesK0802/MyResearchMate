@@ -309,7 +309,7 @@ export class AnalysisPageComponent implements OnInit {
             const winSeq = extractWindow(refSeq, cutSite, displayWindowSize,
               customWindowEnabled ? customWindowLeft : undefined,
               customWindowEnabled ? customWindowRight : undefined);
-            const cutWinIdx = cutInfo.grna_start !== -1 ? cutIndexInWindow(refSeq, cutSite, displayWindowSize,
+            const cutWinIdx = cutInfo.pam_found ? cutIndexInWindow(refSeq, cutSite, displayWindowSize,
               customWindowEnabled ? customWindowLeft : undefined,
               customWindowEnabled ? customWindowRight : undefined) : -1;
 
@@ -336,7 +336,7 @@ export class AnalysisPageComponent implements OnInit {
               geneName,
               targetId,
               sequence: winSeq,
-              cutSiteIndex: cutInfo.grna_start !== -1 ? cutSite : -1,
+              cutSiteIndex: cutInfo.pam_found ? cutSite : -1,
               cutSiteInWindow: cutWinIdx,
               pam: cutInfo.pam,
               strand: cutInfo.strand,

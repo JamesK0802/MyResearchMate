@@ -51,6 +51,7 @@ export function runBenchmark(
     const grna = row.grna.trim().toUpperCase();
     const cut = findGrnaCutSite(reference, grna);
     if (cut.grna_start < 0) throw new Error(`gRNA was not found in the reference for ${row.gene} › ${row.target}.`);
+    if (!cut.pam_found) throw new Error(`No adjacent SpCas9 PAM (NGG/CCN) was found for ${row.gene} › ${row.target}.`);
     const refWindow = extractWindow(reference, cut.cut_site, options.windowSize, options.customWindowLeft, options.customWindowRight);
     const cutIndex = cutIndexInWindow(reference, cut.cut_site, options.windowSize, options.customWindowLeft, options.customWindowRight);
     const classInfo: ClassInfo = {

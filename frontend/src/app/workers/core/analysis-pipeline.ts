@@ -200,10 +200,12 @@ function runAnalysisOnReads(
     const refSgrnaStart = cutInfo.grna_start;
     const refCutSite = cutInfo.cut_site;
 
-    if (refSgrnaStart === -1) {
+    if (refSgrnaStart === -1 || !cutInfo.pam_found) {
       targetResultsList.push({
         target_id: targetId,
-        error: 'gRNA not found in reference',
+        error: refSgrnaStart === -1
+          ? 'gRNA not found in reference'
+          : 'No adjacent SpCas9 PAM (NGG/CCN) found for this gRNA',
         summary: { total_reads: totalReads, matched_reads: 0, aligned_reads: 0 } as any,
       } as any);
       continue;
