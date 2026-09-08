@@ -508,6 +508,7 @@ export class AppStateService {
               this.ngZone.run(() => {
                 runSlot.isLoading = false;
                 if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
+                this.resultsUpdated$.next();
               });
             }, 800);
           } else if (event.type === 'error') {
@@ -515,6 +516,7 @@ export class AppStateService {
             runSlot.isLoading = false;
             this.localAnalysisSub = null;
             if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
+            this.resultsUpdated$.next();
           }
         });
       },
@@ -524,6 +526,7 @@ export class AppStateService {
           runSlot.isLoading = false;
           this.localAnalysisSub = null;
           if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
+          this.resultsUpdated$.next();
         });
       },
     });
@@ -553,6 +556,7 @@ export class AppStateService {
     if (runningSlot) runningSlot.isLoading = false;
     this.runningAnalysisTabId = null;
     this.setProgress(0, 'Analysis cancelled.');
+    this.resultsUpdated$.next();
   }
 
   // ── Handle completed response ──
