@@ -147,6 +147,17 @@
   box-shadow: 0 1px 2px rgba(22, 101, 52, .08);
 }
 
+.analysis-page .analysis-tab-item.locked {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.analysis-page .analysis-tab-item.locked:hover {
+  color: var(--color-text-secondary, #64748b);
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
 .analysis-page .tab-name {
   max-width: 180px;
   overflow: hidden;
@@ -191,6 +202,13 @@
 
 .analysis-page .tab-close-btn:hover { color: #dc2626; background: #fee2e2; }
 
+.analysis-page .tab-close-btn:disabled,
+.analysis-page .btn-add-tab:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+  transform: none;
+}
+
 .analysis-page .btn-add-tab {
   display: inline-grid;
   width: 38px;
@@ -210,6 +228,12 @@
 }
 
 .analysis-page .btn-add-tab:hover { color: #fff; background: #16a34a; transform: translateY(-1px); }
+
+.analysis-page .btn-add-tab:disabled:hover {
+  color: #15803d;
+  background: #f0fdf4;
+  transform: none;
+}
 
 .analysis-page .advanced-toggle-bar {
   display: flex;

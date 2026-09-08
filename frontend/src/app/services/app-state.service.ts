@@ -70,6 +70,11 @@ export class AppStateService {
   // ── Multi-Tab Analysis State ──
   tabs: AnalysisTab[] = [];
   activeTabId: string = '';
+  runningAnalysisTabId: string | null = null;
+
+  get isAnalysisRunning(): boolean {
+    return this.runningAnalysisTabId !== null;
+  }
 
   get currentTab(): AnalysisTab | null {
     return this.tabs.find(t => t.id === this.activeTabId) || null;
@@ -218,6 +223,7 @@ export class AppStateService {
   }
 
   addTab(name?: string) {
+    if (this.isAnalysisRunning) return;
     this.saveCurrentTabState();
     const newTabNumber = this.tabs.length + 1;
     const tabName = name || `Analysis ${newTabNumber}`;
@@ -240,6 +246,7 @@ export class AppStateService {
 
   selectTab(tabId: string) {
     if (this.activeTabId === tabId) return;
+    if (this.isAnalysisRunning) return;
     this.saveCurrentTabState();
 
     const targetTab = this.tabs.find(t => t.id === tabId);
@@ -258,6 +265,7 @@ export class AppStateService {
   }
 
   closeTab(tabId: string) {
+    if (this.isAnalysisRunning) return;
     if (this.tabs.length <= 1) {
       this.analysisSlot = emptySlot();
       this.selectedFiles = [];
@@ -451,9 +459,23 @@ export class AppStateService {
 
   // ── Local Mode Analysis ──
   runLocalAnalysis(files: File[], genesPayload: any[], params: any, illuminaPairs: IlluminaFilePair[] = []) {
+    if (this.isAnalysisRunning) {
+      this.error = 'Wait for the current analysis to finish or cancel it first.';
+      return;
+    }
     this.saveCurrentTabState();
+    const runTab = this.currentTab;
+    if (!runTab) {
+      this.error = 'No analysis tab is available.';
+      return;
+    }
+    const runTabId = runTab.id;
+    const runSlot = runTab.slot;
+    this.runningAnalysisTabId = runTabId;
     this.activateSlot('analysis');
-    this.isLoading = true;
+    this.analysisSlot = runSlot;
+    runSlot.isLoading = true;
+    runSlot.error = null;
     this.fileProgress = {};
     this.setProgress(0, 'Preparing local analysis…');
 
@@ -479,34 +501,57 @@ export class AppStateService {
             this.setProgress(event.percent, event.stage);
             this.fileProgress = event.fileProgress || {};
           } else if (event.type === 'result') {
-            this.handleAnalysisComplete(event.payload, () => {
-              this.setProgress(100, 'Local Analysis Complete ✓');
-              setTimeout(() => {
-                this.ngZone.run(() => { this.isLoading = false; });
-              }, 800);
-            });
+            this.applyAnalysisResultToSlot(runSlot, event.payload);
+            this.setProgress(100, 'Local Analysis Complete ✓');
+            this.localAnalysisSub = null;
+            setTimeout(() => {
+              this.ngZone.run(() => {
+                runSlot.isLoading = false;
+                if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
+              });
+            }, 800);
           } else if (event.type === 'error') {
-            this.error = event.message;
-            this.isLoading = false;
+            runSlot.error = event.message;
+            runSlot.isLoading = false;
+            this.localAnalysisSub = null;
+            if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
           }
         });
       },
       error: (err) => {
         this.ngZone.run(() => {
-          this.error = err?.message || 'Local analysis failed.';
-          this.isLoading = false;
+          runSlot.error = err?.message || 'Local analysis failed.';
+          runSlot.isLoading = false;
+          this.localAnalysisSub = null;
+          if (this.runningAnalysisTabId === runTabId) this.runningAnalysisTabId = null;
         });
       },
     });
   }
 
+  private applyAnalysisResultToSlot(targetSlot: ResultSlot, payload: any): void {
+    const previousMode = this.activeMode;
+    const previousAnalysisSlot = this.analysisSlot;
+    this.activeMode = 'analysis';
+    this.analysisSlot = targetSlot;
+    try {
+      this.handleAnalysisComplete(payload);
+    } finally {
+      this.activeMode = previousMode;
+      this.analysisSlot = this.currentTab?.slot || previousAnalysisSlot;
+    }
+  }
+
   cancelAnalysis() {
+    const runningTabId = this.runningAnalysisTabId;
+    const runningSlot = runningTabId ? this.tabs.find(tab => tab.id === runningTabId)?.slot : null;
     if (this.localAnalysisSub) {
       this.localAnalysisSub.unsubscribe();
       this.localAnalysisSub = null;
     }
     this.localAnalysisService.cancelAnalysis();
-    this.isLoading = false;
+    if (runningSlot) runningSlot.isLoading = false;
+    this.runningAnalysisTabId = null;
     this.setProgress(0, 'Analysis cancelled.');
   }
 

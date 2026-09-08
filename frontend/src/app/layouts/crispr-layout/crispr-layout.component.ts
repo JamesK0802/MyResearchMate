@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AppStateService } from '../../services/app-state.service';
 
 @Component({
   selector: 'app-crispr-layout',
@@ -16,19 +17,31 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
               <small>Multi-reference CRISPR analysis</small>
             </span>
           </a>
-          <a routerLink="benchmark" routerLinkActive="active" class="sub-tab">
+          <a routerLink="benchmark" routerLinkActive="active" class="sub-tab"
+             [class.locked]="state.isAnalysisRunning"
+             [attr.aria-disabled]="state.isAnalysisRunning"
+             [attr.title]="state.isAnalysisRunning ? 'Finish or cancel the current analysis first' : null"
+             (click)="blockWhileAnalyzing($event)">
             <span class="sub-tab-text">
               <strong>Benchmark</strong>
               <small>Classification accuracy testing</small>
             </span>
           </a>
-          <a routerLink="result-viewer" routerLinkActive="active" class="sub-tab">
+          <a routerLink="result-viewer" routerLinkActive="active" class="sub-tab"
+             [class.locked]="state.isAnalysisRunning"
+             [attr.aria-disabled]="state.isAnalysisRunning"
+             [attr.title]="state.isAnalysisRunning ? 'Finish or cancel the current analysis first' : null"
+             (click)="blockWhileAnalyzing($event)">
             <span class="sub-tab-text">
               <strong>Result Viewer</strong>
               <small>Load exported Excel results</small>
             </span>
           </a>
-          <a routerLink="my-data" routerLinkActive="active" class="sub-tab">
+          <a routerLink="my-data" routerLinkActive="active" class="sub-tab"
+             [class.locked]="state.isAnalysisRunning"
+             [attr.aria-disabled]="state.isAnalysisRunning"
+             [attr.title]="state.isAnalysisRunning ? 'Finish or cancel the current analysis first' : null"
+             (click)="blockWhileAnalyzing($event)">
             <span class="sub-tab-text">
               <strong>My Data</strong>
               <small>Manage your saved results</small>
@@ -55,6 +68,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     }
     .sub-tab:hover { color: #334155; background: #f8fafc; }
     .sub-tab.active { color: #166534; border-bottom-color: #22c55e; }
+    .sub-tab.locked, .sub-tab.locked:hover {
+      color: #94a3b8; background: transparent; cursor: not-allowed; opacity: .55;
+    }
     .sub-tab-text { display: flex; flex-direction: column; line-height: 1.3; }
     .sub-tab-text strong { font-size: 0.82rem; font-weight: 700; }
     .sub-tab-text small { font-size: 0.68rem; font-weight: 500; opacity: 0.75; }
@@ -85,4 +101,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     }
   `]
 })
-export class CrisprLayoutComponent {}
+export class CrisprLayoutComponent {
+  constructor(public state: AppStateService) {}
+
+  blockWhileAnalyzing(event: MouseEvent): void {
+    if (!this.state.isAnalysisRunning) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}
