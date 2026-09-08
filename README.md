@@ -130,39 +130,21 @@ Database data is stored in a persistent Docker volume named `postgres_data`, and
 
 ---
 
-## 🤖 Automated Updates (Version-based)
+## 🤖 Managed Updates
 
-If you want the server to automatically update itself only when the version increases (instead of every push), you can use the provided auto-update script.
+After the first deployment of this version, install the restricted host update service once:
 
-### 1. Setup the Script
-1.  Make the script executable:
-     ```bash
-     chmod +x scripts/auto-update.sh
-     ```
-2.  Edit the script to set your actual repository path:
-     ```bash
-     nano scripts/auto-update.sh
-     # Change REPO_DIR to your actual absolute path
-     ```
+```bash
+sudo ./deploy/install-managed-update.sh
+```
 
-### 2. Schedule with Cron
-Set the script to run every 5 minutes (or any interval):
-1.  Open crontab: `crontab -e`
-2.  Add this line (update the path):
-     ```cron
-     */5 * * * * /bin/bash /path/to/MyLabMate/scripts/auto-update.sh >> /path/to/MyLabMate/auto-update.log 2>&1
-     ```
+The system owner can then open **Managers → Update application** and select **Update & rebuild**. The host service performs a fast-forward-only Git pull, rebuilds Docker, verifies the application containers, and stores its status outside the containers. After the app restarts, the refreshed Managers page shows the Git commits, changed files, and rebuild result once.
 
-### 3. Triggering an Update
-To deploy a new version:
-1.  Increase the version number in the `VERSION` file.
-2.  Commit and push:
-     ```bash
-     git add VERSION
-     git commit -m "Bump version to 3.3.1"
-     git push origin main
-     ```
-The server will detect the change within 5 minutes, pull the code, and rebuild the containers automatically.
+The API never receives access to the Docker socket. Host-side progress and errors are available with:
+
+```bash
+sudo journalctl -u myresearchmate-update.service
+```
 
 ---
 
