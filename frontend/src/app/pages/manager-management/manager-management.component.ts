@@ -197,7 +197,39 @@ interface DeploymentStatus {
     .result-details.files p { color: #64748b; line-height: 1.55; overflow-wrap: anywhere; }
     .no-changes { margin-top: 20px; padding: 12px 14px; color: #166534; background: #f0fdf4; border-radius: 10px; }
     .btn-done { display: block; margin: 26px 0 0 auto; padding: 10px 22px; color: white; background: #166534; }
-    @media (max-width: 640px) { .manager-container { padding: 22px 14px; } .deployment-card { align-items: stretch; flex-direction: column; } .btn-update { width: 100%; } .result-modal { padding: 28px 20px 22px; } }
+    @media (max-width: 640px) {
+      .manager-container { padding: 18px 12px 28px; overflow-x:hidden; }
+      .page-header { margin-bottom:18px; }
+      .page-header h1 { margin:0; font-size:1.45rem; }
+      .page-header p { display:none; }
+      .deployment-card { align-items:stretch; flex-direction:column; gap:14px; padding:18px; margin-bottom:18px; }
+      .deployment-card p { font-size:.82rem; line-height:1.4; }
+      .btn-update { width:100%; }
+      .search-bar { margin-bottom:12px; }
+      .search-bar input { box-sizing:border-box; padding:11px 13px; border-width:1px; font-size:.86rem; }
+      .table-container { overflow:visible; border-radius:14px; }
+      table, tbody { display:block; width:100%; }
+      thead { display:none; }
+      tr {
+        display:grid;
+        grid-template-columns:minmax(0, 1fr) auto;
+        align-items:center;
+        gap:10px 12px;
+        padding:14px;
+        border-bottom:1px solid #f1f5f9;
+      }
+      tr:last-child { border-bottom:0; }
+      td { display:block; min-width:0; padding:0; border:0; }
+      td:nth-child(2) { justify-self:end; }
+      td:nth-child(3) { grid-column:1 / -1; }
+      .user-name { font-size:.86rem; }
+      .user-email { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; }
+      .role-pill { display:inline-block; padding:4px 9px; font-size:.64rem; }
+      .actions { width:100%; }
+      .actions button { width:100%; padding:9px 12px; }
+      .self-tag, .owner-tag { display:block; margin-top:-3px; font-size:.68rem; text-align:right; }
+      .result-modal { padding:28px 20px 22px; }
+    }
   `]
 })
 export class ManagerManagementComponent implements OnInit, OnDestroy {
