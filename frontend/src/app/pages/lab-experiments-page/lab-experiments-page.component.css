@@ -992,6 +992,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(12px);
   z-index: 1000;
@@ -1671,6 +1672,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(4px);
   z-index: 10000;
@@ -1872,8 +1874,8 @@
   /* ── Stunning Fullscreen Modal Overlay ── */
   .exp-modal-card {
     width: 100vw !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     border-radius: 0 !important;
   }
 

@@ -4,6 +4,10 @@
   padding: 40px 24px;
 }
 
+.unit-label {
+  text-transform: none;
+}
+
 /* ── Header Area ── */
 .pcr-header {
   display: flex;
@@ -397,7 +401,7 @@ td { padding: 20px 32px; border-bottom: 1px solid #f1f5f9; }
   .manager-modal,
   .share-modal {
     width: calc(100% - 28px);
-    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
     border-radius: 18px;
   }
 

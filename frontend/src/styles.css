@@ -664,8 +664,42 @@ a { color: inherit; }
 }
 
 .info-icon:hover .tooltip-text,
-.badge-shared:hover .tooltip-text {
+.info-icon:focus .tooltip-text,
+.info-icon:focus-within .tooltip-text,
+.badge-shared:hover .tooltip-text,
+.badge-shared:focus .tooltip-text,
+.badge-shared:focus-within .tooltip-text {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+@media (max-width: 768px) {
+  .info-icon .tooltip-text,
+  .badge-shared .tooltip-text {
+    box-sizing: border-box !important;
+    position: fixed !important;
+    right: 12px !important;
+    bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    left: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+    white-space: normal !important;
+    z-index: 100000 !important;
+  }
+
+  .info-icon .tooltip-text::after,
+  .badge-shared .tooltip-text::after {
+    display: none;
+  }
+
+  .info-icon:hover .tooltip-text,
+  .info-icon:focus .tooltip-text,
+  .info-icon:focus-within .tooltip-text,
+  .badge-shared:hover .tooltip-text,
+  .badge-shared:focus .tooltip-text,
+  .badge-shared:focus-within .tooltip-text {
+    transform: none !important;
+  }
 }

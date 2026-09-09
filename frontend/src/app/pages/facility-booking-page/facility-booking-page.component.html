@@ -97,9 +97,10 @@
 
   <!-- ═══ TAB 1: TABLE VIEW ═══ -->
   <div *ngIf="!loading && !error && activeTab === 'table'" class="tab-content" style="margin-top: 24px;">
-    <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
-      <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
-        <input type="checkbox" [(ngModel)]="showExpired" /> Show Expired Bookings
+    <div class="booking-list-toolbar">
+      <label class="expired-toggle">
+        <input type="checkbox" [(ngModel)]="showExpired" />
+        <span>Show expired</span>
       </label>
     </div>
 
@@ -377,8 +378,8 @@
         <tbody>
           <tr *ngFor="let s of yearlySummary.summary">
             <td class="yt-spot-col">
-              <strong>{{ s.spot.name }}</strong><br>
-              <span style="font-size: 0.65rem; color: var(--color-text-tertiary);">{{ s.spot.room }}</span>
+              <strong>{{ s.spot.name }}</strong>
+              <span class="yt-room-name">{{ s.spot.room }}</span>
             </td>
             <td *ngFor="let m of s.months" 
                 [class.yt-booked]="m.booked" 

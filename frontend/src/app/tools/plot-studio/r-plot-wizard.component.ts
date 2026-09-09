@@ -457,7 +457,7 @@ interface PaletteDef {
       top: 0;
       left: 0;
       width: 100vw;
-      height: 100vh;
+      height: 100dvh;
       background: rgba(15, 23, 42, 0.45);
       backdrop-filter: blur(6px);
       z-index: 1000;
@@ -471,7 +471,7 @@ interface PaletteDef {
       width: 1000px;
       max-width: 96vw;
       height: 700px;
-      max-height: 92vh;
+      max-height: 92dvh;
       background: #ffffff;
       border: 1.5px solid #cbd5e1;
       border-radius: 16px;

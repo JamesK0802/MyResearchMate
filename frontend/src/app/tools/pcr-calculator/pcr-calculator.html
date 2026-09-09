@@ -22,7 +22,7 @@
           <div class="mobile-config-summary-heading">
             <div>
               <strong>Protocol setup</strong>
-              <span>{{ pcrForm.get('numReactions')?.value }} reactions · {{ pcrForm.get('reactionVolume')?.value }} µL</span>
+              <span>{{ pcrForm.get('numReactions')?.value }} reactions · {{ pcrForm.get('reactionVolume')?.value }} <span class="unit-label">µL</span></span>
             </div>
             <button type="button" (click)="mobileConfigOpen = !mobileConfigOpen">
               {{ mobileConfigOpen ? 'Done' : 'Edit' }}
@@ -70,7 +70,7 @@
         </div>
 
         <div class="field-group">
-          <label>Reaction Volume (µL)</label>
+          <label>Reaction Volume (<span class="unit-label">µL</span>)</label>
           <input type="number" formControlName="reactionVolume">
         </div>
 
@@ -106,7 +106,7 @@
               </div>
 
               <div *ngIf="comp.get('calculationMode')?.value === 'fixed_volume'" class="field-group-mini">
-                <label>Volume (µL)</label>
+                <label>Volume (<span class="unit-label">µL</span>)</label>
                 <input type="number" formControlName="fixedVolume">
               </div>
 
@@ -148,8 +148,8 @@
               <thead>
                 <tr>
                   <th>Component</th>
-                  <th class="text-right">Per Reaction (µL)</th>
-                  <th class="text-right">Total Bulk (µL)</th>
+                  <th class="text-right">Per Reaction (<span class="unit-label">µL</span>)</th>
+                  <th class="text-right">Total Bulk (<span class="unit-label">µL</span>)</th>
                 </tr>
               </thead>
               <tbody>

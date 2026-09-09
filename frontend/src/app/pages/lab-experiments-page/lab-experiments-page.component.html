@@ -144,7 +144,7 @@
                      [(ngModel)]="exp.title" 
                      (input)="onExperimentChange(exp)" 
                      placeholder="Experiment Title..." />
-              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
+              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" tabindex="0" role="button" aria-label="Show sharing details" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
                 👥 Shared ({{ getSharedNames(exp).length }})
                 <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
                   <strong>Shared with:</strong>
@@ -318,7 +318,7 @@
                      [(ngModel)]="exp.title" 
                      (input)="onExperimentChange(exp)" 
                      placeholder="Experiment Title..." />
-              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
+              <span *ngIf="getSharedNames(exp).length > 0" class="badge-shared" tabindex="0" role="button" aria-label="Show sharing details" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 4px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); height: fit-content; line-height: 1; cursor: help; position: relative; overflow: visible;">
                 👥 Shared ({{ getSharedNames(exp).length }})
                 <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
                   <strong>Shared with:</strong>
@@ -486,7 +486,7 @@
             <span *ngIf="selectedExperiment.work_type" class="badge work-type">{{ getPresetName(selectedExperiment.work_type) }}</span>
             <span class="meta-date">Started: {{ formatDate(selectedExperiment.created_at) }}</span>
             <ng-container>
-              <span *ngIf="getSharedNames(selectedExperiment).length > 0" class="badge-shared" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); cursor: help; position: relative; overflow: visible;">
+              <span *ngIf="getSharedNames(selectedExperiment).length > 0" class="badge-shared" tabindex="0" role="button" aria-label="Show sharing details" style="background: rgba(22, 163, 74, 0.1); color: #16a34a; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(22, 163, 74, 0.2); backdrop-filter: blur(4px); cursor: help; position: relative; overflow: visible;">
                 👥 Shared ({{ getSharedNames(selectedExperiment).length }})
                 <span class="tooltip-text" style="white-space: pre-line; line-height: 1.45; text-align: left; left: 50%; bottom: 140%; width: 220px;">
                   <strong>Shared with:</strong>

@@ -409,7 +409,7 @@ export interface ConnectionPath {
 
     /* ── FIXED SCREEN-VIEWPORT HERO FOCUS INSPECTOR OVERLAY ── */
     .fixed-focused-hero-overlay {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh;
       z-index: 1000; display: flex; align-items: center; justify-content: center;
       pointer-events: auto; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px);
     }
