@@ -4,18 +4,20 @@ import { FormsModule } from '@angular/forms';
 import { LabService, LabRegistrationRequest } from '../../services/lab.service';
 import { AuthService } from '../../services/auth.service';
 import { StorageQuotaService } from '../../services/storage-quota.service';
+import { OwnerServerAdminComponent } from './owner-server-admin.component';
 
 @Component({
   selector: 'app-admin-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, OwnerServerAdminComponent],
   template: `
     <div class="admin-container">
       <div class="page-header">
         <h1>Admin Dashboard</h1>
-        <p>Review and manage lab workspace registration requests.</p>
+        <p>Manage lab access, storage, and owner-only server operations.</p>
       </div>
-      <div class="tabs"><button [class.active]="activeAdminTab==='labs'" (click)="activeAdminTab='labs'">Lab Approval <span *ngIf="pendingRequests.length" class="request-badge">{{pendingRequests.length}}</span></button><button [class.active]="activeAdminTab==='storage'" (click)="activeAdminTab='storage'">Storage Management <span *ngIf="pendingStorageRequests.length" class="request-badge">{{pendingStorageRequests.length}}</span></button></div>
+      <div class="tabs"><button [class.active]="activeAdminTab==='labs'" (click)="activeAdminTab='labs'">Lab Approval <span *ngIf="pendingRequests.length" class="request-badge">{{pendingRequests.length}}</span></button><button [class.active]="activeAdminTab==='storage'" (click)="activeAdminTab='storage'">Storage <span *ngIf="pendingStorageRequests.length" class="request-badge">{{pendingStorageRequests.length}}</span></button><button *ngIf="auth.currentProfile?.role === 'owner'" [class.active]="activeAdminTab==='server-data'" (click)="activeAdminTab='server-data'">Server Data</button><button *ngIf="auth.currentProfile?.role === 'owner'" [class.active]="activeAdminTab==='database'" (click)="activeAdminTab='database'">Database</button></div>
+      <app-owner-server-admin *ngIf="auth.currentProfile?.role === 'owner' && (activeAdminTab === 'server-data' || activeAdminTab === 'database')" [view]="activeAdminTab === 'database' ? 'database' : 'data'"></app-owner-server-admin>
       <div class="admin-section" *ngIf="activeAdminTab==='storage'">
         <h2 class="section-title">Storage requests</h2>
         <div *ngFor="let req of pendingStorageRequests" class="request-row storage-request"><div class="req-main"><div class="request-top"><strong>{{req.target}}</strong><span>{{gb(req.requested_bytes)}} requested</span></div><p>{{req.reason}}</p><div class="review-fields"><label>Approve total <input type="number" [(ngModel)]="req.approvedGb" min="1"><small>GB</small></label><label>Review note <input [(ngModel)]="req.reviewReason" placeholder="Optional for approval, required for rejection"></label></div></div><div class="req-actions"><button class="btn-approve" (click)="approveStorage(req)">Approve</button><button class="btn-reject" (click)="rejectStorage(req)">Reject</button></div></div>
@@ -156,8 +158,9 @@ import { StorageQuotaService } from '../../services/storage-quota.service';
       .page-header { margin-bottom: 10px; }
       .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
       .page-header p { display: none; }
-      .tabs { margin-bottom: 14px; }
-      .tabs button { flex: 1; padding: 9px 5px; font-size: .76rem; }
+      .tabs { margin-bottom: 14px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border: 1px solid var(--color-border); border-radius: 10px; padding: 3px; }
+      .tabs button { padding: 8px 4px; font-size: .72rem; border-radius: 7px; border-bottom: 0; }
+      .tabs button.active { background: var(--color-primary-subtle); }
       .admin-section { margin-bottom: 18px; }
       .section-title { margin-bottom: 8px; font-size: .68rem; }
       .requests-list { gap: 9px; }
@@ -187,7 +190,7 @@ export class AdminPanelComponent implements OnInit {
   processingId: string | null = null;
   showHistory = false;
   storageRequests: any[] = []; storageTargets: any[] = [];
-  activeAdminTab: 'labs'|'storage' = 'labs';
+  activeAdminTab: 'labs'|'storage'|'server-data'|'database' = 'labs';
   get personalTargets(){return this.storageTargets.filter(t=>t.scope==='personal');} get labTargets(){return this.storageTargets.filter(t=>t.scope==='lab');}
   displayStorageTarget(target:any){ return target.scope === 'personal' && target.uid ? `${target.name} (${target.uid})` : target.name; }
   get pendingStorageRequests(){ return this.storageRequests.filter(r => r.status === 'pending'); }

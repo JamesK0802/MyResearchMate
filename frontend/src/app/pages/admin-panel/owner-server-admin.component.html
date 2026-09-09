@@ -1,0 +1,65 @@
+<div class="status error" *ngIf="error">{{ error }}</div>
+<div class="status notice" *ngIf="notice">{{ notice }}</div>
+
+<ng-container *ngIf="view === 'data'">
+  <section class="migration-card">
+    <div class="migration-copy">
+      <span class="eyebrow">Server migration</span>
+      <h2>Backup & restore</h2>
+      <p>A backup contains the server .env, PostgreSQL database, and data folder. Backups stay on this server until you download them.</p>
+    </div>
+    <div class="migration-actions">
+      <button class="primary" (click)="createBackup()" [disabled]="actionBusy">{{ actionBusy ? 'Working…' : 'Create backup' }}</button>
+      <label class="file-picker">
+        <span>{{ restoreFile?.name || 'Choose backup file' }}</span>
+        <input type="file" accept=".gz,application/gzip" (change)="chooseRestore($event)" [disabled]="actionBusy">
+      </label>
+      <button class="danger" (click)="restore()" [disabled]="actionBusy || !restoreFile">Restore</button>
+    </div>
+    <p class="restart-note">Restoring creates a safety backup first. Restart the application afterward so restored environment settings take effect.</p>
+  </section>
+
+  <section class="panel backups-panel">
+    <div class="panel-heading"><div><span class="eyebrow">Saved on server</span><h2>Backups</h2></div><button class="quiet" (click)="loadBackups()">Refresh</button></div>
+    <div class="backup-list" *ngIf="backups.length; else noBackups">
+      <div class="backup-row" *ngFor="let backup of backups">
+        <div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'medium' }}</small></div>
+        <button class="quiet" (click)="server.downloadBackup(backup)">Download</button>
+      </div>
+    </div>
+    <ng-template #noBackups><p class="empty">No server backups yet.</p></ng-template>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">Live storage</span><h2>Data folder</h2></div><button class="quiet" (click)="loadData(path)">Refresh</button></div>
+    <nav class="breadcrumbs" aria-label="Data folder path"><button *ngFor="let crumb of crumbs(); let last = last" (click)="loadData(crumb.path)" [class.current]="last">{{ crumb.label }}</button></nav>
+    <div class="file-head"><span>Name</span><span>Size</span><span>Modified</span><span></span></div>
+    <button class="file-row" *ngFor="let entry of entries" (click)="open(entry)">
+      <span class="file-name"><i>{{ entry.kind === 'directory' ? '📁' : '📄' }}</i><strong>{{ entry.name }}</strong></span>
+      <span>{{ formatBytes(entry.size) }}</span><span class="modified">{{ entry.modified_at | date:'short' }}</span><span class="open-mark">{{ entry.kind === 'directory' ? '›' : '↓' }}</span>
+    </button>
+    <p class="empty" *ngIf="!entries.length && !loading">This folder is empty.</p>
+  </section>
+</ng-container>
+
+<ng-container *ngIf="view === 'database'">
+  <section class="database-intro"><div><span class="eyebrow">PostgreSQL</span><h2>Database tables</h2><p>Read-only preview of the live database. Up to 50 rows are shown at once.</p></div><button class="quiet" (click)="loadTables()">Refresh</button></section>
+  <div class="database-layout">
+    <aside class="table-list">
+      <label for="mobile-table">Table</label>
+      <select id="mobile-table" [(ngModel)]="selectedTable" (ngModelChange)="selectTable($event)"><option *ngFor="let table of tables" [value]="table.name">{{ table.name }} ({{ table.row_count }})</option></select>
+      <button *ngFor="let table of tables" [class.active]="selectedTable === table.name" (click)="selectTable(table.name)"><span>{{ table.name }}</span><small>{{ table.row_count }} rows</small></button>
+    </aside>
+    <section class="panel database-panel" *ngIf="preview">
+      <div class="panel-heading"><div><span class="eyebrow">Table preview</span><h2>{{ preview.table }}</h2></div><strong class="row-count">{{ preview.total }} rows</strong></div>
+      <div class="column-chips"><span *ngFor="let column of tableSummary(preview.table)?.columns" [class.primary-key]="column.primary_key"><strong>{{ column.name }}</strong>{{ column.type }}</span></div>
+      <div class="data-scroll">
+        <table><thead><tr><th *ngFor="let column of preview.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of preview.rows"><td *ngFor="let column of preview.columns" [title]="displayCell(row[column])">{{ displayCell(row[column]) }}</td></tr></tbody></table>
+        <p class="empty" *ngIf="!preview.rows.length">This table has no rows.</p>
+      </div>
+      <div class="pagination" *ngIf="preview.total > preview.limit"><button class="quiet" (click)="selectTable(preview.table, preview.offset - preview.limit)" [disabled]="preview.offset === 0">Previous</button><span>{{ preview.offset + 1 }}–{{ pageEnd() }} of {{ preview.total }}</span><button class="quiet" (click)="selectTable(preview.table, preview.offset + preview.limit)" [disabled]="preview.offset + preview.limit >= preview.total">Next</button></div>
+    </section>
+  </div>
+</ng-container>
+
+<div class="loading" *ngIf="loading">Loading server information…</div>

@@ -30,10 +30,12 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - LAB_NOTEBOOK_DATA_DIR=/app/data
+      - SERVER_ENV_FILE=/app/server-config/.env
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
+      - ./.env:/app/server-config/.env
 
   frontend:
     build:

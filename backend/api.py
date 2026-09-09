@@ -108,6 +108,7 @@ from routers.tool_directory import router as tool_directory_router
 from routers.sequence_workspace import router as sequence_workspace_router
 from routers.storage_quotas import router as storage_quotas_router
 from routers.deployment_updates import router as deployment_updates_router
+from routers.server_admin import router as server_admin_router
 api_router.include_router(results_router)
 api_router.include_router(protocol_trees_router)
 api_router.include_router(plot_projects_router)
@@ -115,6 +116,7 @@ api_router.include_router(tool_directory_router)
 api_router.include_router(sequence_workspace_router)
 api_router.include_router(storage_quotas_router)
 api_router.include_router(deployment_updates_router)
+api_router.include_router(server_admin_router)
 
 # Include labs router
 print("[DEBUG] Including labs_router from routers.labs")
