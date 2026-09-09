@@ -138,7 +138,12 @@
           <span>Tools</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('tools')">⌄</span>
         </button>
         <div class="drawer-section-content" *ngIf="isMobileSectionOpen('tools')">
-          <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
+          <a routerLink="/crispr/analysis" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
+          <div class="drawer-nested-links">
+            <a routerLink="/crispr/benchmark" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">Benchmark</a>
+            <a routerLink="/crispr/result-viewer" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">Result Viewer</a>
+            <a *ngIf="auth.isLoggedIn" routerLink="/crispr/my-data" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">My Data</a>
+          </div>
           <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
           <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
           <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>

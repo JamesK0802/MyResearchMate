@@ -63,6 +63,15 @@ export class App implements OnInit {
     }
   }
 
+  closeMobileCrisprLink(event: MouseEvent) {
+    if (this.analysisState.isAnalysisRunning) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    this.isMobileMenuOpen = false;
+  }
+
   isMobileSectionOpen(section: string): boolean {
     return this.openMobileSections.has(section);
   }

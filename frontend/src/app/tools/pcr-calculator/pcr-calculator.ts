@@ -32,6 +32,7 @@ export class PcrCalculator implements OnInit {
   selectedPreset: PCRPreset | null = null;
   viewMode: 'calculator' | 'manager' = 'calculator';
   managerTab: 'system' | 'my' | 'incoming' = 'system';
+  mobileConfigOpen = false;
 
   // Sharing State
   sharingPreset: PCRPreset | null = null;
