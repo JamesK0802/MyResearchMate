@@ -23,6 +23,10 @@ export interface ConnectionPath {
       aria-label="Protocol canvas. Use the arrow keys to pan, Shift plus mouse wheel to move horizontally, Control or Command plus mouse wheel to zoom, or middle mouse drag to pan."
       (wheel)="onWheel($event)"
       (mousedown)="onCanvasMouseDown($event)"
+      (touchstart)="onCanvasTouchStart($event)"
+      (touchmove)="onCanvasTouchMove($event)"
+      (touchend)="onCanvasTouchEnd($event)"
+      (touchcancel)="onCanvasTouchEnd($event)"
       (keydown)="onCanvasKeydown($event)">
 
       <div class="connection-edit-frame" *ngIf="connectionEditMode" aria-hidden="true"></div>
@@ -501,6 +505,10 @@ export class NamuFlowViewComponent implements AfterViewInit {
   private canvasPanStartClientY = 0;
   private canvasPanStartScrollLeft = 0;
   private canvasPanStartScrollTop = 0;
+  private pinchStartDistance = 0;
+  private pinchStartScale = 1;
+  private pinchCanvasX = 0;
+  private pinchCanvasY = 0;
 
   // Connection Dragging state (Drag-to-Connect)
   isConnectingDrag = false;
@@ -787,6 +795,45 @@ export class NamuFlowViewComponent implements AfterViewInit {
       e.preventDefault();
       el.scrollLeft += e.deltaY || e.deltaX;
     }
+  }
+
+  onCanvasTouchStart(e: TouchEvent) {
+    if (e.touches.length !== 2 || !this.containerRef) return;
+    e.preventDefault();
+    const el = this.containerRef.nativeElement as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const midpoint = this.touchMidpoint(e.touches);
+    this.pinchStartDistance = this.touchDistance(e.touches);
+    this.pinchStartScale = this.zoomScale;
+    this.pinchCanvasX = (midpoint.x - rect.left + el.scrollLeft) / this.zoomScale;
+    this.pinchCanvasY = (midpoint.y - rect.top + el.scrollTop) / this.zoomScale;
+  }
+
+  onCanvasTouchMove(e: TouchEvent) {
+    if (e.touches.length !== 2 || !this.containerRef || !this.pinchStartDistance) return;
+    e.preventDefault();
+    const el = this.containerRef.nativeElement as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const midpoint = this.touchMidpoint(e.touches);
+    const ratio = this.touchDistance(e.touches) / this.pinchStartDistance;
+    this.zoomScale = Math.max(0.2, Math.min(4, this.pinchStartScale * ratio));
+    el.scrollLeft = Math.max(0, this.pinchCanvasX * this.zoomScale - (midpoint.x - rect.left));
+    el.scrollTop = Math.max(0, this.pinchCanvasY * this.zoomScale - (midpoint.y - rect.top));
+  }
+
+  onCanvasTouchEnd(e: TouchEvent) {
+    if (e.touches.length < 2) this.pinchStartDistance = 0;
+  }
+
+  private touchDistance(touches: TouchList): number {
+    return Math.hypot(touches[1].clientX - touches[0].clientX, touches[1].clientY - touches[0].clientY);
+  }
+
+  private touchMidpoint(touches: TouchList): { x: number; y: number } {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2
+    };
   }
 
   onCanvasKeydown(e: KeyboardEvent) {

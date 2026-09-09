@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, EventEmitter, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -31,19 +31,32 @@ interface NotebookPage {
             aria-label="Select protocol tree">
             <option *ngFor="let item of trees" [value]="item.id">{{ item.name }} ({{ item.nodes.length }})</option>
           </select>
-          <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
-          <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
-          <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Preparing PDF ' + pdfProgress + '…' : 'Preview PDF' }}</button>
+          <ng-container *ngIf="!isMobileView">
+            <button type="button" [class.active]="layout === 'spread'" (click)="setLayout('spread')">2 Pages</button>
+            <button type="button" [class.active]="layout === 'overview'" (click)="setLayout('overview')">8 Pages</button>
+            <button type="button" (click)="printNotebook()" [disabled]="generatingPdf">{{ generatingPdf ? 'Preparing PDF ' + pdfProgress + '…' : 'Preview PDF' }}</button>
+          </ng-container>
         </div>
       </header>
 
       <p class="notebook-empty" *ngIf="!tree.nodes.length">This tree has no nodes.</p>
       <p class="notebook-pdf-error" *ngIf="pdfError">{{ pdfError }}</p>
 
+      <div class="mobile-screen-notebook" *ngIf="tree.nodes.length && isMobileView">
+        <article class="notebook-page mobile-notebook-page" *ngIf="mobilePage as notebookPage">
+          <ng-container *ngTemplateOutlet="pageTemplate; context: { $implicit: notebookPage, editable: false }"></ng-container>
+        </article>
+        <div class="notebook-pagination">
+          <button type="button" (click)="previousMobilePage()" [disabled]="mobilePageIndex === 0">Previous</button>
+          <span>{{ mobilePageIndex + 1 }} of {{ cachedPages.length }}</span>
+          <button type="button" (click)="nextMobilePage()" [disabled]="mobilePageIndex + 1 >= cachedPages.length">Next</button>
+        </div>
+      </div>
+
       <div class="screen-notebook"
         [class.screen-spread]="layout === 'spread'"
         [class.screen-overview]="layout === 'overview'"
-        *ngIf="tree.nodes.length">
+        *ngIf="tree.nodes.length && !isMobileView">
         <div class="notebook-spread" *ngIf="layout === 'spread'" [class.turning]="turning">
           <div class="notebook-spine" aria-hidden="true"></div>
           <article class="notebook-page left-page" *ngIf="spreadPages[0] as notebookPage">
@@ -246,6 +259,7 @@ interface NotebookPage {
     .notebook-overview { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; width:100%; max-width:1264px; margin:auto; overflow:hidden; }
     .overview-spread-cell { min-width:0; aspect-ratio:297 / 210; overflow:hidden; }
     .notebook-overview .overview-spread { width:200%; max-width:none; min-height:0; aspect-ratio:297 / 210; margin:0; transform:scale(.5); transform-origin:top left; pointer-events:none; user-select:none; }
+    .mobile-screen-notebook { display:none; }
     .page-title-input { width:100%; box-sizing:border-box; border:0; border-radius:0; outline:none; color:#252422; background:transparent; margin:0; height:var(--rule); font:700 1.35rem/var(--rule) Georgia,serif; }
     .editable-step { display:flex; align-items:center; gap:5px; min-height:var(--rule); line-height:var(--rule); }
     .editable-step input { flex:1; min-width:0; height:var(--rule); line-height:var(--rule); border:0; outline:none; background:transparent; color:#252422; font:400 .92rem/var(--rule) Georgia,serif; padding:0; margin:0; }
@@ -278,7 +292,28 @@ interface NotebookPage {
     .pdf-rendering .print-overview-spread .right-page { display:flex; border-radius:0 6px 6px 0; padding-left:56px; }
     .pdf-rendering .print-overview-spread .notebook-spine { display:block; }
     @keyframes page-turn { from { opacity:.25; transform:perspective(1200px) rotateY(-11deg); transform-origin:left center; } to { opacity:1; transform:none; } }
-    @media (max-width:900px) { .notebook-spread { grid-template-columns:1fr; } .notebook-spine, .right-page { display:none; } .left-page { border-radius:8px; padding-right:48px; } .notebook-overview { grid-template-columns:1fr; } }
+    @media (max-width:900px) {
+      :host { background:#f3f0e9; }
+      .notebook-shell { padding:14px 12px 24px; }
+      .notebook-controls { margin-bottom:12px; gap:8px; }
+      .notebook-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.86rem; }
+      .notebook-actions { min-width:0; }
+      .notebook-tree-select { max-width:150px; }
+      .mobile-screen-notebook { display:block; width:100%; }
+      .mobile-notebook-page { --rule:26px; width:100%; height:auto; min-height:0; aspect-ratio:210 / 297; padding:0 24px; border-radius:8px; filter:drop-shadow(0 8px 14px rgba(45,40,32,.14)); }
+      .mobile-notebook-page .page-title-input,
+      .mobile-notebook-page h2 { font-size:1rem; line-height:var(--rule); }
+      .mobile-notebook-page .page-steps ol,
+      .mobile-notebook-page .editable-step input { font-size:.76rem; line-height:var(--rule); }
+      .mobile-notebook-page .note-entry,
+      .mobile-notebook-page .editable-note textarea { font-size:.7rem; line-height:var(--rule); }
+      .notebook-pagination { justify-content:space-between; gap:8px; margin-top:12px; }
+      .notebook-pagination button { padding:7px 10px; }
+      .screen-notebook,
+      .pdf-generating-backdrop,
+      .pdf-preview-backdrop,
+      .print-notebook { display:none !important; }
+    }
     @media print {
       @page {
         size: A4 landscape;
@@ -334,6 +369,8 @@ export class NamuNotebookViewComponent implements OnChanges {
   layout: 'spread' | 'overview' = 'spread';
   spreadStart = 0;
   overviewStart = 0;
+  mobilePageIndex = 0;
+  isMobileView = typeof window !== 'undefined' && window.innerWidth <= 900;
   turning = false;
   printing = false;
   pdfRendering = false;
@@ -363,6 +400,7 @@ export class NamuNotebookViewComponent implements OnChanges {
     if (treeIdChanged) {
       this.spreadStart = 0;
       this.overviewStart = 0;
+      this.mobilePageIndex = 0;
     } else {
       if (this.spreadStart >= this.cachedPages.length) {
         this.spreadStart = Math.max(0, Math.floor((this.cachedPages.length - 1) / 2) * 2);
@@ -370,7 +408,13 @@ export class NamuNotebookViewComponent implements OnChanges {
       if (this.overviewStart >= this.cachedPages.length) {
         this.overviewStart = Math.max(0, Math.floor((this.cachedPages.length - 1) / 8) * 8);
       }
+      if (this.mobilePageIndex >= this.cachedPages.length) this.mobilePageIndex = Math.max(0, this.cachedPages.length - 1);
     }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize() {
+    this.isMobileView = window.innerWidth <= 900;
   }
 
   refreshPages() {
@@ -378,6 +422,7 @@ export class NamuNotebookViewComponent implements OnChanges {
   }
 
   get spreadPages(): NotebookPage[] { return this.cachedPages.slice(this.spreadStart, this.spreadStart + 2); }
+  get mobilePage(): NotebookPage | undefined { return this.cachedPages[this.mobilePageIndex]; }
   get overviewSpreads(): Array<[NotebookPage, NotebookPage | undefined]> {
     const pages = this.cachedPages.slice(this.overviewStart, this.overviewStart + 8);
     const spreads: Array<[NotebookPage, NotebookPage | undefined]> = [];
@@ -401,11 +446,13 @@ export class NamuNotebookViewComponent implements OnChanges {
   nodeStartPage(node: NamuNode): number { return this.cachedPages.findIndex(page => page.node.id === node.id) + 1; }
   previousNodes(node: NamuNode): NamuNode[] { return this.tree.nodes.filter(candidate => candidate.nextNodes.includes(node.id)); }
   nextNodes(node: NamuNode): NamuNode[] { return this.tree.nodes.filter(candidate => node.nextNodes.includes(candidate.id)); }
-  goToNode(nodeId: string) { const index = this.cachedPages.findIndex(page => page.node.id === nodeId); if (index >= 0) { this.layout = 'spread'; this.spreadStart = Math.floor(index / 2) * 2; this.turnPage(); } }
+  goToNode(nodeId: string) { const index = this.cachedPages.findIndex(page => page.node.id === nodeId); if (index >= 0) { this.layout = 'spread'; this.spreadStart = Math.floor(index / 2) * 2; this.mobilePageIndex = index; this.turnPage(); } }
   previousSpread() { if (this.spreadStart >= 2) { this.spreadStart -= 2; this.turnPage(); } }
   nextSpread() { if (this.spreadStart + 2 < this.cachedPages.length) { this.spreadStart += 2; this.turnPage(); } }
   previousOverview() { if (this.overviewStart >= 8) this.overviewStart -= 8; }
   nextOverview() { if (this.overviewStart + 8 < this.cachedPages.length) this.overviewStart += 8; }
+  previousMobilePage() { if (this.mobilePageIndex > 0) { this.mobilePageIndex--; this.turnPage(); } }
+  nextMobilePage() { if (this.mobilePageIndex + 1 < this.cachedPages.length) { this.mobilePageIndex++; this.turnPage(); } }
 
   saveNode(node: NamuNode) {
     this.namuStorageService.updateNode(this.tree.id, node);
