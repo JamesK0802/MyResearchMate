@@ -382,6 +382,11 @@
   display: none;
 }
 
+.mobile-new-booking-toggle,
+.mobile-tab-label {
+  display: none;
+}
+
 /* ── Tabs ── */
 .app-tabs {
   display: flex;
@@ -799,4 +804,92 @@
   .fp-cell-tall {
     min-height: 132px;
   }
+}
+
+/* Compact, scan-first mobile booking workspace. */
+@media (max-width: 900px) {
+  .booking-page {
+    padding: 12px 12px max(20px, env(safe-area-inset-bottom));
+  }
+  .booking-page .page-header { margin-bottom: 8px; }
+  .booking-page .page-header h1 { font-size: 1.65rem; letter-spacing: -.035em; line-height: 1.1; }
+
+  .mobile-new-booking-toggle {
+    align-items: center;
+    background: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    border-radius: 9px;
+    color: #fff;
+    display: flex;
+    font-size: .76rem;
+    font-weight: 800;
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 7px 11px;
+    width: 100%;
+  }
+  .mobile-new-booking-toggle.open { background: var(--color-surface); color: var(--color-primary); }
+  .booking-form-card { display: none; border-radius: 10px; margin-top: 7px; padding: 11px; }
+  .booking-form-card.mobile-open { display: block; }
+  .booking-form-card .card-title { margin: 0 0 9px; font-size: 1rem; }
+  .form-grid-inline { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .form-grid-inline .app-form-group:first-child { grid-column: 1 / -1; }
+  .booking-form-card .app-label { margin-bottom: 3px; font-size: .65rem; }
+  .booking-form-card .app-input,
+  .booking-form-card .app-select { min-width: 0; padding: 7px 8px; font-size: .75rem; }
+  .booking-form-card .form-actions { gap: 6px !important; }
+  .booking-form-card .form-actions .app-btn { min-height: 36px; padding: 6px 10px; font-size: .74rem; }
+
+  .app-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    margin-top: 10px !important;
+    padding: 3px;
+    overflow: visible;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 10px;
+    background: #eef2f7;
+  }
+  .app-tab { justify-content: center; gap: 4px; min-width: 0; margin: 0; border: 0; border-radius: 7px; font-size: .7rem; padding: 7px 4px; }
+  .app-tab.active { background: #fff; box-shadow: 0 1px 4px rgba(15,23,42,.08); }
+  .desktop-tab-label { display: none; }
+  .mobile-tab-label { display: inline; }
+  .tab-content { margin-top: 10px !important; }
+
+  .mobile-booking-list { gap: 8px; }
+  .mobile-booking-card { border-radius: 10px; padding: 10px; }
+  .mobile-booking-top { margin-bottom: 8px; padding-bottom: 8px; }
+  .mobile-booking-grid { gap: 8px 10px; }
+
+  .controls-bar { margin-bottom: 10px !important; padding: 10px; }
+  .summary-row { margin-top: 9px; padding-top: 9px; }
+  .summary-stat { gap: 4px; padding: 7px; }
+  .stat-icon-wrapper { display: none; }
+
+  .floor-plan { flex-direction: column; gap: 9px; margin: 0; overflow: visible; padding: 0; }
+  .room-container { box-sizing: border-box; border-radius: 11px; flex: none; gap: 8px; padding: 10px; width: 100%; }
+  .room-header { padding-bottom: 5px; font-size: .68rem; }
+  .room-acacia, .room-speed-breeding { width: 100%; }
+  .room-acacia .room-body { grid-template-columns: minmax(0, 1fr) 62px; }
+  .room-speed-breeding .room-body { grid-template-columns: minmax(0, 1fr) 74px; }
+  .fp-right-mid, .fp-right-bot { grid-template-columns: 82px minmax(0, 1fr); }
+  .room-body, .fp-right, .fp-right-top, .fp-right-mid, .fp-right-bot, .fp-acacia-grid { gap: 5px; }
+  .fp-cell { min-height: 52px; padding: 6px 5px; }
+  .fp-cell-tall { min-height: 109px; }
+  .fp-cell-wide { min-height: 55px; }
+  .fp-cell-sm { min-height: 50px; }
+  .cell-name { font-size: .62rem; }
+  .cell-info, .cell-avail { font-size: .52rem; }
+  .fp-room-label, .fp-label-box { padding: 6px 3px; font-size: .52rem; }
+
+  .yearly-controls > div:last-child { display: none; }
+  .detail-grid, .form-grid { grid-template-columns: 1fr !important; }
+  .yearly-table { min-width: 760px; font-size: .66rem; }
+
+  .app-modal-overlay { align-items: flex-end; padding: 0 !important; }
+  .app-modal { box-sizing: border-box; width: 100vw !important; max-width: none !important; max-height: 92dvh; border-radius: 14px 14px 0 0 !important; }
+  .app-modal-header, .app-modal-body, .app-modal-footer { padding: 11px 12px !important; }
+  .app-modal-header h2 { font-size: 1rem; }
+  .app-modal-footer .app-btn { padding: 6px 8px; font-size: .68rem; }
 }

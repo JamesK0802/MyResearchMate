@@ -16,6 +16,7 @@ type TabType = 'table' | 'map' | 'yearly';
 export class FacilityBookingPageComponent implements OnInit {
   // Global State
   activeTab: TabType = 'table';
+  mobileBookingFormOpen = false;
   allSpots: FacilitySpot[] = [];
   
   // Booking Form State (Top Section) - Using Year-Month string format ("YYYY-MM")
@@ -53,6 +54,8 @@ export class FacilityBookingPageComponent implements OnInit {
   dragSpotId: string | null = null;
   dragStartMonth: number | null = null;
   dragCurrentMonth: number | null = null;
+  private yearlyTouchStartX = 0;
+  private yearlyTouchStartY = 0;
 
   // Options
   years: number[] = [];
@@ -214,7 +217,11 @@ export class FacilityBookingPageComponent implements OnInit {
       this.form.species = '';
       this.refreshActiveTab();
       
-      setTimeout(() => { this.formSuccess = ''; this.cdr.detectChanges(); }, 3000);
+      setTimeout(() => {
+        this.formSuccess = '';
+        this.mobileBookingFormOpen = false;
+        this.cdr.detectChanges();
+      }, 3000);
     } catch (e: any) {
       this.formError = e?.error?.detail || e?.message || 'Failed to save booking.';
     }
@@ -337,6 +344,7 @@ export class FacilityBookingPageComponent implements OnInit {
       this.openEditModal(item.booking);
     } else {
       // Available -> select in top form
+      this.mobileBookingFormOpen = true;
       this.form.spot_id = item.spot.id;
       const mStr = String(this.selectedMonth).padStart(2, '0');
       this.form.start_month = `${this.selectedYear}-${mStr}`;
@@ -371,6 +379,34 @@ export class FacilityBookingPageComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  onYearlyCellTouchStart(event: TouchEvent) {
+    const touch = event.touches[0];
+    if (!touch) return;
+    this.yearlyTouchStartX = touch.clientX;
+    this.yearlyTouchStartY = touch.clientY;
+  }
+
+  onYearlyCellTouchEnd(event: TouchEvent, spotId: string, monthVal: number, booked: boolean) {
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const moved = Math.hypot(touch.clientX - this.yearlyTouchStartX, touch.clientY - this.yearlyTouchStartY);
+    // A swipe remains table scrolling; a deliberate tap opens/selects the cell.
+    if (moved > 10) return;
+    event.preventDefault();
+    if (booked) {
+      this.fetchAndOpenBooking(spotId, monthVal);
+      return;
+    }
+    this.mobileBookingFormOpen = true;
+    this.form.spot_id = spotId;
+    const month = String(monthVal).padStart(2, '0');
+    this.form.start_month = `${this.selectedYear}-${month}`;
+    this.form.end_month = `${this.selectedYear}-${month}`;
+    this.formSuccess = `Selected: ${this.months[monthVal - 1].label}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.cdr.detectChanges();
+  }
+
   @HostListener('document:mouseup')
   onGlobalMouseUp() {
     if (!this.isDragging) return;
@@ -380,6 +416,7 @@ export class FacilityBookingPageComponent implements OnInit {
       const m2 = Math.max(this.dragStartMonth, this.dragCurrentMonth);
       
       // Populate Top Booking Form
+      this.mobileBookingFormOpen = true;
       this.form.spot_id = this.dragSpotId;
       this.form.start_month = `${this.selectedYear}-${String(m1).padStart(2, '0')}`;
       this.form.end_month = `${this.selectedYear}-${String(m2).padStart(2, '0')}`;
