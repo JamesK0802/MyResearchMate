@@ -326,15 +326,16 @@ td { padding: 20px 32px; border-bottom: 1px solid #f1f5f9; }
   .config-panel { order: 2; }
 
   .mobile-config-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
     gap: 12px;
   }
 
-  .mobile-config-summary > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mobile-config-summary-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .mobile-config-summary-heading > div { min-width:0; display:flex; flex-direction:column; gap:2px; }
   .mobile-config-summary strong { color: #1e293b; font-size: .9rem; }
   .mobile-config-summary span { color: #64748b; font-size: .72rem; }
+  .mobile-config-summary > label { margin-bottom:-7px; color:#64748b; font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+  .mobile-preset-select { padding:9px 11px; border:1px solid #dbe3ee; border-radius:9px; background:#f8fafc; font-size:.82rem; }
   .mobile-config-summary button {
     flex: 0 0 auto;
     padding: 7px 12px;
@@ -350,6 +351,7 @@ td { padding: 20px 32px; border-bottom: 1px solid #f1f5f9; }
   .mobile-config-body.open { display: block; margin-top: 18px; }
   .mobile-config-body .section-header { margin-bottom: 14px; }
   .mobile-config-body .section-header:first-child { display: none; }
+  .mobile-config-body > .field-group:first-of-type { display:none; }
   .mobile-config-body .field-group { margin-bottom: 14px; }
   .mobile-config-body .divider { margin: 20px 0; }
   .mobile-config-body input,
