@@ -249,7 +249,7 @@ interface PaletteDef {
               <div class="mapping-box">
                 <div class="form-field">
                   <label>X-Axis (Horizontal):
-                    <span class="info-bubble" tabindex="0" role="button" aria-label="X-axis help" data-tooltip="Column for the horizontal axis">?</span>
+                    <span class="info-bubble" tabindex="0" role="button" aria-label="X-axis help" data-tooltip="Column for the horizontal axis" (click)="showMappingHelp($event, 'Column for the horizontal axis')">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.xColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of columns" [value]="col">{{ col }}</option>
@@ -258,7 +258,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Y-Axis (Vertical):
-                    <span class="info-bubble" tabindex="0" role="button" aria-label="Y-axis help" data-tooltip="Measurement column for vertical axis">?</span>
+                    <span class="info-bubble" tabindex="0" role="button" aria-label="Y-axis help" data-tooltip="Measurement column for vertical axis" (click)="showMappingHelp($event, 'Measurement column for the vertical axis')">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.yColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option *ngFor="let col of numericColumns" [value]="col">{{ col }} (numeric)</option>
@@ -270,7 +270,7 @@ interface PaletteDef {
 
                 <div class="form-field">
                   <label>Group / Fill (Subgroups):
-                    <span class="info-bubble" tabindex="0" role="button" aria-label="Group and fill help" data-tooltip="Column to group conditions or genotypes side-by-side">?</span>
+                    <span class="info-bubble" tabindex="0" role="button" aria-label="Group and fill help" data-tooltip="Column to group conditions or genotypes side-by-side" (click)="showMappingHelp($event, 'Column used to group conditions or genotypes side-by-side')">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.groupColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - Single Color)</option>
@@ -280,7 +280,7 @@ interface PaletteDef {
 
                 <div class="form-field" *ngIf="currentPlot.chartType === 'bar' || currentPlot.chartType === 'line'">
                   <label>Error Bar (SD/SE):
-                    <span class="info-bubble" tabindex="0" role="button" aria-label="Error bar help" data-tooltip="Standard Deviation or Standard Error column">?</span>
+                    <span class="info-bubble" tabindex="0" role="button" aria-label="Error bar help" data-tooltip="Standard Deviation or Standard Error column" (click)="showMappingHelp($event, 'Column containing Standard Deviation or Standard Error values')">?</span>
                   </label>
                   <select [(ngModel)]="currentPlot.errorColumn" (ngModelChange)="onMappingUpdated()" class="form-select">
                     <option value="">(None - No Error Bars)</option>
@@ -443,6 +443,10 @@ interface PaletteDef {
             <div class="guided-help-preview"><app-r-plot-preview [plotState]="guidedHelp.plot" [data]="guidedHelp.rows"></app-r-plot-preview></div>
           </section>
         </div>
+
+        <button type="button" class="mapping-help-toast" *ngIf="mappingHelpText" (click)="mappingHelpText = ''" aria-label="Close help">
+          {{ mappingHelpText }}
+        </button>
 
       </div>
     </div>
@@ -1120,6 +1124,27 @@ interface PaletteDef {
       gap: 10px;
     }
 
+    .mapping-help-toast {
+      display: none;
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: max(62px, calc(env(safe-area-inset-bottom) + 52px));
+      z-index: 12000;
+      width: auto;
+      box-sizing: border-box;
+      border: 0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      background: #334155;
+      color: #fff;
+      box-shadow: 0 7px 20px rgba(15, 23, 42, .24);
+      font-size: .78rem;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: center;
+    }
+
     .form-row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1363,18 +1388,9 @@ interface PaletteDef {
       .mapping-box { padding: 10px; gap: 8px; }
       .mapping-box .info-bubble[data-tooltip]::before { display: none; }
       .mapping-box .info-bubble[data-tooltip]::after {
-        bottom: max(66px, calc(env(safe-area-inset-bottom) + 54px));
-        box-sizing: border-box;
-        left: 12px;
-        position: fixed;
-        right: 12px;
-        top: auto;
-        transform: none;
-        width: auto;
-        z-index: 12000;
+        display: none;
       }
-      .mapping-box .info-bubble:hover[data-tooltip]::after,
-      .mapping-box .info-bubble:focus[data-tooltip]::after { transform: none; }
+      .mapping-help-toast { display: block; }
       .form-row-2 { grid-template-columns: 1fr; gap: 7px; }
       .form-field label { font-size: .68rem; }
       .form-input, .form-select { min-height: 34px; box-sizing: border-box; font-size: .72rem; }
@@ -1411,7 +1427,14 @@ export class RPlotWizardComponent implements OnInit {
   guidedHelp: ReturnType<RPlotSyncService['getPlotExample']> | null = null;
   guidedHelpName = '';
   guidedHelpUse = '';
+  mappingHelpText = '';
   showOtherPlots = false;
+
+  showMappingHelp(event: Event, text: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.mappingHelpText = this.mappingHelpText === text ? '' : text;
+  }
 
   constructor(
     private rSyncService: RPlotSyncService,

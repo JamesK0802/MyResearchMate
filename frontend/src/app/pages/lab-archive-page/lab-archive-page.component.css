@@ -213,3 +213,230 @@
   font-style: italic;
   font-weight: 600;
 }
+
+@media (max-width: 768px) {
+  .archive-page {
+    gap: 10px;
+    max-width: 100%;
+    overflow-x: hidden;
+    padding: 12px 12px max(20px, env(safe-area-inset-bottom));
+  }
+
+  .archive-page .page-header h1 {
+    font-size: 1.65rem;
+    letter-spacing: -.035em;
+    line-height: 1.1;
+  }
+
+  .archive-page .view-mode-tabs {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px !important;
+    margin: 0 !important;
+    padding: 3px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: #eef2f7;
+  }
+
+  .view-mode-tabs .app-btn {
+    min-width: 0;
+    min-height: 34px;
+    border: 0;
+    border-radius: 7px !important;
+    padding: 5px 8px;
+    box-shadow: none;
+    font-size: .72rem;
+  }
+
+  .controls-card {
+    gap: 8px;
+    padding: 10px !important;
+    border-radius: 10px;
+  }
+
+  .search-row {
+    gap: 5px;
+  }
+
+  .search-row .app-input {
+    min-width: 0;
+  }
+
+  .search-row .app-btn {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    font-size: .68rem;
+  }
+
+  .filters-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    padding-top: 8px;
+  }
+
+  .filter-group label {
+    margin: 0;
+    font-size: .65rem;
+  }
+
+  .app-input,
+  .app-select {
+    min-width: 0;
+    padding: 7px 8px;
+    font-size: .72rem;
+  }
+
+  .experiments-list {
+    gap: 10px;
+  }
+
+  .experiment-card {
+    padding: 10px 9px 8px !important;
+    border-radius: 11px;
+  }
+
+  .exp-header-row-one {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 7px !important;
+  }
+
+  .exp-title-date-group {
+    gap: 5px !important;
+    margin: 0 !important;
+  }
+
+  .exp-title-date-group .inline-exp-title {
+    min-width: 0;
+    padding: 0 !important;
+    font-size: 1rem !important;
+  }
+
+  .badge-shared {
+    font-size: .6rem !important;
+    padding: 3px 5px !important;
+  }
+
+  .exp-actions-inline-group {
+    align-items: flex-start !important;
+    width: 100%;
+  }
+
+  .exp-action-buttons-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 5px !important;
+    width: 100%;
+  }
+
+  .exp-action-buttons-row .app-btn {
+    min-height: 33px;
+    padding: 5px 8px;
+    font-size: .68rem;
+  }
+
+  .score-pill-badge,
+  .meta-date-inline {
+    font-size: .62rem !important;
+  }
+
+  .workflow-scroll-area {
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .workflow-scroll-area::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workflow-scroll-area .compact-step {
+    flex-basis: calc(100vw - 72px) !important;
+    max-width: 285px;
+    scroll-snap-align: center;
+  }
+
+  .comments-preview-card {
+    margin-top: 6px !important;
+    padding: 8px 9px !important;
+  }
+
+  .empty-msg {
+    min-height: 130px;
+    display: grid;
+    place-items: center;
+    padding: 24px 20px !important;
+    font-size: .8rem;
+  }
+
+  .exp-modal-card {
+    box-sizing: border-box;
+    gap: 12px !important;
+    width: 100vw !important;
+    max-width: none !important;
+    max-height: 100dvh !important;
+    min-height: 100dvh;
+    padding: 12px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .modal-header {
+    gap: 8px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .modal-title-area {
+    min-width: 0;
+  }
+
+  .modal-title-area h3 {
+    font-size: 1.05rem !important;
+  }
+
+  .close-modal-btn {
+    flex: 0 0 auto;
+    font-size: .7rem !important;
+  }
+
+  .modal-body-layout {
+    display: block !important;
+  }
+
+  .modal-sidebar-panel {
+    gap: 10px !important;
+    padding: 0 0 10px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .modal-timeline-panel {
+    gap: 8px !important;
+    padding-top: 2px;
+  }
+
+  .step-card-content {
+    margin-bottom: 9px !important;
+    padding: 10px !important;
+  }
+
+  .global-comments-section {
+    gap: 9px !important;
+    margin-top: 2px !important;
+    padding-top: 12px !important;
+  }
+
+  .global-comments-section h4 {
+    font-size: .95rem !important;
+  }
+
+  .add-comment-form {
+    gap: 6px !important;
+  }
+
+  .add-comment-form .app-btn {
+    height: 50px !important;
+    padding: 0 10px !important;
+    font-size: .7rem !important;
+  }
+}

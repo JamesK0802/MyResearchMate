@@ -21,7 +21,7 @@
     <div class="editor-container section-card">
       <!-- Mobile back button (Visible only in single column editor mode) -->
       <button class="mobile-back-to-list-btn" (click)="selectNote(null)">
-        ◀ Back to Notebook Ledger
+        ‹ Notes
       </button>
 
       <!-- Floating sidebar toggle button -->
@@ -40,10 +40,12 @@
                  placeholder="Title of your entry..." />
           <div class="editor-actions">
             <input #imagePicker class="image-picker-input" type="file" accept="image/*" (change)="onImageSelected($event)" />
-            <button type="button" class="app-btn app-btn-outline" (click)="imagePicker.click()">Add Image</button>
-            <button class="app-btn app-btn-danger-outline delete-btn" (click)="deleteNote(selectedNote.id)">Delete Note</button>
+            <button type="button" class="app-btn app-btn-outline add-image-btn" (click)="imagePicker.click()">Add Image</button>
+            <button class="app-btn app-btn-danger-outline delete-btn" (click)="deleteNote(selectedNote.id)" aria-label="Delete note"><span class="desktop-action-label">Delete Note</span><span class="mobile-action-label">Delete</span></button>
           </div>
         </div>
+
+        <div class="mobile-paste-hint">Paste a copied image directly into the note.</div>
 
         <!-- Rich editable canvas -->
         <div class="editor-canvas-wrapper" (click)="onEditorClick($event)" (scroll)="onEditorScroll()">
@@ -60,12 +62,12 @@
 
           <!-- Interactive Drag-to-Resize Guide Overlay -->
           <div class="image-resize-guide" 
-               (mousedown)="onGuideMouseDown($event)"
+               (pointerdown)="onGuidePointerDown($event)"
                [ngStyle]="{ 'display': selectedImg ? 'block' : 'none', 'top': guideStyle.top, 'left': guideStyle.left, 'width': guideStyle.width, 'height': guideStyle.height }">
-            <div class="resize-handle tl" (mousedown)="onResizeStart($event, 'tl')"></div>
-            <div class="resize-handle tr" (mousedown)="onResizeStart($event, 'tr')"></div>
-            <div class="resize-handle bl" (mousedown)="onResizeStart($event, 'bl')"></div>
-            <div class="resize-handle br" (mousedown)="onResizeStart($event, 'br')"></div>
+            <div class="resize-handle tl" (pointerdown)="onResizeStart($event, 'tl')"></div>
+            <div class="resize-handle tr" (pointerdown)="onResizeStart($event, 'tr')"></div>
+            <div class="resize-handle bl" (pointerdown)="onResizeStart($event, 'bl')"></div>
+            <div class="resize-handle br" (pointerdown)="onResizeStart($event, 'br')"></div>
             
             <!-- Modern Google Docs-style Alignment & Wrapping Menu -->
             <div class="image-format-menu">

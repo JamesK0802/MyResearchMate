@@ -247,6 +247,11 @@
   white-space: nowrap;
 }
 
+.mobile-action-label,
+.mobile-paste-hint {
+  display: none;
+}
+
 /* Rich editable sheet */
 .editor-canvas-wrapper {
   flex: 1;
@@ -263,6 +268,7 @@
   cursor: move;
   z-index: 150;
   box-sizing: border-box;
+  touch-action: none;
 }
 
 .resize-handle {
@@ -276,6 +282,7 @@
   box-shadow: var(--shadow-sm);
   z-index: 160;
   transition: transform 0.1s ease;
+  touch-action: none;
 }
 
 .resize-handle:hover {
@@ -427,8 +434,8 @@
 
 @media (max-width: 768px) {
   .notes-page {
-    padding: var(--space-1, 4px) var(--space-2, 8px);
-    height: calc(100vh - 56px);
+    padding: 6px 8px max(8px, env(safe-area-inset-bottom));
+    height: calc(100dvh - 56px);
   }
   
   .notes-layout {
@@ -459,15 +466,39 @@
   .notes-layout.mobile-editor-active .editor-container {
     display: flex !important;
     width: 100% !important;
-    padding: 16px;
+    border-radius: 12px;
+    padding: 10px 12px;
   }
 
   /* Header adjustments for space saving */
   .title-input {
-    font-size: 1.35rem;
+    min-width: 0;
+    font-size: 1.15rem;
+    padding: 2px 0;
   }
   .editor-header {
-    padding-bottom: 12px;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+  .editor-actions {
+    gap: 4px;
+  }
+  .add-image-btn {
+    display: none;
+  }
+  .desktop-action-label {
+    display: none;
+  }
+  .mobile-action-label {
+    display: inline;
+  }
+  .delete-btn {
+    border: 0;
+    min-height: 32px;
+    padding: 4px 7px;
+    background: transparent;
+    font-size: .7rem;
   }
   .toggle-sidebar-btn {
     display: none !important; /* Hide floating chevron on mobile */
@@ -480,15 +511,62 @@
     border: none;
     color: var(--color-primary);
     font-weight: 800;
-    font-size: 0.9rem;
+    font-size: 0.76rem;
     cursor: pointer;
     padding: 0;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
     align-self: flex-start;
   }
   
   .empty-editor {
     display: none; /* No need to show ledger prompt on mobile canvas */
+  }
+
+  .mobile-paste-hint {
+    display: block;
+    margin-top: 7px;
+    color: var(--color-text-tertiary);
+    font-size: .68rem;
+    line-height: 1.25;
+  }
+
+  .editor-canvas-wrapper {
+    margin-top: 8px;
+    padding-right: 0;
+  }
+
+  .rich-editor-canvas {
+    min-height: calc(100dvh - 190px);
+    padding-bottom: 48px;
+    font-size: .94rem;
+    line-height: 1.65;
+  }
+
+  .resize-handle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+  }
+  .resize-handle.tl { left: -13px; top: -13px; }
+  .resize-handle.tr { right: -13px; top: -13px; }
+  .resize-handle.bl { bottom: -13px; left: -13px; }
+  .resize-handle.br { bottom: -13px; right: -13px; }
+
+  .image-format-menu {
+    bottom: -39px;
+    max-width: calc(100vw - 36px);
+    gap: 2px;
+    overflow-x: auto;
+    padding: 3px 5px;
+  }
+  .menu-pill-btn {
+    min-height: 30px;
+    padding: 3px 7px;
+    font-size: .62rem;
+  }
+  .menu-dimensions,
+  .menu-divider {
+    display: none;
   }
 }
 
@@ -506,4 +584,15 @@
   box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
+}
+
+@media (max-width: 768px) {
+  .sync-status-bottom {
+    right: 12px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    border: 0;
+    box-shadow: none;
+    padding: 3px 7px;
+  }
+  .sync-status-bottom .status-text { display: none; }
 }

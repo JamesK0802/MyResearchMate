@@ -456,7 +456,7 @@ export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 50);
   }
 
-  onGuideMouseDown(event: MouseEvent) {
+  onGuidePointerDown(event: PointerEvent) {
     const target = event.target as HTMLElement;
     
     // Ignore guide movement drag if user clicked handles or format menu buttons!
@@ -487,13 +487,16 @@ export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectedImg.style.clear = 'both';
     this.currentWrapping = 'absolute';
     
-    const onMouseMove = (moveEvent: MouseEvent) => {
+    const onPointerMove = (moveEvent: PointerEvent) => {
       if (!this.isDraggingImage || !this.selectedImg) return;
+      moveEvent.preventDefault();
       const deltaX = moveEvent.clientX - startMouseX;
       const deltaY = moveEvent.clientY - startMouseY;
       
-      const newLeft = startLeft + deltaX;
-      const newTop = startTop + deltaY;
+      const maxLeft = Math.max(0, wrapper.clientWidth - this.selectedImg.offsetWidth);
+      const maxTop = Math.max(0, wrapper.scrollHeight - this.selectedImg.offsetHeight);
+      const newLeft = Math.max(0, Math.min(maxLeft, startLeft + deltaX));
+      const newTop = Math.max(0, Math.min(maxTop, startTop + deltaY));
       
       this.selectedImg.style.left = `${newLeft}px`;
       this.selectedImg.style.top = `${newTop}px`;
@@ -501,18 +504,20 @@ export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
       this.positionResizeGuide();
     };
     
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       this.isDraggingImage = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       this.onEditorInput();
     };
     
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
   }
 
-  onResizeStart(event: MouseEvent, handle: string) {
+  onResizeStart(event: PointerEvent, handle: string) {
     event.preventDefault();
     event.stopPropagation();
     if (!this.selectedImg || !this.richEditor) return;
@@ -528,8 +533,9 @@ export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
     const startLeft = offset.left;
     const isAbsolute = this.selectedImg.style.position === 'absolute';
     
-    const onMouseMove = (moveEvent: MouseEvent) => {
+    const onPointerMove = (moveEvent: PointerEvent) => {
       if (!this.isResizing || !this.selectedImg) return;
+      moveEvent.preventDefault();
       const deltaX = moveEvent.clientX - startMouseX;
       
       let newWidth = startWidth;
@@ -566,16 +572,18 @@ export class LabNotesPageComponent implements OnInit, OnDestroy, AfterViewInit {
       this.positionResizeGuide();
     };
     
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       this.isResizing = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       
       // Auto-save changes immediately!
       this.onEditorInput();
     };
     
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
   }
 }
