@@ -300,7 +300,10 @@ interface NotebookPage {
       .notebook-actions { min-width:0; }
       .notebook-tree-select { max-width:150px; }
       .mobile-screen-notebook { display:block; width:100%; }
-      .mobile-notebook-page { --rule:26px; width:100%; height:auto; min-height:0; aspect-ratio:210 / 297; padding:0 24px; border-radius:8px; filter:drop-shadow(0 8px 14px rgba(45,40,32,.14)); }
+      .mobile-notebook-page { --rule:26px; width:100%; height:auto; min-height:calc(100dvh - 190px); aspect-ratio:auto; padding:0 24px 22px; border-radius:8px; overflow:visible; filter:drop-shadow(0 8px 14px rgba(45,40,32,.14)); }
+      .mobile-notebook-page .page-heading,
+      .mobile-notebook-page .page-steps,
+      .mobile-notebook-page .page-notes { flex-shrink:0; }
       .mobile-notebook-page .page-title-input,
       .mobile-notebook-page h2 { font-size:1rem; line-height:var(--rule); }
       .mobile-notebook-page .page-steps ol,

@@ -97,6 +97,7 @@ export interface ConnectionPath {
           <ng-container *ngFor="let t of allTrees">
             <div class="node-wrapper"
               *ngFor="let node of t.nodes"
+              [attr.data-node-id]="node.id"
               [style.left.px]="node.x || 100"
               [style.top.px]="node.y || 200"
               [class.is-focused]="focusedNodeId === node.id"
@@ -107,6 +108,7 @@ export interface ConnectionPath {
               <div class="node-card"
                 [class.focused]="focusedNodeId === node.id"
                 (mousedown)="startDragNode($event, node, t)"
+                (touchstart)="startTouchConnectDrag($event, node)"
                 (click)="onNodeClick(node)"
                 [title]="connectionEditMode ? 'Select this node for connection editing' : 'Click to edit this protocol step'">
                 
@@ -282,6 +284,7 @@ export interface ConnectionPath {
       mask-composite: exclude;
     }
     .namu-flow-container.connection-edit-mode { cursor: crosshair; }
+    .namu-flow-container.connection-edit-mode .node-card { touch-action:none; }
     .connection-edit-hint {
       position: fixed; z-index: 45;
       top: calc(var(--nav-height, 56px) + 68px);
@@ -462,6 +465,18 @@ export interface ConnectionPath {
       .boundary-header-tag { font-size: .7rem; padding: 4px 9px; }
       .connection-edit-hint { top: calc(var(--nav-height, 56px) + 50px); width: calc(100vw - 24px); box-sizing: border-box; font-size: .7rem; }
       .connection-edit-frame { top: calc(var(--nav-height, 56px) + 46px); }
+      .fixed-focused-hero-overlay { align-items:flex-start; padding:10px; box-sizing:border-box; overflow:hidden; }
+      .hero-modal-content-wrapper { flex-direction:column; gap:10px; width:100%; max-width:none; max-height:calc(100dvh - 20px); overflow-y:auto; }
+      .hero-focused-card,
+      .hero-right-leaves-sidebar { width:100%; max-width:none; max-height:none; padding:14px; border-width:2px; border-radius:13px; box-sizing:border-box; overflow:visible; }
+      .hero-focused-card { gap:11px; }
+      .hero-right-leaves-sidebar { flex-shrink:0; gap:10px; }
+      .node-title-inline-input { min-width:0; font-size:1rem; }
+      .hero-focused-card .step-inline-row { gap:5px; }
+      .hero-focused-card .step-edit-input { min-width:0; font-size:.82rem; }
+      .hero-focused-card .node-card-footer { align-items:flex-start; flex-wrap:wrap; gap:8px; }
+      .hero-focused-card .node-card-actions { flex-wrap:wrap; }
+      .pure-memo-textarea { min-height:64px; font-size:.86rem; }
     }
   `]
 })
@@ -810,6 +825,11 @@ export class NamuFlowViewComponent implements AfterViewInit {
   }
 
   onCanvasTouchMove(e: TouchEvent) {
+    if (this.isConnectingDrag && e.touches.length === 1) {
+      e.preventDefault();
+      this.updateTempTouch(e.touches[0]);
+      return;
+    }
     if (e.touches.length !== 2 || !this.containerRef || !this.pinchStartDistance) return;
     e.preventDefault();
     const el = this.containerRef.nativeElement as HTMLElement;
@@ -822,6 +842,15 @@ export class NamuFlowViewComponent implements AfterViewInit {
   }
 
   onCanvasTouchEnd(e: TouchEvent) {
+    if (this.isConnectingDrag && e.changedTouches.length) {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const targetElement = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+      const targetId = targetElement?.closest<HTMLElement>('[data-node-id]')?.dataset['nodeId'];
+      const targetNode = targetId ? this.tree.nodes.find(node => node.id === targetId) : undefined;
+      if (targetNode) this.onPortMouseUp(targetNode, this.tree);
+      else this.cancelConnectDrag();
+    }
     if (e.touches.length < 2) this.pinchStartDistance = 0;
   }
 
@@ -876,7 +905,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
     }
 
     if (this.connectionEditMode) {
-      this.editConnectionWithNode(node);
+      // Link editing is drag-only. A tap must never create or select a link.
       return;
     }
     
@@ -891,7 +920,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
   }
 
   clearConnectionSelection() {
-    this.connectionSourceNodeId = null;
+    this.cancelConnectDrag();
   }
 
   private editConnectionWithNode(node: NamuNode) {
@@ -1047,7 +1076,18 @@ export class NamuFlowViewComponent implements AfterViewInit {
   startConnectDrag(e: MouseEvent, node: NamuNode) {
     this.isConnectingDrag = true;
     this.connectSourceNode = node;
+    this.connectionSourceNodeId = node.id;
     this.updateTempMouse(e);
+  }
+
+  startTouchConnectDrag(e: TouchEvent, node: NamuNode) {
+    if (!this.connectionEditMode || e.touches.length !== 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.isConnectingDrag = true;
+    this.connectSourceNode = node;
+    this.connectionSourceNodeId = node.id;
+    this.updateTempTouch(e.touches[0]);
   }
 
   onPortMouseUp(targetNode: NamuNode, tree?: NamuTree) {
@@ -1062,7 +1102,14 @@ export class NamuFlowViewComponent implements AfterViewInit {
       }
       this.isConnectingDrag = false;
       this.connectSourceNode = null;
+      this.connectionSourceNodeId = null;
     }
+  }
+
+  private cancelConnectDrag() {
+    this.isConnectingDrag = false;
+    this.connectSourceNode = null;
+    this.connectionSourceNodeId = null;
   }
 
   onInputPortMouseUp(targetNode: NamuNode, tree?: NamuTree) {
@@ -1122,6 +1169,14 @@ export class NamuFlowViewComponent implements AfterViewInit {
     this.tempMouseY = (e.clientY - rect.top + container.scrollTop) / this.zoomScale;
   }
 
+  private updateTempTouch(touch: Touch) {
+    if (!this.containerRef) return;
+    const container = this.containerRef.nativeElement as HTMLElement;
+    const rect = container.getBoundingClientRect();
+    this.tempMouseX = (touch.clientX - rect.left + container.scrollLeft) / this.zoomScale;
+    this.tempMouseY = (touch.clientY - rect.top + container.scrollTop) / this.zoomScale;
+  }
+
   @HostListener('document:mouseup')
   onCanvasMouseUp() {
     if (this.isPanningCanvas) {
@@ -1144,8 +1199,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
       this.draggingNode = null;
     }
     if (this.isConnectingDrag) {
-      this.isConnectingDrag = false;
-      this.connectSourceNode = null;
+      this.cancelConnectDrag();
     }
   }
 
