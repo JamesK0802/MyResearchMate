@@ -124,6 +124,15 @@ import { AuthService } from '../../services/auth.service';
     .mt-4 { margin-top: 1rem; }
     .signup-btn { margin-bottom: 0; background: var(--color-surface-alt); color: var(--color-text-primary); border: 1.5px solid var(--color-border); }
     .signup-btn:hover { background: var(--color-border-light); }
+    @media (max-width: 600px) {
+      .login-container { min-height: auto; align-items: flex-start; padding: 18px 12px; }
+      .login-card { padding: 22px 16px; border-radius: 15px; box-shadow: var(--shadow-md); }
+      .login-header { margin-bottom: 18px; }
+      .login-logo { font-size: 2rem; margin-bottom: 7px; }
+      .login-header h1 { font-size: 1.45rem; }
+      .login-header p { font-size: .82rem; }
+      .login-footer { padding-top: 14px; }
+    }
   `]
 })
 export class LoginPageComponent {

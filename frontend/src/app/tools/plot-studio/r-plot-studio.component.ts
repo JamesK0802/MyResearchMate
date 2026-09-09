@@ -498,6 +498,24 @@ import { PlotProjectService } from '../../services/plot-project.service';
       background: #cbd5e1;
       border-radius: 1px;
     }
+    @media (max-width: 700px) {
+      .r-studio-shell, .vscode-welcome-screen, .studio-workspace-container { min-height: calc(100dvh - 56px); height: calc(100dvh - 56px); }
+      .vscode-welcome-screen { padding: 14px 12px; align-items: flex-start; }
+      .welcome-card-box { padding: 22px 16px; gap: 16px; border-radius: 15px; }
+      .welcome-title { font-size: 1.4rem; }
+      .welcome-subtitle, .welcome-footer { display: none; }
+      .btn-welcome-primary, .btn-welcome-secondary { padding: 11px 13px; gap: 10px; }
+      .action-text strong { font-size: .86rem; }
+      .action-text span { font-size: .7rem; }
+      .workspace-bar { height: 38px; padding: 0 8px; }
+      .brand-title { min-width: 0; }
+      .brand-name { display: none; }
+      .layout-icon-group-center { position: static; transform: none; margin-right: auto; }
+      .btn-top-save, .btn-top-close { padding: 4px 8px; font-size: .68rem; }
+      .workspace-body { height: auto; overflow-y: auto; flex-direction: column; }
+      .panel-wrapper, .panel-wrapper.flex-grow { width: 100% !important; height: auto; min-height: 360px; flex: 0 0 360px; border-bottom: 1px solid #e2e8f0; }
+      .splitter { display: none; }
+    }
   `]
 })
 export class RPlotStudioComponent implements OnInit, OnDestroy {

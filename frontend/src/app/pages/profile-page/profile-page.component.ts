@@ -143,6 +143,23 @@ import { AuthService, UserProfile } from '../../services/auth.service';
 
     .message { text-align: center; margin-top: var(--space-5); font-size: var(--text-sm); color: var(--color-primary); font-weight: var(--fw-semi); padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-primary-light); }
     .message.error { color: var(--color-error); background: var(--color-error-bg); }
+    @media (max-width: 600px) {
+      .profile-page { padding: 18px 12px; }
+      .profile-header { display: grid; grid-template-columns: 58px 1fr; align-items: center; text-align: left; gap: 12px; margin-bottom: 16px; }
+      .avatar { width: 54px; height: 54px; margin: 0; border-width: 2px; }
+      .avatar-letter { font-size: 1.45rem; }
+      .profile-header h1 { font-size: 1.45rem; margin-bottom: 5px; }
+      .role-badge { font-size: .62rem; padding: 3px 9px; }
+      .profile-card { padding: 6px 14px; border-radius: 14px; }
+      .info-row { padding: 12px 0; display: grid; grid-template-columns: 86px minmax(0, 1fr); align-items: center; gap: 10px; }
+      .info-row label { margin: 0; font-size: .66rem; }
+      .info-value { font-size: .88rem; min-width: 0; overflow-wrap: anywhere; }
+      .editable-field { justify-content: space-between; min-width: 0; }
+      .edit-field { grid-column: 1 / -1; }
+      .textarea-field { min-height: 72px; }
+      .profile-actions { margin-top: 14px; }
+      .btn-logout { width: 100%; justify-content: center; padding: 10px; }
+    }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   `]
 })

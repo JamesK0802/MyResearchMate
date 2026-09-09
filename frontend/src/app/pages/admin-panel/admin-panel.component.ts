@@ -151,6 +151,34 @@ import { StorageQuotaService } from '../../services/storage-quota.service';
     .request-row.processed { padding: var(--space-4) var(--space-6); }
     .mini-grid { grid-template-columns: 1fr 1fr; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-text-tertiary); }
     .loading-state, .empty-state { text-align: center; padding: 60px; color: var(--color-text-secondary); font-size: var(--text-md); }
+    @media (max-width: 600px) {
+      .admin-container { padding: 16px 12px; }
+      .page-header { margin-bottom: 10px; }
+      .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
+      .page-header p { display: none; }
+      .tabs { margin-bottom: 14px; }
+      .tabs button { flex: 1; padding: 9px 5px; font-size: .76rem; }
+      .admin-section { margin-bottom: 18px; }
+      .section-title { margin-bottom: 8px; font-size: .68rem; }
+      .requests-list { gap: 9px; }
+      .request-row, .storage-request, .allocation-row { padding: 12px; border-radius: 13px; display: block; }
+      .req-info { gap: 6px; margin-bottom: 9px; }
+      .lab-name { font-size: .95rem; }
+      .req-date { font-size: .68rem; }
+      .req-tagline { font-size: .78rem; margin-bottom: 5px; }
+      .req-desc { display: none; }
+      .details-grid, .mini-grid { grid-template-columns: 1fr; gap: 8px; }
+      .detail-block label { margin-bottom: 3px; font-size: .62rem; }
+      .leader-box, .member-tag, .no-m { font-size: .75rem; }
+      .req-actions { margin-top: 10px; }
+      .req-actions button { flex: 1; padding: 8px; font-size: .75rem; }
+      .review-fields { grid-template-columns: 1fr; gap: 8px; }
+      .allocation-row .req-date { margin: 4px 0 10px; display: block; }
+      .btn-manage-quota { width: 100%; justify-content: center; }
+      .history-section { padding-top: 14px; }
+      .request-row.processed { padding: 10px 12px; }
+      .loading-state, .empty-state { padding: 45px 10px; }
+    }
   `]
 })
 export class AdminPanelComponent implements OnInit {

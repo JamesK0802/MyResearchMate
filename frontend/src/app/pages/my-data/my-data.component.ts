@@ -263,7 +263,40 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
     .empty-state p { color: var(--color-text-secondary); margin-bottom: var(--space-6); font-size: var(--text-md); }
     .btn-primary { padding: 12px 28px; background: var(--color-primary); color: white; border: none; border-radius: var(--radius-md); font-family: var(--font-sans); font-weight: var(--fw-bold); font-size: var(--text-md); cursor: pointer; transition: var(--transition-fast); }
     .btn-primary:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
-    @media (max-width:600px) { .data-toolbar { align-items:stretch; flex-direction:column; gap:0; } .sort-control { justify-content:flex-end; } .tabs-nav { overflow-x:auto; } .tabs-nav button { padding:10px var(--space-4); white-space:nowrap; } }
+    @media (max-width:600px) {
+      .my-data-container { padding:14px 12px 24px; }
+      .data-toolbar { align-items:stretch; border-bottom:0; flex-direction:column; gap:8px; margin-bottom:12px; }
+      .tabs-nav { border-bottom:1px solid var(--color-border); display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); overflow:visible; }
+      .tabs-nav button { font-size:.72rem; line-height:1.15; min-width:0; padding:9px 4px; white-space:normal; }
+      .sort-control { display:grid; grid-template-columns:42px minmax(0,1fr); padding:0; }
+      .sort-control select { min-height:36px; padding:6px 8px; width:100%; }
+      .results-grid { gap:10px; grid-template-columns:1fr; }
+      .result-card { border-radius:12px; padding:13px 14px; }
+      .result-card:hover { transform:none; }
+      .card-top { align-items:center; gap:7px; margin-bottom:8px; padding-right:20px; }
+      .result-title { font-size:1rem; line-height:1.25; }
+      .card-badges { flex-shrink:0; }
+      .badge { font-size:.58rem; padding:2px 6px; }
+      .btn-pin { right:7px; top:7px; }
+      .result-meta { flex-wrap:wrap; font-size:.7rem; gap:5px 11px; margin-bottom:4px; }
+      .sharing-info { display:none; }
+      .card-actions { gap:6px; padding-top:9px; }
+      .btn-load { font-size:.76rem; min-height:36px; padding:7px 9px; }
+      .btn-share,.btn-delete,.btn-info-only { height:36px; width:36px; }
+      .empty-state { border-radius:12px; padding:36px 16px; }
+      .empty-icon { font-size:2rem; margin-bottom:10px; }
+      .empty-state h3 { font-size:1rem; }
+      .empty-state p { font-size:.78rem; margin-bottom:14px; }
+      .modal-overlay { align-items:flex-end; padding:0; }
+      .modal-content { border-radius:16px 16px 0 0; max-height:88vh; }
+      .modal-header { padding:14px 16px; }
+      .modal-header h2 { font-size:1rem; }
+      .modal-body { overflow-y:auto; padding:14px 16px; }
+      .modal-sub { font-size:.78rem; margin-bottom:12px; }
+      .lab-item { padding:10px; }
+      .modal-footer { padding:11px 16px; }
+      .btn-cancel,.btn-save-share { flex:1; font-size:.76rem; padding:9px; }
+    }
   `]
 })
 export class MyDataComponent implements OnInit {

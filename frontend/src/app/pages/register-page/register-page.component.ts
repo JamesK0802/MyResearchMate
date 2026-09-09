@@ -134,6 +134,15 @@ import { AuthService } from '../../services/auth.service';
     
     .text-center { text-align: center; }
     .btn-text { background: none; border: none; color: var(--color-primary); font-weight: var(--fw-black); cursor: pointer; text-decoration: underline; padding: 0; }
+    @media (max-width: 600px) {
+      .login-container { min-height: auto; align-items: flex-start; padding: 18px 12px; }
+      .login-card { padding: 22px 16px; border-radius: 15px; box-shadow: var(--shadow-md); }
+      .login-header { margin-bottom: 18px; }
+      .login-logo { font-size: 2rem; margin-bottom: 7px; }
+      .login-header h1 { font-size: 1.45rem; }
+      .login-header p { font-size: .82rem; }
+      .login-footer { padding-top: 14px; margin-top: 14px; }
+    }
   `]
 })
 export class RegisterPageComponent implements OnInit {

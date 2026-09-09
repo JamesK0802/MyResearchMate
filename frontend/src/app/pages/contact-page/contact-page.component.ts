@@ -128,6 +128,21 @@ import { environment } from '../../../environments/environment';
       .card-left, .card-right { padding: 60px 40px; }
       .card-right { border-left: none; border-top: 1px solid #f1f5f9; }
     }
+    @media (max-width: 600px) {
+      .container { padding: 14px 12px; }
+      .unified-card { border-radius: 16px; }
+      .card-left, .card-right { padding: 22px 18px; }
+      .m-badge { margin-bottom: 8px; }
+      .card-header h1 { font-size: 1.6rem; margin-bottom: 6px; }
+      .card-header p { margin-bottom: 18px; font-size: .86rem; line-height: 1.45; }
+      .support-categories { display: none; }
+      .card-actions { padding-top: 14px; }
+      .card-right { gap: 20px; }
+      .contact-block h3 { font-size: 1.15rem; }
+      .email-link { font-size: .9rem; overflow-wrap: anywhere; }
+      .role-desc, .info-block p { font-size: .78rem; line-height: 1.4; }
+      .footer-meta { padding-top: 14px; }
+    }
   `]
 })
 export class ContactPageComponent {

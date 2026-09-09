@@ -110,6 +110,16 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
       border-left: 1px solid var(--color-border);
       background: var(--color-surface);
     }
+    @media (max-width: 700px) {
+      .sequence-workspace-page { height: calc(100dvh - 56px); }
+      .storage-bar { height: 32px; flex-basis: 32px; padding: 0 9px; }
+      .storage-title { font-size: .72rem; }
+      .storage-usage.muted { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .65rem; }
+      .workspace-container { flex-direction: column; overflow-y: auto; }
+      .explorer-panel { flex: 0 0 31%; min-height: 190px; border-right: 0; border-bottom: 1px solid var(--color-border); }
+      .viewer-panel { flex: 0 0 52%; min-height: 310px; }
+      .inspector-panel { flex: 0 0 auto; min-height: 220px; border-left: 0; border-top: 1px solid var(--color-border); }
+    }
   `]
 })
 export class SequenceWorkspacePageComponent {

@@ -5,6 +5,46 @@
   font-family: var(--font-sans);
 }
 
+@media (max-width: 600px) {
+  app-tool-directory .directory { padding: 16px 12px; }
+  app-tool-directory .directory header { gap: 12px; margin-bottom: 14px; justify-content: space-between; }
+  app-tool-directory .directory h1 { font-size: 1.45rem; }
+  app-tool-directory .directory header > div > p { display: none; }
+  app-tool-directory .sort-control { font-size: .72rem; gap: 4px; }
+  app-tool-directory .sort-control select { width: 110px; flex-basis: 110px; padding: 8px; }
+  app-tool-directory .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  app-tool-directory .card,
+  app-tool-directory .add { border-radius: 12px; min-height: 180px; }
+  app-tool-directory .thumb { height: 82px; }
+  app-tool-directory .thumb-fallback { gap: 2px; }
+  app-tool-directory .thumb-fallback span { font-size: 1.35rem; }
+  app-tool-directory .thumb-fallback small { font-size: .65rem; padding: 0 6px; }
+  app-tool-directory .card h2 { margin: 9px 10px 0; font-size: .85rem; line-height: 1.2; }
+  app-tool-directory .card p { margin: 5px 10px 0; min-height: 0; font-size: .7rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  app-tool-directory .card footer { padding: 8px 10px; font-size: .72rem; }
+  app-tool-directory .add { font-size: 2rem; }
+  app-tool-directory .shade { align-items: end; }
+  app-tool-directory .shade form { width: 100%; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 18px 14px; max-height: 88vh; overflow: auto; }
+
+  app-sample-photo-compare-page { --print-slot-width: 190px; --print-slot-height: 236px; }
+  app-sample-photo-compare-page .compare-shell { padding: 16px 10px 30px; }
+  app-sample-photo-compare-page .compare-header { display: flex; margin-bottom: 12px; gap: 8px; }
+  app-sample-photo-compare-page .compare-header h1 { font-size: 1.35rem; }
+  app-sample-photo-compare-page .comparison-summary { display: none; }
+  app-sample-photo-compare-page .save-pdf { margin: 0; padding: 7px 9px; font-size: .7rem; }
+  app-sample-photo-compare-page .board-title { padding: 10px 12px; }
+  app-sample-photo-compare-page .board-title input { font-size: .95rem; }
+  app-sample-photo-compare-page .photo-row { padding: 12px; gap: 6px; }
+  app-sample-photo-compare-page .row-label { flex-direction: row; align-items: center; }
+  app-sample-photo-compare-page .row-label input { font-size: .86rem; }
+  app-sample-photo-compare-page .row-label small { white-space: nowrap; font-size: .65rem; }
+  app-sample-photo-compare-page .slot-grid { gap: 7px; padding-bottom: 8px; }
+  app-sample-photo-compare-page .upload-action { height: 30px; width: 116px; font-size: .68rem; }
+  app-sample-photo-compare-page .comparison-divider { margin: 0 12px; }
+  app-sample-photo-compare-page .save-dialog-backdrop { padding: 0; align-items: end; }
+  app-sample-photo-compare-page .save-dialog { box-sizing: border-box; border-radius: 16px 16px 0 0; padding: 18px 14px; }
+}
+
 /* ── App Shell ── */
 .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -4632,15 +4672,23 @@ select.form-control {
   .analysis-page .upload-zone p { font-size: .86rem; }
 
   .analysis-page .analysis-controls-grid {
+    grid-template-columns: 1fr;
     gap: 9px;
     margin-bottom: 10px;
+  }
+
+  .analysis-page .analysis-controls-grid .form-group:not(.toggle-group) {
+    align-items: center;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 96px;
   }
 
   .analysis-page .analysis-controls-grid .form-group:not(.toggle-group) label {
     font-size: .62rem;
     letter-spacing: .02em;
     line-height: 1.25;
-    margin-bottom: 5px;
+    margin: 0;
   }
 
   .analysis-page .analysis-controls-grid input.form-control {
@@ -4816,4 +4864,65 @@ select.form-control {
   .results-dashboard .table-card { padding: 12px; }
   .results-dashboard .mobile-summary-row { border-radius: 10px; padding: 9px; }
   .results-dashboard .annotation-panel { border-radius: 12px; padding: 11px; }
+
+  /* Benchmark: compact parameter rows and dense labelled dataset cards. */
+  .bench-container { gap: 12px; }
+  .bench-header p,
+  .bench-section-title p,
+  .bench-dataset-header p { display: none; }
+  .bench-header h2 { font-size: 1.2rem; margin-bottom: 0; }
+  .bench-mode-tabs { width: 100%; }
+  .bench-mode-tabs button { flex: 1; font-size: .76rem; padding: 7px 9px; }
+  .bench-params-card { padding: 12px; }
+  .bench-section-title { align-items: center; flex-direction: row; gap: 8px; margin-bottom: 9px; }
+  .bench-section-title h3,
+  .bench-dataset-header h3 { font-size: 1rem; margin: 0; }
+  .bench-section-title .platform-segmented { margin-left: auto; }
+  .bench-params-row,
+  .bench-advanced-grid { display: grid; gap: 7px; grid-template-columns: 1fr; max-width: none; }
+  .bench-param-group {
+    align-items: center;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    min-width: 0;
+  }
+  .bench-param-group label { font-size: .67rem; line-height: 1.2; margin: 0; }
+  .bench-param-group input { min-height: 36px; padding: 7px 8px; }
+  .bench-advanced-toggle-bar { margin-top: 8px; }
+  .bench-advanced-toggle { font-size: .72rem; padding: 6px 8px; }
+  .bench-advanced-panel { gap: 8px; padding: 10px; }
+  .bench-dataset-header { align-items: center; padding: 11px 12px; }
+  .bench-dataset-header .btn-add-small { min-height: 32px; padding: 5px 9px; }
+  .bench-class-row {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) 24px;
+    padding: 10px 12px;
+  }
+  .bench-class-files { grid-column: 1 / -1; }
+  .bench-class-config {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: 1fr;
+  }
+  .bench-config-line { gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bench-input { font-size: .75rem; min-width: 0; padding: 7px 8px; }
+  .bench-class-row > .btn-remove { align-self: center; grid-column: 2; grid-row: 2; }
+  .bench-actions { gap: 7px; }
+  .btn-bench { font-size: .78rem; min-height: 40px; padding: 9px 12px; }
+  .bench-result-card { padding: 12px; }
+  .bench-metric-grid { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .bench-metric { min-width: 0; padding: 9px 5px; }
+  .bm-label { font-size: .58rem; }
+  .bm-value { font-size: 1.15rem; }
+  .bm-count { font-size: .6rem; }
+  .bench-prep-stats { gap: 4px; }
+  .bench-prep-stats span { font-size: .62rem; padding: 3px 6px; }
+  .merge-mate-dropzone { margin: 10px; padding: 8px; }
+  .merge-mate-card { padding: 9px; }
+  .merge-reference-config { padding: 12px; }
+  .merge-output-card,
+  .merge-filter-diagnostics { padding: 12px; }
+  .merge-reason-grid { gap: 5px; }
 }

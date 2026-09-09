@@ -213,6 +213,32 @@ import { LabService } from '../../services/lab.service';
     .spinner { width: 36px; height: 36px; border: 3px solid var(--color-border-light); border-top-color: var(--color-primary); border-radius: 50%; margin: 0 auto var(--space-4); animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-icon { font-size: 3rem; margin-bottom: var(--space-5); display: block; }
+    @media (max-width: 600px) {
+      .my-labs-container { padding: 16px 12px; }
+      .page-header { margin-bottom: 14px; }
+      .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
+      .page-header p { display: none; }
+      .labs-list { gap: 10px; }
+      .lab-item-row { padding: 14px; border-radius: 14px; display: block; }
+      .lab-header { gap: 7px; margin-bottom: 5px; }
+      .lab-name { font-size: 1.05rem; }
+      .role-badge { font-size: .58rem; padding: 2px 7px; }
+      .lab-tagline { margin-bottom: 5px; font-size: .8rem; }
+      .lab-desc { margin-bottom: 9px; font-size: .78rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .lab-meta { gap: 7px; font-size: .7rem; }
+      .lab-actions { margin-top: 12px; flex-direction: row; }
+      .lab-actions button { flex: 1; padding: 8px 10px; font-size: .78rem; }
+      .team-section { margin-top: 12px; padding-top: 12px; }
+      .members-grid { grid-template-columns: 1fr; gap: 6px; }
+      .member-mini-card { padding: 8px; }
+      .btn-remove-member { opacity: 1; }
+      .loading-state, .empty-state { padding: 48px 0; }
+      .modal-overlay { padding: 0; align-items: flex-end; }
+      .modal-content { max-width: none; border-radius: 18px 18px 0 0; max-height: 88vh; }
+      .modal-header, .modal-body, .modal-footer { padding: 14px; }
+      .modal-header h2 { font-size: 1rem; }
+      .request-item { padding: 10px; }
+    }
   `]
 })
 export class MyLabsComponent implements OnInit {

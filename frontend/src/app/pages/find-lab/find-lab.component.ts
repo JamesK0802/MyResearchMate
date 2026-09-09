@@ -147,6 +147,31 @@ import { LabService } from '../../services/lab.service';
     .empty-icon { font-size: 3rem; margin-bottom: var(--space-5); display: block; }
     .empty-state h3 { font-size: var(--text-xl); color: var(--color-text-primary); margin-bottom: var(--space-3); font-weight: var(--fw-bold); }
     .empty-state p { color: var(--color-text-secondary); font-size: var(--text-md); }
+    @media (max-width: 600px) {
+      .find-lab-container { padding: 16px 12px; }
+      .page-header { margin-bottom: 14px; }
+      .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
+      .page-header p { display: none; }
+      .search-bar-container { padding: 10px; margin-bottom: 14px; border-radius: 12px; gap: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 116px; }
+      .search-box input, .sort-box select { padding-top: 9px; padding-bottom: 9px; font-size: .8rem; }
+      .sort-box label { display: none; }
+      .sort-box select { width: 100%; }
+      .my-requests-section { padding: 12px; margin-bottom: 14px; border-radius: 12px; }
+      .section-title { margin-bottom: 8px; font-size: .82rem; }
+      .requests-list-mini { grid-template-columns: 1fr; gap: 6px; }
+      .request-mini-card { padding: 9px; }
+      .labs-grid { gap: 9px; }
+      .lab-card { padding: 13px; border-radius: 13px; display: grid; gap: 10px; }
+      .lab-card:hover { transform: none; }
+      .lab-card-header { gap: 7px; margin-bottom: 4px; }
+      .lab-name { font-size: 1rem; }
+      .lab-date { margin-left: auto; }
+      .lab-tagline { font-size: .78rem; }
+      .lab-desc { font-size: .76rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .lab-footer { min-width: 0; }
+      .btn-join, .status-badge { width: 100%; box-sizing: border-box; text-align: center; padding: 8px; font-size: .78rem; }
+      .loading-state, .empty-state { padding: 48px 0; }
+    }
   `]
 })
 export class FindLabComponent implements OnInit {
