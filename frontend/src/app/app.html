@@ -134,60 +134,83 @@
 
     <div class="drawer-links">
       <div class="drawer-section">
-        <div class="drawer-section-title">Tools</div>
-        <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
-        <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
-        <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
-        <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
-        <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 8px 0;"></div>
-        <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
-        <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo Comparison</a>
-        <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">External Tools</a>
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('tools')" [attr.aria-expanded]="isMobileSectionOpen('tools')">
+          <span>Tools</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('tools')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('tools')">
+          <a routerLink="/crispr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
+          <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
+          <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
+          <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
+          <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
+          <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo Comparison</a>
+          <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">External Tools</a>
+        </div>
       </div>
 
       <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <div class="drawer-section-title">My Data</div>
-        <a routerLink="/crispr/my-data" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
-        <a routerLink="/data/protocol-trees" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
-        <a routerLink="/data/plot-projects" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
-        <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
-        <a routerLink="/tools/sequence-viewer" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('data')" [attr.aria-expanded]="isMobileSectionOpen('data')">
+          <span>My Data</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('data')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('data')">
+          <a routerLink="/crispr/my-data" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
+          <a routerLink="/data/protocol-trees" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
+          <a routerLink="/data/plot-projects" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
+          <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
+          <a routerLink="/tools/sequence-viewer" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
+        </div>
       </div>
 
       <!-- Lab Note entries (logged in) -->
       <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <div class="drawer-section-title">Lab Diary</div>
-        <a routerLink="/lab/notes" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">General Notes</a>
-        <a routerLink="/lab/experiments" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">My Experiments</a>
-        <a routerLink="/lab/archive" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Archive</a>
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('diary')" [attr.aria-expanded]="isMobileSectionOpen('diary')">
+          <span>Lab Diary</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('diary')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('diary')">
+          <a routerLink="/lab/notes" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">General Notes</a>
+          <a routerLink="/lab/experiments" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">My Experiments</a>
+          <a routerLink="/lab/archive" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Archive</a>
+        </div>
       </div>
 
       <!-- Facility Booking (logged in) -->
       <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <div class="drawer-section-title">Booking</div>
-        <a routerLink="/booking" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Facility Booking</a>
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('booking')" [attr.aria-expanded]="isMobileSectionOpen('booking')">
+          <span>Booking</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('booking')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('booking')">
+          <a routerLink="/booking" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Facility Booking</a>
+        </div>
       </div>
 
       <!-- Labs management (logged in) -->
       <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <div class="drawer-section-title">Labs</div>
-        <a routerLink="/labs/my" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">My Labs</a>
-        <a routerLink="/labs/find" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Find Lab</a>
-        <a routerLink="/labs/register" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Register Lab</a>
-        <ng-container *ngIf="myLabs && myLabs.length > 0">
-          <div class="drawer-section-title" style="margin-top: 16px;">Labs Archive</div>
-          <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="drawer-link" [style.color]="lab.archive_deletion_at ? '#dc2626' : null" (click)="isMobileMenuOpen = false">
-            {{ lab.lab_name }} <span *ngIf="lab.archive_deletion_at">({{ remainingArchiveDays(lab.archive_deletion_at) }}d left)</span>
-          </a>
-        </ng-container>
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('labs')" [attr.aria-expanded]="isMobileSectionOpen('labs')">
+          <span>Labs</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('labs')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('labs')">
+          <a routerLink="/labs/my" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">My Labs</a>
+          <a routerLink="/labs/find" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Find Lab</a>
+          <a routerLink="/labs/register" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Register Lab</a>
+          <ng-container *ngIf="myLabs && myLabs.length > 0">
+            <div class="drawer-subsection-title">Labs Archive</div>
+            <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="drawer-link" [style.color]="lab.archive_deletion_at ? '#dc2626' : null" (click)="isMobileMenuOpen = false">
+              {{ lab.lab_name }} <span *ngIf="lab.archive_deletion_at">({{ remainingArchiveDays(lab.archive_deletion_at) }}d left)</span>
+            </a>
+          </ng-container>
+        </div>
       </div>
 
       <!-- Admin options (logged in) -->
       <div class="drawer-section" *ngIf="auth.isLoggedIn && (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner' || auth.currentProfile?.role === 'manager')">
-        <div class="drawer-section-title">Administration</div>
-        <a routerLink="/admin/labs" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">Admin Panel</a>
-        <a *ngIf="auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner'"
-           routerLink="/admin/managers" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">Manage Managers</a>
+        <button type="button" class="drawer-section-toggle admin-toggle" (click)="toggleMobileSection('admin')" [attr.aria-expanded]="isMobileSectionOpen('admin')">
+          <span>Administration</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('admin')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('admin')">
+          <a routerLink="/admin/labs" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">Admin Panel</a>
+          <a *ngIf="auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'owner'"
+             routerLink="/admin/managers" routerLinkActive="active" class="drawer-link admin-link" (click)="isMobileMenuOpen = false">Manage Managers</a>
+        </div>
       </div>
 
       <!-- Static info -->

@@ -389,18 +389,60 @@ import { AuthService } from '../../services/auth.service';
     }
 
     @media (max-width: 640px) {
-      .container { padding: 0 20px; }
-      .hero { padding: 72px 22px 48px; max-width: 100%; overflow: hidden; }
-      .hero-label { letter-spacing: 0.08em; line-height: 1.5; }
-      h1 { font-size: 2.35rem; line-height: 1.14; }
-      .hero-sub { font-size: 1rem; margin-bottom: 32px; }
+      .container { padding: 0 14px; }
+      .hero { padding: 48px 18px 34px; max-width: 100%; overflow: hidden; }
+      .hero-label { font-size: .66rem; letter-spacing: 0.06em; line-height: 1.4; margin-bottom: 12px; }
+      h1 { font-size: 2rem; line-height: 1.1; margin-bottom: 12px; }
+      .hero-sub {
+        display: -webkit-box;
+        font-size: .88rem;
+        line-height: 1.45;
+        margin-bottom: 22px;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
       .hero-cta { align-items: stretch; }
-      .hero-cta a { flex: 1; padding: 14px 18px; text-align: center; }
-      .tool-card { padding: 28px; border-radius: 12px; }
-      .mechanism-container { border-radius: 18px; padding: 32px 20px; }
-      .mech-header h2 { font-size: 2rem; }
-      .d-card, .step-card { padding: 28px 22px; border-radius: 14px; }
-      .s-header { align-items: flex-start; }
+      .hero-cta a, .hero-cta button { flex: 1; padding: 11px 14px; text-align: center; }
+      .grid-section { padding-bottom: 30px; }
+      .sec-label { font-size: .66rem; margin: 0 0 12px 4px; }
+      .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .tool-card { min-height: 112px; padding: 15px 14px; border-radius: 12px; }
+      .tool-card h3 { font-size: .94rem; line-height: 1.2; margin: 0 0 7px; }
+      .tool-card p {
+        display: -webkit-box;
+        font-size: .75rem;
+        line-height: 1.4;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
+      .tag-row { display: none; }
+      .tool-card.placeholder { display: none; }
+      .mechanism-container { border-radius: 14px; margin-bottom: 34px; padding: 22px 16px; }
+      .mech-header { border-bottom: 0; margin-bottom: 16px; padding-bottom: 0; }
+      .m-badge { font-size: .62rem; margin-bottom: 7px; }
+      .mech-header h2 { font-size: 1.45rem; margin-bottom: 7px; }
+      .m-intro {
+        display: -webkit-box;
+        font-size: .8rem;
+        line-height: 1.45;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
+      .dual-cards { display: none; }
+      .crispr-feature-grid { gap: 7px; margin-bottom: 12px; }
+      .crispr-feature-grid div { border-radius: 9px; padding: 10px 12px; }
+      .crispr-feature-grid span { display: inline; font-size: .61rem; margin: 0 7px 0 0; }
+      .crispr-feature-grid strong { display: inline; font-size: .72rem; line-height: 1.35; }
+      .steps-grid { gap: 7px; }
+      .step-card { border-radius: 9px; padding: 11px 12px; }
+      .s-header { align-items: center; gap: 8px; margin: 0; }
+      .s-num { flex: 0 0 auto; font-size: .65rem; padding: 3px 7px; }
+      .step-card h3 { font-size: .8rem; line-height: 1.25; }
+      .step-card p { display: none; }
+      .main-footer { font-size: .72rem; padding: 32px 16px; }
     }
   `]
 })

@@ -3309,10 +3309,62 @@ select.form-control {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 6px;
     padding-right: 4px;
   }
-  .drawer-section { display: flex; flex-direction: column; gap: 8px; }
+  .drawer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-border-light);
+    padding-bottom: 6px;
+  }
+  .drawer-section-toggle {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 850;
+    justify-content: space-between;
+    letter-spacing: 0.04em;
+    padding: 11px 8px;
+    text-align: left;
+    text-transform: uppercase;
+    width: 100%;
+  }
+  .drawer-section-toggle.admin-toggle { color: #7c3aed; }
+  .drawer-chevron {
+    color: var(--color-text-tertiary);
+    font-size: 1.15rem;
+    line-height: 1;
+    transform: rotate(-90deg);
+    transition: transform 0.18s ease;
+  }
+  .drawer-chevron.open { transform: rotate(0); }
+  .drawer-section-content {
+    animation: drawerSectionIn 0.16s ease-out;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 0 5px 6px;
+  }
+  @keyframes drawerSectionIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .drawer-subsection-title {
+    color: var(--color-text-tertiary);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    padding: 10px 12px 2px;
+    text-transform: uppercase;
+  }
   .drawer-section-title {
     font-size: 0.72rem;
     font-weight: 800;
@@ -3322,11 +3374,11 @@ select.form-control {
     margin-bottom: 4px;
   }
   .drawer-link {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: var(--color-text-secondary);
     text-decoration: none;
-    padding: 10px 12px;
+    padding: 9px 12px;
     border-radius: var(--radius-md);
     transition: var(--transition-fast);
     line-height: 1.25;
@@ -4529,4 +4581,239 @@ select.form-control {
   .unified-table {
     width: 100%;
   }
+}
+
+/* ── Compact mobile analysis workspace ────────────────────────────────
+   Desktop keeps the full editing surface. On phones, inputs become short,
+   label-led rows so several references can be scanned without tall cards. */
+@media (max-width: 768px) {
+  .analysis-page .analysis-tabs-bar {
+    gap: 7px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }
+
+  .analysis-page .analysis-tab-item {
+    font-size: .76rem;
+    min-height: 32px;
+    padding: 0 9px;
+  }
+
+  .analysis-page .btn-add-tab {
+    height: 32px;
+    width: 32px;
+  }
+
+  .analysis-page .config-section {
+    border-radius: 12px;
+    margin-bottom: 16px;
+    padding: 12px;
+  }
+
+  .analysis-page .local-mode-banner {
+    align-items: flex-start;
+    font-size: .72rem;
+    line-height: 1.35;
+    margin-bottom: 10px;
+    padding: 9px 10px;
+  }
+
+  .analysis-page .local-mode-banner svg { flex: 0 0 auto; margin-top: 1px; }
+
+  .analysis-page .sequencing-platform-field { margin-bottom: 7px; }
+  .analysis-page .platform-segmented button { min-width: 66px; padding: 4px 7px; }
+
+  .analysis-page .upload-zone {
+    margin-bottom: 12px;
+    min-height: 44px;
+    padding: 11px;
+  }
+
+  .analysis-page .upload-zone p { font-size: .86rem; }
+
+  .analysis-page .analysis-controls-grid {
+    gap: 9px;
+    margin-bottom: 10px;
+  }
+
+  .analysis-page .analysis-controls-grid .form-group:not(.toggle-group) label {
+    font-size: .62rem;
+    letter-spacing: .02em;
+    line-height: 1.25;
+    margin-bottom: 5px;
+  }
+
+  .analysis-page .analysis-controls-grid input.form-control {
+    font-size: .82rem;
+    min-height: 38px;
+    padding: 7px 9px;
+  }
+
+  .analysis-page .analysis-controls-grid .toggle-group {
+    border-radius: 9px;
+    min-height: 40px;
+    padding: 8px 9px;
+  }
+
+  .analysis-page .advanced-toggle-bar { margin: 3px 0 10px; }
+  .analysis-page .btn-advanced-toggle { font-size: .74rem; padding: 6px 8px; }
+  .analysis-page .divider { margin: 12px 0; }
+
+  .analysis-page .section-header {
+    display: grid;
+    gap: 9px;
+    grid-template-columns: 1fr;
+    margin-bottom: 10px;
+  }
+
+  .analysis-page .section-header h2 {
+    font-size: 1.05rem;
+    margin: 0;
+  }
+
+  .analysis-page .section-header .header-actions {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .analysis-page .btn-autofill,
+  .analysis-page .btn-window-check,
+  .analysis-page .btn-add {
+    font-size: .72rem;
+    line-height: 1.1;
+    min-height: 34px;
+    padding: 7px 5px !important;
+  }
+
+  .analysis-page .autofill-actions-panel { padding: 10px; margin-bottom: 12px; }
+  .analysis-page .autofill-hint { display: none; }
+  .analysis-page .autofill-buttons { gap: 7px; }
+  .analysis-page .autofill-buttons button { flex: 1; font-size: .7rem; padding: 8px 6px; }
+
+  .analysis-page .gene-block-card {
+    background: #fff;
+    border: 1px solid #bbebce;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+
+  .analysis-page .gene-block-header {
+    min-height: 36px;
+    padding: 8px 11px;
+  }
+
+  .analysis-page .gene-block-title { font-size: .82rem; }
+  .analysis-page .btn-remove-target { font-size: .68rem; padding: 4px 7px; }
+  .analysis-page .gene-block-body { padding: 10px; }
+
+  .analysis-page .gene-block-body .form-row {
+    display: grid;
+    gap: 7px !important;
+    grid-template-columns: 1fr;
+    margin-bottom: 8px !important;
+  }
+
+  .analysis-page .gene-block-body .form-group,
+  .analysis-page .gene-target-row .form-group {
+    align-items: center;
+    display: grid;
+    gap: 7px;
+    grid-template-columns: 78px minmax(0, 1fr);
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  .analysis-page .gene-block-body .form-group label,
+  .analysis-page .gene-target-row .form-group label {
+    font-size: .62rem;
+    letter-spacing: .015em;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .analysis-page .gene-block-body input,
+  .analysis-page .gene-block-body textarea {
+    font-size: .78rem;
+    min-height: 36px;
+    padding: 7px 8px;
+  }
+
+  .analysis-page textarea.monospaced {
+    height: 38px;
+    min-height: 38px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    resize: none;
+    white-space: pre;
+  }
+
+  .analysis-page .gene-targets-section {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    margin-top: 5px;
+    padding: 0;
+  }
+
+  .analysis-page .gene-targets-header {
+    border-top: 1px solid #e5e7eb;
+    justify-content: flex-end;
+    margin-bottom: 3px;
+    padding-top: 7px;
+  }
+
+  .analysis-page .gene-targets-label { display: none; }
+  .analysis-page .btn-add-small { font-size: .68rem; min-height: 30px; padding: 5px 8px; }
+
+  .analysis-page .gene-target-row {
+    border-bottom: 1px dashed #e2e8f0;
+    display: grid;
+    gap: 7px;
+    grid-template-columns: 1fr;
+    padding: 7px 0 9px;
+    position: relative;
+  }
+
+  .analysis-page .gene-target-num {
+    font-size: .66rem;
+    margin: 0;
+    padding: 0;
+  }
+
+  .analysis-page .gene-target-row .btn-remove {
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    top: 3px;
+  }
+
+  .analysis-page > form .btn-primary {
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .analysis-page .window-check-panel { border-radius: 10px; padding: 12px; }
+  .analysis-page .window-check-hint,
+  .analysis-page .matrix-hint,
+  .analysis-page .slider-description,
+  .analysis-page .similar-window-subtitle { display: none; }
+
+  .results-dashboard .btn-curate,
+  .results-dashboard .btn-exit-curate,
+  .results-dashboard .btn-new-analysis,
+  .results-dashboard .btn-save-data,
+  .results-dashboard .btn-save-curated,
+  .results-dashboard .btn-export {
+    font-size: .72rem !important;
+    min-height: 38px;
+    padding: 7px 8px !important;
+  }
+
+  .results-dashboard .left-actions,
+  .results-dashboard .right-actions { gap: 6px !important; }
+  .results-dashboard .table-card { padding: 12px; }
+  .results-dashboard .mobile-summary-row { border-radius: 10px; padding: 9px; }
+  .results-dashboard .annotation-panel { border-radius: 12px; padding: 11px; }
 }

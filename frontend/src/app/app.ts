@@ -20,6 +20,7 @@ import { AppStateService } from './services/app-state.service';
 export class App implements OnInit {
   appVersion = environment.version;
   isMobileMenuOpen = false;
+  openMobileSections = new Set<string>();
   myLabs: any[] = [];
   remainingArchiveDays(value: string): number { return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000)); }
 
@@ -52,6 +53,18 @@ export class App implements OnInit {
 
   toggleMobileMenu() {
     this.isMobileMenuOpen = !this.isMobileMenuOpen;
+  }
+
+  toggleMobileSection(section: string) {
+    if (this.openMobileSections.has(section)) {
+      this.openMobileSections.delete(section);
+    } else {
+      this.openMobileSections.add(section);
+    }
+  }
+
+  isMobileSectionOpen(section: string): boolean {
+    return this.openMobileSections.has(section);
   }
 
   navigateAdmin(event: MouseEvent, path: string) {
