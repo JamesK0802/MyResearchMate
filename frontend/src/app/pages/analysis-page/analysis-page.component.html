@@ -86,7 +86,7 @@
           <label>
             Window Size (bp)
             <span class="custom-window-badge" *ngIf="state.analysisForm.get('customWindowEnabled')?.value">Custom</span>
-            <span class="info-icon">?
+            <span class="info-icon" tabindex="0" role="button" aria-label="Window size help">?
               <span class="tooltip-text">Total analysis width around cut site.</span>
             </span>
           </label>
@@ -96,7 +96,7 @@
         <div class="form-group flex-wide">
           <label>
             Data Filtering (Phred)
-            <span class="info-icon">?
+            <span class="info-icon" tabindex="0" role="button" aria-label="Data filtering help">?
               <span class="tooltip-text">Minimum Phred quality score.</span>
             </span>
           </label>
@@ -105,7 +105,7 @@
         <div class="form-group flex-wide">
           <label>
             Assignment Margin (%)
-            <span class="info-icon">?
+            <span class="info-icon" tabindex="0" role="button" aria-label="Assignment margin help">?
               <span class="tooltip-text">Minimum score difference for target assignment.</span>
             </span>
           </label>
@@ -114,7 +114,7 @@
         <div class="form-group flex-wide">
           <label>
             Indel Threshold (%)
-            <span class="info-icon">?
+            <span class="info-icon" tabindex="0" role="button" aria-label="Indel threshold help">?
               <span class="tooltip-text">Noise filter. Ignore groups below this %.</span>
             </span>
           </label>
@@ -141,7 +141,7 @@
         <div class="form-group" style="max-width: 180px; margin-left: auto; margin-top: -10px; margin-bottom: 10px;">
           <label>
             Rescue Filtering
-            <span class="info-icon">?
+            <span class="info-icon" tabindex="0" role="button" aria-label="Ambiguous analysis help">?
               <span class="tooltip-text">Minimum cluster size for Ambiguous Rescue.</span>
             </span>
           </label>
@@ -176,7 +176,7 @@
             <div class="slider-header">
               <label>
                 Distance Weight
-                <span class="info-icon">?
+                <span class="info-icon" tabindex="0" role="button" aria-label="Distance weighting help">?
                   <span class="tooltip-text">Assigns higher weight to sequence differences further from the cut site during classification (Default: 0, Recommended: 0.5 - 3.0).</span>
                 </span>
               </label>
@@ -190,7 +190,7 @@
             <div class="slider-header">
               <label>
                 Cut Site Exclusion Window
-                <span class="info-icon">?
+                <span class="info-icon" tabindex="0" role="button" aria-label="Cut-site exclusion help">?
                   <span class="tooltip-text">Excludes mutations (indels/substitutions) starting within cut site ±N bp from similarity score calculation (Default: 0).</span>
                 </span>
               </label>

@@ -230,7 +230,7 @@ interface PlotHelpCard extends PlotExample {
         </div>
 
         <div class="insp-strip-item" *ngIf="canSetYAxisRange" title="Set the visible Y-axis range. Leave empty to calculate it from your data.">
-          <label class="control-field">Y min <span class="field-help" title="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span><input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" /></label>
+          <label class="control-field">Y min <span class="field-help" tabindex="0" role="button" aria-label="Y-axis limit help" data-tooltip="Leave blank for automatic limits. Use fixed limits when comparing panels.">?</span><input type="number" class="inline-number" [ngModel]="activePlot.yMin" (ngModelChange)="updateActiveState({yMin: $event === '' ? null : +$event})" placeholder="Auto" /></label>
           <label class="control-field">max<input type="number" class="inline-number" [ngModel]="activePlot.yMax" (ngModelChange)="updateActiveState({yMax: $event === '' ? null : +$event})" placeholder="Auto" /></label>
         </div>
         </section>
@@ -673,6 +673,22 @@ interface PlotHelpCard extends PlotExample {
           </div>
         </div>
 
+        <div class="mobile-element-controls" *ngIf="selectedElement" (click)="$event.stopPropagation()">
+          <div class="mobile-element-control-head">
+            <strong>{{ selectedElementLabel }}</strong>
+            <button type="button" (click)="selectedElement = null" aria-label="Close element controls">×</button>
+          </div>
+          <div class="mobile-element-control-row">
+            <button type="button" (click)="nudgeSelected(0, -6)" aria-label="Move up">↑</button>
+            <button type="button" (click)="nudgeSelected(-6, 0)" aria-label="Move left">←</button>
+            <button type="button" (click)="nudgeSelected(6, 0)" aria-label="Move right">→</button>
+            <button type="button" (click)="nudgeSelected(0, 6)" aria-label="Move down">↓</button>
+            <span class="mobile-element-control-separator"></span>
+            <button type="button" (click)="resizeSelected(-1)" aria-label="Decrease size">A−</button>
+            <button type="button" (click)="resizeSelected(1)" aria-label="Increase size">A+</button>
+          </div>
+        </div>
+
       </div>
 
       <!-- Mode 2: Multi-Plot Grid View (Side-by-Side & Multi-Panel) -->
@@ -1076,7 +1092,9 @@ interface PlotHelpCard extends PlotExample {
       letter-spacing: .08em;
       text-transform: uppercase;
     }
-    .field-help { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: #e2e8f0; color: #475569; font-size: 9px; font-weight: 800; cursor: help; }
+    .field-help { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: #e2e8f0; color: #475569; font-size: 9px; font-weight: 800; cursor: help; position: relative; }
+    .field-help::after { content: attr(data-tooltip); position: absolute; bottom: calc(100% + 7px); left: 50%; width: 220px; box-sizing: border-box; padding: 7px 9px; border-radius: 6px; background: #0f172a; color: #fff; font-size: 11px; font-weight: 500; line-height: 1.35; text-transform: none; letter-spacing: 0; opacity: 0; visibility: hidden; transform: translateX(-50%); pointer-events: none; z-index: 1000; }
+    .field-help:hover::after, .field-help:focus::after { opacity: 1; visibility: visible; }
 
     .insp-strip-item {
       display: flex;
@@ -1197,6 +1215,8 @@ interface PlotHelpCard extends PlotExample {
     .draggable-element:hover .clickable-text, .legend-box:hover text {
       filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.35));
     }
+
+    .mobile-element-controls { display: none; }
 
     .btn-close-strip {
       position: absolute;
@@ -1666,6 +1686,32 @@ interface PlotHelpCard extends PlotExample {
       .plot-gallery { display: none; }
       .canvas-viewport { padding: 7px; }
       .svg-container { padding: 5px; border-radius: 5px; box-shadow: none; }
+      .selection-box { stroke-width: 2.2; }
+      .resize-handle { display: none; }
+      .mobile-element-controls {
+        align-items: stretch;
+        background: rgba(255,255,255,.97);
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        box-shadow: 0 8px 28px rgba(15,23,42,.18);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        left: 10px;
+        padding: 7px;
+        position: absolute;
+        right: 10px;
+        z-index: 80;
+      }
+      .mobile-element-control-head { align-items: center; display: flex; justify-content: space-between; padding-left: 3px; }
+      .mobile-element-control-head strong { color: #334155; font-size: .7rem; }
+      .mobile-element-control-head button { background: transparent; border: 0; color: #64748b; font-size: 1rem; height: 26px; width: 30px; }
+      .mobile-element-control-row { display: grid; grid-template-columns: repeat(4, 1fr) 1px repeat(2, 1.2fr); gap: 5px; }
+      .mobile-element-control-row button { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; color: #0f172a; font-size: .9rem; font-weight: 800; min-height: 40px; padding: 0; }
+      .mobile-element-control-row button:active { background: #dbeafe; border-color: #2563eb; }
+      .mobile-element-control-separator { background: #e2e8f0; }
+      .field-help::after { bottom: max(18px, env(safe-area-inset-bottom)); left: 12px; position: fixed; right: 12px; transform: none; width: auto; z-index: 12000; }
       .inline-editor-popover { width: calc(100vw - 42px); box-sizing: border-box; }
       .grid-viewport { padding: 9px; }
       .grid-header-subtitle { display: none; }
@@ -2076,6 +2122,55 @@ export class RPlotCanvasComponent implements OnInit {
     if (element === 'tag') return this.activePlot.fontSizeTag || 18;
     if (element === 'legend') return this.activePlot.fontSizeLegend || 11;
     return element === 'xLabel' ? this.xLabelFontSize : this.yLabelFontSize;
+  }
+
+  get selectedElementLabel(): string {
+    const labels: Record<DraggableElement, string> = {
+      tag: 'Figure tag',
+      title: 'Title',
+      subtitle: 'Subtitle',
+      xLabel: 'X-axis label',
+      yLabel: 'Y-axis label',
+      legend: 'Legend'
+    };
+    return this.selectedElement ? labels[this.selectedElement] : '';
+  }
+
+  nudgeSelected(dx: number, dy: number) {
+    const element = this.selectedElement;
+    if (!element) return;
+    if (element === 'tag') {
+      this.updateActiveState({ tagOffsetX: (this.activePlot.tagOffsetX || 0) + dx, tagOffsetY: (this.activePlot.tagOffsetY || 0) + dy });
+    } else if (element === 'title') {
+      this.updateActiveState({ titleOffsetX: (this.activePlot.titleOffsetX || 0) + dx, titleOffsetY: (this.activePlot.titleOffsetY || 0) + dy });
+    } else if (element === 'subtitle') {
+      this.updateActiveState({ subtitleOffsetX: (this.activePlot.subtitleOffsetX || 0) + dx, subtitleOffsetY: (this.activePlot.subtitleOffsetY || 0) + dy });
+    } else if (element === 'legend') {
+      this.updateActiveState({ legendOffsetX: (this.activePlot.legendOffsetX || 0) + dx, legendOffsetY: (this.activePlot.legendOffsetY || 0) + dy });
+    } else if (element === 'xLabel') {
+      this.updateActiveState({ xLabelOffsetX: (this.activePlot.xLabelOffsetX ?? this.activePlot.xLabelOffset ?? 0) + dx, xLabelOffsetY: (this.activePlot.xLabelOffsetY || 0) + dy });
+    } else {
+      this.updateActiveState({ yLabelOffsetX: (this.activePlot.yLabelOffsetX ?? this.activePlot.yLabelOffset ?? 0) + dx, yLabelOffsetY: (this.activePlot.yLabelOffsetY || 0) + dy });
+    }
+  }
+
+  resizeSelected(delta: number) {
+    const element = this.selectedElement;
+    if (!element) return;
+    const next = this.elementFontSize(element) + delta;
+    if (element === 'title') {
+      this.updateActiveState({ fontSizeTitle: Math.max(10, Math.min(42, next)) });
+    } else if (element === 'subtitle') {
+      this.updateActiveState({ fontSizeSubtitle: Math.max(8, Math.min(34, next)) });
+    } else if (element === 'tag') {
+      this.updateActiveState({ fontSizeTag: Math.max(8, Math.min(34, next)) });
+    } else if (element === 'legend') {
+      this.updateActiveState({ fontSizeLegend: Math.max(8, Math.min(28, next)) });
+    } else if (element === 'xLabel') {
+      this.updateActiveState({ fontSizeXAxis: Math.max(8, Math.min(28, next)) });
+    } else {
+      this.updateActiveState({ fontSizeYAxis: Math.max(8, Math.min(28, next)) });
+    }
   }
 
   textHandleWidth(text: string, fontSize: number): number {
