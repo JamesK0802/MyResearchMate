@@ -126,7 +126,7 @@ import { AuthService } from '../../services/auth.service';
         </header>
 
         <!-- ── Main Viewport Content ── -->
-        <main class="namu-viewport" *ngIf="activeTree">
+        <main class="namu-viewport" [class.canvas-viewport]="viewMode === 'canvas'" *ngIf="activeTree">
           <app-namu-flow-view *ngIf="viewMode === 'canvas'"
             [doc]="doc!"
             [tree]="activeTree"

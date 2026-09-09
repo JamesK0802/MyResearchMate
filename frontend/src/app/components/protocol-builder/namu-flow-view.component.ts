@@ -464,7 +464,7 @@ export interface ConnectionPath {
       .namu-flow-container { touch-action: pan-x pan-y; }
       .boundary-header-tag { font-size: .7rem; padding: 4px 9px; }
       .connection-edit-hint { top: calc(var(--nav-height, 56px) + 50px); width: calc(100vw - 24px); box-sizing: border-box; font-size: .7rem; }
-      .connection-edit-frame { top: calc(var(--nav-height, 56px) + 46px); }
+      .connection-edit-frame { display:none; }
       .fixed-focused-hero-overlay { align-items:flex-start; padding:10px; box-sizing:border-box; overflow:hidden; }
       .hero-modal-content-wrapper { flex-direction:column; gap:10px; width:100%; max-width:none; max-height:calc(100dvh - 20px); overflow-y:auto; }
       .hero-focused-card,

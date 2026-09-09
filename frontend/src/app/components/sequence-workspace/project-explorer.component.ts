@@ -148,6 +148,11 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
     .rename-btn:hover { color: #7c3aed; background: #ede9fe; }
     
     .empty-state { padding: 16px; text-align: center; color: #64748b; font-size: 0.78rem; line-height: 1.4; }
+    @media (max-width:700px) {
+      .explorer-header { justify-content:flex-start; }
+      .btn-collapse { display:none; }
+      .item-actions { opacity:1; }
+    }
   `]
 })
 export class ProjectExplorerComponent {
