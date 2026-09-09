@@ -1648,6 +1648,28 @@ interface PlotHelpCard extends PlotExample {
       background: #2563eb;
       color: #ffffff;
     }
+    @media (max-width: 700px) {
+      .plot-tabs-bar { height: 34px; padding: 0 7px; }
+      .plot-tab { padding: 3px 7px; font-size: .65rem; }
+      .btn-add-tab { padding: 3px 7px; font-size: .64rem; }
+      .view-mode-group { display: none; }
+      .canvas-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 5px 7px; gap: 5px; }
+      .toolbar-controls { min-width: 0; flex-basis: auto; }
+      .toolbar-controls .ctrl-group:not(:first-child) { display: none; }
+      .ctrl-group.type-menu-wrap { width: 100%; }
+      .type-menu-button { width: 100%; min-width: 0; }
+      .type-menu { left: 0; width: min(230px, calc(100vw - 24px)); }
+      .toolbar-actions { flex: none; gap: 4px; }
+      .btn-toggle-inspector { height: 27px; padding: 3px 7px; font-size: .65rem; }
+      .export-split-button { height: 27px; }
+      .btn-export-main, .export-select-menu { font-size: .64rem; }
+      .plot-gallery { display: none; }
+      .canvas-viewport { padding: 7px; }
+      .svg-container { padding: 5px; border-radius: 5px; box-shadow: none; }
+      .inline-editor-popover { width: calc(100vw - 42px); box-sizing: border-box; }
+      .grid-viewport { padding: 9px; }
+      .grid-header-subtitle { display: none; }
+    }
   `]
 })
 export class RPlotCanvasComponent implements OnInit {

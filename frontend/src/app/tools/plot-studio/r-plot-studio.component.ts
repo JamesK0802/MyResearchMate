@@ -117,6 +117,12 @@ import { PlotProjectService } from '../../services/plot-project.service';
             </button>
           </div>
 
+          <nav class="mobile-panel-tabs" aria-label="R-Plot workspace panels">
+            <button type="button" [class.active]="mobilePanel === 'data'" (click)="mobilePanel = 'data'">Data</button>
+            <button type="button" [class.active]="mobilePanel === 'code'" (click)="mobilePanel = 'code'">Code</button>
+            <button type="button" [class.active]="mobilePanel === 'plot'" (click)="mobilePanel = 'plot'">Plot</button>
+          </nav>
+
           <!-- Right: Save & Close Buttons -->
           <div class="workspace-right-actions">
             <button type="button" class="btn-top-save" (click)="onSaveClick()" title="Save this project to My Data">
@@ -133,8 +139,9 @@ import { PlotProjectService } from '../../services/plot-project.service';
 
           <!-- PANEL 1: DATA TABLE -->
           <div
-            *ngIf="panelConfig.showData"
+            *ngIf="panelConfig.showData || isMobileViewport"
             class="panel-wrapper"
+            [class.mobile-panel-hidden]="mobilePanel !== 'data'"
             [style.width.%]="panelConfig.dataWidth">
             <app-r-data-table></app-r-data-table>
           </div>
@@ -149,8 +156,9 @@ import { PlotProjectService } from '../../services/plot-project.service';
 
           <!-- PANEL 2: R CODE EDITOR -->
           <div
-            *ngIf="panelConfig.showCode"
+            *ngIf="panelConfig.showCode || isMobileViewport"
             class="panel-wrapper"
+            [class.mobile-panel-hidden]="mobilePanel !== 'code'"
             [style.width.%]="panelConfig.codeWidth">
             <app-r-code-editor></app-r-code-editor>
           </div>
@@ -165,8 +173,9 @@ import { PlotProjectService } from '../../services/plot-project.service';
 
           <!-- PANEL 3: INTERACTIVE PLOT CANVAS -->
           <div
-            *ngIf="panelConfig.showPlot"
+            *ngIf="panelConfig.showPlot || isMobileViewport"
             class="panel-wrapper flex-grow"
+            [class.mobile-panel-hidden]="mobilePanel !== 'plot'"
             [style.width.%]="panelConfig.plotWidth">
             <app-r-plot-canvas></app-r-plot-canvas>
           </div>
@@ -387,6 +396,7 @@ import { PlotProjectService } from '../../services/plot-project.service';
       gap: 2px;
       align-items: center;
     }
+    .mobile-panel-tabs { display: none; }
 
     .btn-layout-icon {
       background: transparent;
@@ -510,16 +520,22 @@ import { PlotProjectService } from '../../services/plot-project.service';
       .workspace-bar { height: 38px; padding: 0 8px; }
       .brand-title { min-width: 0; }
       .brand-name { display: none; }
-      .layout-icon-group-center { position: static; transform: none; margin-right: auto; }
+      .layout-icon-group-center { display: none; }
+      .mobile-panel-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 144px; padding: 2px; border: 1px solid #dbe3ef; border-radius: 7px; background: #f1f5f9; }
+      .mobile-panel-tabs button { border: 0; border-radius: 5px; padding: 4px 5px; background: transparent; color: #64748b; font-size: .67rem; font-weight: 700; }
+      .mobile-panel-tabs button.active { background: #fff; color: #2563eb; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
       .btn-top-save, .btn-top-close { padding: 4px 8px; font-size: .68rem; }
-      .workspace-body { height: auto; overflow-y: auto; flex-direction: column; }
-      .panel-wrapper, .panel-wrapper.flex-grow { width: 100% !important; height: auto; min-height: 360px; flex: 0 0 360px; border-bottom: 1px solid #e2e8f0; }
+      .workspace-body { height: auto; overflow: hidden; display: block; }
+      .panel-wrapper, .panel-wrapper.flex-grow { width: 100% !important; height: 100%; min-height: 0; }
+      .mobile-panel-hidden { display: none; }
       .splitter { display: none; }
     }
   `]
 })
 export class RPlotStudioComponent implements OnInit, OnDestroy {
   showWelcomeScreen = true;
+  mobilePanel: 'data' | 'code' | 'plot' = 'data';
+  readonly isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 700;
   panelConfig!: PanelConfig;
   isWizardOpen = false;
   currentProjectId: string | null = null;
@@ -549,6 +565,7 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
         this.panelConfig = cfg;
       }),
       this.rSyncService.wizardOpen$.subscribe(isOpen => {
+        if (this.isMobileViewport && this.isWizardOpen && !isOpen) this.mobilePanel = 'plot';
         this.isWizardOpen = isOpen;
       })
     );

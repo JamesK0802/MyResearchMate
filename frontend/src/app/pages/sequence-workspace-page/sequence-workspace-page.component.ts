@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { ProjectExplorerComponent } from '../../components/sequence-workspace/project-explorer.component';
 import { MainViewerComponent } from '../../components/sequence-workspace/main-viewer.component';
 import { ItemInspectorComponent } from '../../components/sequence-workspace/item-inspector.component';
@@ -24,9 +25,14 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
         <app-storage-usage *ngIf="(auth.session$ | async) && !auth.isDemo" scope="personal" label="Cloud storage"></app-storage-usage>
         <span *ngIf="!(auth.session$ | async) || auth.isDemo" class="storage-usage muted">Sign in to save files to your account</span>
       </header>
+      <nav class="mobile-workspace-tabs" aria-label="Sequence workspace panels">
+        <button type="button" [class.active]="mobilePanel === 'files'" (click)="mobilePanel = 'files'">Files</button>
+        <button type="button" [class.active]="mobilePanel === 'viewer'" (click)="mobilePanel = 'viewer'">Viewer</button>
+        <button type="button" [class.active]="mobilePanel === 'details'" (click)="mobilePanel = 'details'">Details</button>
+      </nav>
       <div class="workspace-container">
       <!-- Collapsible Explorer Left Sidebar -->
-      <div class="panel explorer-panel" *ngIf="!isSidebarCollapsed">
+      <div class="panel explorer-panel" [class.mobile-panel-hidden]="mobilePanel !== 'files'" *ngIf="!isSidebarCollapsed">
         <app-project-explorer (collapse)="toggleSidebar()"></app-project-explorer>
       </div>
 
@@ -35,11 +41,11 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
 
-      <div class="panel viewer-panel">
+      <div class="panel viewer-panel" [class.mobile-panel-hidden]="mobilePanel !== 'viewer'">
         <app-main-viewer [isSidebarCollapsed]="isSidebarCollapsed"></app-main-viewer>
       </div>
 
-      <div class="panel inspector-panel" *ngIf="(workspace.selectedItem$ | async)?.type !== 'fastq'">
+      <div class="panel inspector-panel" [class.mobile-panel-hidden]="mobilePanel !== 'details'" *ngIf="(workspace.selectedItem$ | async)?.type !== 'fastq'">
         <app-item-inspector></app-item-inspector>
       </div>
       </div>
@@ -51,6 +57,7 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
     .storage-title { color: var(--color-text-primary); font-size: 0.82rem; font-weight: 800; }
     .storage-usage { color: var(--color-primary); font-size: 0.78rem; font-weight: 700; }
     .storage-usage.muted { color: var(--color-text-tertiary); font-weight: 600; }
+    .mobile-workspace-tabs { display: none; }
     .workspace-container {
       display: flex;
       flex-direction: row;
@@ -114,18 +121,29 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
       .sequence-workspace-page { height: calc(100dvh - 56px); }
       .storage-bar { height: 32px; flex-basis: 32px; padding: 0 9px; }
       .storage-title { font-size: .72rem; }
-      .storage-usage.muted { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .65rem; }
-      .workspace-container { flex-direction: column; overflow-y: auto; }
-      .explorer-panel { flex: 0 0 31%; min-height: 190px; border-right: 0; border-bottom: 1px solid var(--color-border); }
-      .viewer-panel { flex: 0 0 52%; min-height: 310px; }
-      .inspector-panel { flex: 0 0 auto; min-height: 220px; border-left: 0; border-top: 1px solid var(--color-border); }
+      .storage-bar app-storage-usage, .storage-usage.muted { display: none; }
+      .mobile-workspace-tabs { display: grid; grid-template-columns: repeat(3, 1fr); flex: 0 0 39px; border-bottom: 1px solid var(--color-border); background: #fff; }
+      .mobile-workspace-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #64748b; font: 700 .74rem var(--font-sans); }
+      .mobile-workspace-tabs button.active { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+      .workspace-container { display: block; overflow: hidden; }
+      .panel { width: 100%; height: 100%; min-height: 0; border: 0; }
+      .mobile-panel-hidden { display: none; }
+      .btn-expand-sidebar { display: none; }
     }
   `]
 })
-export class SequenceWorkspacePageComponent {
+export class SequenceWorkspacePageComponent implements OnDestroy {
   isSidebarCollapsed = false;
+  mobilePanel: 'files' | 'viewer' | 'details' = 'files';
+  private readonly selectionSubscription: Subscription;
 
-  constructor(public workspace: SequenceWorkspaceService, public auth: AuthService) {}
+  constructor(public workspace: SequenceWorkspaceService, public auth: AuthService) {
+    this.selectionSubscription = this.workspace.selectedItemId$.subscribe(id => {
+      if (id && window.innerWidth <= 700) this.mobilePanel = 'viewer';
+    });
+  }
+
+  ngOnDestroy(): void { this.selectionSubscription.unsubscribe(); }
 
   formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';

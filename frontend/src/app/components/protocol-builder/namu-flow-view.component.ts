@@ -452,6 +452,13 @@ export interface ConnectionPath {
       font-size: 1.2rem; color: #64748b; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center;
     }
     .btn-close-focus:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    @media (max-width: 700px) {
+      .canvas-navigation-hint { display: none; }
+      .namu-flow-container { touch-action: pan-x pan-y; }
+      .boundary-header-tag { font-size: .7rem; padding: 4px 9px; }
+      .connection-edit-hint { top: calc(var(--nav-height, 56px) + 50px); width: calc(100vw - 24px); box-sizing: border-box; font-size: .7rem; }
+      .connection-edit-frame { top: calc(var(--nav-height, 56px) + 46px); }
+    }
   `]
 })
 export class NamuFlowViewComponent implements AfterViewInit {
@@ -906,7 +913,8 @@ export class NamuFlowViewComponent implements AfterViewInit {
     const idealScale = Math.min(scaleX, scaleY);
 
     // Safe clamped zoom scale (between 25% and 100% for comfortable initial view)
-    const targetZoom = Math.max(0.25, Math.min(1.0, idealScale));
+    const minimumReadableZoom = window.innerWidth <= 700 ? 0.55 : 0.25;
+    const targetZoom = Math.max(minimumReadableZoom, Math.min(1.0, idealScale));
     this.zoomScale = targetZoom;
 
     const centerX = (bounds.left + bounds.width / 2) * targetZoom;

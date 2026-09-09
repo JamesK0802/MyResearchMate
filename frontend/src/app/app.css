@@ -27,19 +27,21 @@
   app-tool-directory .shade form { width: 100%; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 18px 14px; max-height: 88vh; overflow: auto; }
 
   app-sample-photo-compare-page { --print-slot-width: 190px; --print-slot-height: 236px; }
-  app-sample-photo-compare-page .compare-shell { padding: 16px 10px 30px; }
-  app-sample-photo-compare-page .compare-header { display: flex; margin-bottom: 12px; gap: 8px; }
-  app-sample-photo-compare-page .compare-header h1 { font-size: 1.35rem; }
-  app-sample-photo-compare-page .comparison-summary { display: none; }
-  app-sample-photo-compare-page .save-pdf { margin: 0; padding: 7px 9px; font-size: .7rem; }
-  app-sample-photo-compare-page .board-title { padding: 10px 12px; }
-  app-sample-photo-compare-page .board-title input { font-size: .95rem; }
-  app-sample-photo-compare-page .photo-row { padding: 12px; gap: 6px; }
-  app-sample-photo-compare-page .row-label { flex-direction: row; align-items: center; }
+  app-sample-photo-compare-page .compare-shell { padding: 16px 10px 30px !important; }
+  app-sample-photo-compare-page .compare-header { display: flex !important; align-items: center !important; margin-bottom: 12px !important; gap: 8px !important; }
+  app-sample-photo-compare-page .compare-header h1 { font-size: 1.35rem !important; }
+  app-sample-photo-compare-page .comparison-summary { display: none !important; }
+  app-sample-photo-compare-page .save-pdf { margin: 0 0 0 auto !important; padding: 7px 9px !important; font-size: .7rem !important; }
+  app-sample-photo-compare-page .board-title { padding: 10px 12px !important; }
+  app-sample-photo-compare-page .board-title input { font-size: .95rem !important; }
+  app-sample-photo-compare-page .photo-row { padding: 12px !important; gap: 6px !important; }
+  app-sample-photo-compare-page .photo-slot { flex-basis: 190px !important; height: 236px !important; }
+  app-sample-photo-compare-page .page-divider { height: 236px !important; }
+  app-sample-photo-compare-page .row-label { flex-direction: row !important; align-items: center !important; }
   app-sample-photo-compare-page .row-label input { font-size: .86rem; }
-  app-sample-photo-compare-page .row-label small { white-space: nowrap; font-size: .65rem; }
-  app-sample-photo-compare-page .slot-grid { gap: 7px; padding-bottom: 8px; }
-  app-sample-photo-compare-page .upload-action { height: 30px; width: 116px; font-size: .68rem; }
+  app-sample-photo-compare-page .row-label small { display: none !important; }
+  app-sample-photo-compare-page .slot-grid { gap: 7px !important; padding-bottom: 8px !important; }
+  app-sample-photo-compare-page .upload-action { display: none !important; }
   app-sample-photo-compare-page .comparison-divider { margin: 0 12px; }
   app-sample-photo-compare-page .save-dialog-backdrop { padding: 0; align-items: end; }
   app-sample-photo-compare-page .save-dialog { box-sizing: border-box; border-radius: 16px 16px 0 0; padding: 18px 14px; }

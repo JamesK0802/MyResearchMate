@@ -1319,6 +1319,54 @@ interface PaletteDef {
     .wizard-footer .btn-success:hover {
       background: #059669;
     }
+
+    @media (max-width: 700px) {
+      .wizard-modal-overlay { padding: 0; align-items: stretch; }
+      .wizard-modal-card { width: 100vw; max-width: none; height: 100dvh; max-height: none; border: 0; border-radius: 0; }
+      .wizard-header { flex: 0 0 48px; padding: 0 14px; }
+      .wizard-title { font-size: .95rem; }
+      .btn-close { padding: 6px 10px; font-size: .7rem; }
+      .step-indicator-bar { flex: 0 0 48px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 5px 8px; }
+      .step-badge { justify-content: center; gap: 4px; min-width: 0; }
+      .step-num { width: 20px; height: 20px; flex: 0 0 20px; font-size: .65rem; }
+      .step-label { max-width: 48px; font-size: .58rem; line-height: 1.1; text-align: left; }
+      .step-divider { display: none; }
+      .wizard-body { padding: 12px; overflow-x: hidden; }
+      .step-1-container { display: block; height: auto; }
+      .step-1-card { box-sizing: border-box; max-width: none; padding: 4px 2px; gap: 17px; border: 0; border-radius: 0; box-shadow: none; }
+      .step-1-header { padding-bottom: 10px; }
+      .step-1-title { font-size: 1rem; }
+      .step-1-desc { font-size: .72rem; line-height: 1.35; }
+      .question-block { gap: 5px; }
+      .question-header { align-items: center; gap: 6px; }
+      .q-badge { order: 2; margin-left: auto; font-size: .58rem; padding: 2px 5px; }
+      .q-label { min-width: 0; font-size: .8rem; line-height: 1.25; }
+      .q-sub-desc { display: none; }
+      .q-input-main, .q-input { width: 100%; box-sizing: border-box; padding: 9px 10px; font-size: .82rem; }
+      .panel-header-row { margin-bottom: 8px; }
+      .panel-section-title { font-size: .82rem; }
+      .btn-import-excel { padding: 6px 9px; font-size: .66rem; }
+      .paste-title { display: none; }
+      .paste-box { font-size: .7rem; }
+      .grid-toolbar { padding: 7px; }
+      .table-container { max-width: 100%; overflow: auto; }
+      .wizard-grid-table { min-width: 420px; }
+      .split-layout { display: flex; flex-direction: column; gap: 10px; height: auto; }
+      .split-left { overflow: visible; padding: 0; }
+      .split-right { height: 260px; flex: 0 0 260px; }
+      .plot-type-row { gap: 6px; }
+      .type-btn { padding: 8px 9px; font-size: .68rem; }
+      .mapping-box { padding: 10px; gap: 8px; }
+      .form-row-2 { grid-template-columns: 1fr; gap: 7px; }
+      .form-field label { font-size: .68rem; }
+      .form-input, .form-select { min-height: 34px; box-sizing: border-box; font-size: .72rem; }
+      .palette-grid { grid-template-columns: 1fr; gap: 6px; }
+      .palette-card { padding: 7px 9px; }
+      .guided-help-backdrop { padding: 10px; }
+      .guided-help-card { width: 100%; box-sizing: border-box; padding: 16px; }
+      .wizard-footer { flex: 0 0 48px; padding: 7px 12px; }
+      .wizard-footer .btn-primary, .wizard-footer .btn-secondary, .wizard-footer .btn-success { padding: 8px 13px; font-size: .7rem; }
+    }
   `]
 })
 export class RPlotWizardComponent implements OnInit {

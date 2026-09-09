@@ -108,6 +108,21 @@ import { AuthService } from '../../services/auth.service';
               Close
             </button>
           </div>
+          <div class="mobile-toolbar-main">
+            <span class="mobile-file-title">{{ doc?.title || openedFileName }}</span>
+            <div class="mobile-view-switcher">
+              <button type="button" [class.active]="viewMode === 'canvas'" (click)="setViewMode('canvas')">Canvas</button>
+              <button type="button" [class.active]="viewMode === 'notebook'" (click)="setViewMode('notebook')">Notes</button>
+            </div>
+            <button type="button" class="mobile-more-button" (click)="showMobileTools = !showMobileTools" aria-label="Protocol actions">•••</button>
+          </div>
+          <div class="mobile-toolbar-menu" *ngIf="showMobileTools">
+            <button type="button" (click)="renameProtocol(); showMobileTools = false">Rename</button>
+            <button type="button" (click)="openProtocolManager(); showMobileTools = false">Manage trees</button>
+            <button type="button" (click)="runPrimarySave(); showMobileTools = false">{{ primarySaveLabel }}</button>
+            <button type="button" (click)="saveAsFile(); showMobileTools = false">Save As</button>
+            <button type="button" class="danger" (click)="closeCurrentFile(); showMobileTools = false">Close</button>
+          </div>
         </header>
 
         <!-- ── Main Viewport Content ── -->
@@ -251,6 +266,7 @@ import { AuthService } from '../../services/auth.service';
   styleUrl: './protocol-builder-page.component.css'
 })
 export class NamuPageComponent implements OnInit, OnDestroy {
+  showMobileTools = false;
   @ViewChild(NamuFlowViewComponent) flowView?: NamuFlowViewComponent;
   @ViewChild('fileInput') fileInput: any;
   @ViewChild('mergeFileInput') mergeFileInput: any;

@@ -398,6 +398,33 @@
   gap: 8px;
 }
 
+.mobile-toolbar-main,
+.mobile-toolbar-menu { display: none; }
+
+@media (max-width: 620px) {
+  .namu-toolbar { height: 46px; flex: 0 0 46px; padding: 0 9px; }
+  .toolbar-left, .toolbar-right { display: none; }
+  .mobile-toolbar-main { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; align-items: center; gap: 7px; }
+  .mobile-file-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; font-size: .78rem; font-weight: 800; }
+  .mobile-view-switcher { display: flex; padding: 2px; border: 1px solid #dbe3ee; border-radius: 7px; background: #f1f5f9; }
+  .mobile-view-switcher button { border: 0; border-radius: 5px; padding: 4px 7px; background: transparent; color: #64748b; font-size: .67rem; font-weight: 700; }
+  .mobile-view-switcher button.active { background: #fff; color: #2563eb; box-shadow: 0 1px 2px rgba(15,23,42,.12); }
+  .mobile-more-button { width: 34px; height: 30px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #334155; font-weight: 800; }
+  .mobile-toolbar-menu { position: absolute; z-index: 60; top: 42px; right: 8px; width: 164px; display: grid; padding: 5px; border: 1px solid #dbe3ee; border-radius: 10px; background: #fff; box-shadow: 0 12px 28px rgba(15,23,42,.18); }
+  .mobile-toolbar-menu button { border: 0; border-radius: 6px; padding: 9px 10px; background: transparent; color: #334155; text-align: left; font: 700 .74rem inherit; }
+  .mobile-toolbar-menu button:active { background: #f1f5f9; }
+  .mobile-toolbar-menu button.danger { color: #dc2626; }
+
+  .floating-canvas-dock { right: 8px; bottom: 8px; left: 8px; width: auto; max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; overflow: visible; }
+  .fab-tree-selector-group { grid-column: 1 / -1; width: 100%; min-width: 0; box-sizing: border-box; border-radius: 12px; padding: 3px 5px 3px 9px; }
+  .fab-tree-dropdown { width: auto; min-width: 0; flex: 1; font-size: .7rem; }
+  .btn-fab-icon { font-size: .68rem; padding: 5px; }
+  .btn-fab-new-tree { padding: 5px 8px; font-size: .68rem; }
+  .btn-fab-layout { min-width: 0; justify-content: center; border-radius: 10px; padding: 7px 8px; font-size: .72rem; }
+  .fixed-auto-save-dot { position: absolute; right: 7px; top: -7px; }
+  .namu-viewport { padding-bottom: 86px; box-sizing: border-box; }
+}
+
 .btn-add-step {
   padding: 6px 14px;
   background: #2563eb;

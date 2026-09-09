@@ -387,6 +387,21 @@ import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service'
       background: #fee2e2;
       text-decoration: none;
     }
+    @media (max-width: 700px) {
+      .panel-header { padding: 7px 10px; }
+      .panel-title { font-size: .76rem; }
+      .mapping-section { padding: 8px 10px; }
+      .section-subtitle { display: none; }
+      .mapping-grid { grid-template-columns: 1fr; gap: 5px; }
+      .map-item { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 7px; }
+      .map-item label { font-size: .62rem; line-height: 1.15; }
+      .map-select { min-width: 0; height: 31px; padding: 3px 6px; font-size: .7rem; }
+      .table-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 6px 8px; }
+      .table-actions .btn-sm { width: 100%; min-width: 0; height: 30px !important; min-height: 30px; justify-content: center; padding: 0 3px; font-size: .62rem !important; }
+      .btn-export { margin-left: 0; }
+      .grid-table-wrapper { padding: 6px; }
+      .excel-table { min-width: 340px; }
+    }
   `]
 })
 export class RDataTableComponent implements OnInit {
