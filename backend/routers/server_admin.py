@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData, Table, func, inspect, select, text
+from sqlalchemy.engine import make_url
 
 from auth.dependencies import get_current_user
 from database import models as database_models  # noqa: F401 - registers application tables
@@ -117,7 +118,33 @@ def _table_or_404(table_name: str) -> Table:
 
 def _run_postgres_tool(command: list[str], timeout: int = 3600) -> None:
     process_environment = os.environ.copy()
-    process_environment["PGDATABASE"] = DATABASE_URL
+    # pg_dump/pg_restore do not understand SQLAlchemy driver URLs reliably
+    # (for example postgresql+psycopg2://). Pass the parsed libpq fields
+    # explicitly so the tools use the exact same server as the application
+    # instead of silently falling back to a local Unix socket.
+    try:
+        database = make_url(DATABASE_URL)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="The configured database URL is invalid") from exc
+    if not database.database:
+        raise HTTPException(status_code=500, detail="The configured database URL has no database name")
+    process_environment.pop("PGSERVICE", None)
+    postgres_fields = {
+        "PGDATABASE": database.database,
+        "PGHOST": database.host,
+        "PGPORT": str(database.port) if database.port else None,
+        "PGUSER": database.username,
+        "PGPASSWORD": database.password,
+        "PGSSLMODE": database.query.get("sslmode"),
+        "PGSSLROOTCERT": database.query.get("sslrootcert"),
+        "PGSSLCERT": database.query.get("sslcert"),
+        "PGSSLKEY": database.query.get("sslkey"),
+    }
+    for key, value in postgres_fields.items():
+        if value is not None:
+            process_environment[key] = str(value)
+        else:
+            process_environment.pop(key, None)
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False, env=process_environment)
     except FileNotFoundError as exc:
