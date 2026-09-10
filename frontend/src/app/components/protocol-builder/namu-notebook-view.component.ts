@@ -15,6 +15,67 @@ interface NotebookPage {
   showNotes: boolean;
 }
 
+/**
+ * Return a stable dependency order for notebook pages. The stored nodes array
+ * reflects creation time, so a node inserted between two existing nodes may
+ * otherwise appear at the very end of the notebook.
+ */
+export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
+  const nodes = tree.nodes || [];
+  const nodeById = new Map(nodes.map(node => [node.id, node]));
+  const originalIndex = new Map(nodes.map((node, index) => [node.id, index]));
+  const comparePosition = (a: NamuNode, b: NamuNode) =>
+    ((a.x ?? Number.MAX_SAFE_INTEGER) - (b.x ?? Number.MAX_SAFE_INTEGER)) ||
+    ((a.y ?? Number.MAX_SAFE_INTEGER) - (b.y ?? Number.MAX_SAFE_INTEGER)) ||
+    ((originalIndex.get(a.id) ?? 0) - (originalIndex.get(b.id) ?? 0));
+
+  const reachable = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (reachable.has(nodeId) || !nodeById.has(nodeId)) return;
+    reachable.add(nodeId);
+    for (const nextId of nodeById.get(nodeId)?.nextNodes || []) visit(nextId);
+  };
+  visit(tree.rootNodeId);
+
+  const orderSubset = (ids: Set<string>): NamuNode[] => {
+    if (!ids.size) return [];
+    const indegree = new Map(Array.from(ids, id => [id, 0]));
+    for (const id of ids) {
+      for (const nextId of nodeById.get(id)?.nextNodes || []) {
+        if (ids.has(nextId)) indegree.set(nextId, (indegree.get(nextId) || 0) + 1);
+      }
+    }
+    const ready = Array.from(ids)
+      .filter(id => indegree.get(id) === 0)
+      .map(id => nodeById.get(id)!)
+      .sort(comparePosition);
+    const ordered: NamuNode[] = [];
+    const emitted = new Set<string>();
+    while (ready.length) {
+      const node = ready.shift()!;
+      if (emitted.has(node.id)) continue;
+      emitted.add(node.id);
+      ordered.push(node);
+      for (const nextId of node.nextNodes || []) {
+        if (!ids.has(nextId)) continue;
+        const remaining = (indegree.get(nextId) || 0) - 1;
+        indegree.set(nextId, remaining);
+        if (remaining === 0) {
+          ready.push(nodeById.get(nextId)!);
+          ready.sort(comparePosition);
+        }
+      }
+    }
+    // Corrupt or manually edited files can contain cycles. Keep every node
+    // visible in a deterministic canvas order instead of dropping those pages.
+    ordered.push(...Array.from(ids).filter(id => !emitted.has(id)).map(id => nodeById.get(id)!).sort(comparePosition));
+    return ordered;
+  };
+
+  const remaining = new Set(nodes.map(node => node.id).filter(id => !reachable.has(id)));
+  return [...orderSubset(reachable), ...orderSubset(remaining)];
+}
+
 @Component({
   selector: 'app-namu-notebook-view',
   standalone: true,
@@ -162,7 +223,13 @@ interface NotebookPage {
             <li *ngFor="let step of stepsForPage(notebookPage); let index = index; trackBy: trackByIndex">
               <span *ngIf="!editable">{{ step }}</span>
               <span class="editable-step" *ngIf="editable">
-                <input [(ngModel)]="notebookPage.node.steps[notebookPage.stepStart + index]" (blur)="saveNode(notebookPage.node)" aria-label="Protocol step">
+                <textarea
+                  [(ngModel)]="notebookPage.node.steps[notebookPage.stepStart + index]"
+                  [rows]="stepRows(step)"
+                  [style.height]="'calc(' + stepRows(step) + ' * var(--rule))'"
+                  (input)="autoGrowTextarea($event)"
+                  (blur)="saveNode(notebookPage.node)"
+                  aria-label="Protocol step"></textarea>
                 <button type="button" class="inline-delete" (click)="deleteStep(notebookPage.node, notebookPage.stepStart + index)" aria-label="Delete step">×</button>
               </span>
             </li>
@@ -262,7 +329,7 @@ interface NotebookPage {
     .mobile-screen-notebook { display:none; }
     .page-title-input { width:100%; box-sizing:border-box; border:0; border-radius:0; outline:none; color:#252422; background:transparent; margin:0; height:var(--rule); font:700 1.35rem/var(--rule) Georgia,serif; }
     .editable-step { display:flex; align-items:center; gap:5px; min-height:var(--rule); line-height:var(--rule); }
-    .editable-step input { flex:1; min-width:0; height:var(--rule); line-height:var(--rule); border:0; outline:none; background:transparent; color:#252422; font:400 .92rem/var(--rule) Georgia,serif; padding:0; margin:0; }
+    .editable-step textarea { flex:1; min-width:0; width:100%; box-sizing:border-box; border:0; outline:none; resize:none; overflow:hidden; field-sizing:content; background:transparent; color:#252422; font:400 .92rem/var(--rule) Georgia,serif; padding:0; margin:0; }
     .editable-step .inline-delete { opacity:0; transition:opacity .15s ease; margin-left:auto; }
     .editable-step:hover .inline-delete { opacity:1; }
     .inline-delete, .add-step, .add-note { border:0; background:transparent; color:#8b3a35; padding:0 4px; font:700 1rem/1 Arial,sans-serif; cursor:pointer; }
@@ -307,7 +374,7 @@ interface NotebookPage {
       .mobile-notebook-page .page-title-input,
       .mobile-notebook-page h2 { font-size:1rem; line-height:var(--rule); }
       .mobile-notebook-page .page-steps ol,
-      .mobile-notebook-page .editable-step input { font-size:.76rem; line-height:var(--rule); }
+      .mobile-notebook-page .editable-step textarea { font-size:.76rem; line-height:var(--rule); }
       .mobile-notebook-page .note-entry,
       .mobile-notebook-page .editable-note textarea { font-size:.7rem; line-height:var(--rule); }
       .notebook-pagination { justify-content:space-between; gap:8px; margin-top:12px; }
@@ -496,6 +563,10 @@ export class NamuNotebookViewComponent implements OnChanges {
     return Math.max(1, lines.reduce((acc, line) => acc + Math.max(1, Math.ceil((line.length || 1) / 50)), 0));
   }
 
+  stepRows(content: string): number {
+    return this.wrappedLineCount(content, 48);
+  }
+
   autoGrowTextarea(event: Event) {
     const textarea = event.target as HTMLTextAreaElement;
     textarea.style.height = 'auto';
@@ -602,7 +673,7 @@ export class NamuNotebookViewComponent implements OnChanges {
    */
   private buildNotebookPages(): NotebookPage[] {
     const pages: NotebookPage[] = [];
-    for (const node of this.tree.nodes) {
+    for (const node of orderNamuNodesForNotebook(this.tree)) {
       let continuation = 0;
       let stepIndex = 0;
       let noteIndex = 0;

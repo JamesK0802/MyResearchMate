@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, AfterViewInit, HostListener } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, ViewChildren, QueryList, AfterViewInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NamuDocument, NamuTree, NamuNode, NamuLeafNote, estimateNamuNodeHeight } from '../../models/namu.model';
@@ -232,8 +232,9 @@ export interface ConnectionPath {
                 
                 <button type="button" class="btn-del-memo-absolute" (click)="deleteLeafNote(focusedNode, leaf.id); $event.stopPropagation()" title="Delete note">✕</button>
 
-                <textarea class="pure-memo-textarea"
+                <textarea #memoTextarea class="pure-memo-textarea"
                   [(ngModel)]="leaf.content"
+                  [rows]="noteRows(leaf.content)"
                   (input)="autoExpandTextarea($event)"
                   (blur)="saveNode(focusedNode)"
                   (click)="$event.stopPropagation()"
@@ -445,6 +446,7 @@ export interface ConnectionPath {
       border: none; outline: none; width: 100%; padding-right: 20px;
       font-size: 1.02rem; line-height: 1.55; color: #0f172a; resize: none;
       min-height: 90px; background: transparent; font-family: inherit; overflow: hidden;
+      box-sizing: border-box; display: block; field-sizing: content;
     }
 
     /* ── RIGHT COLUMN: MAIN HERO CARD STEP EDITOR (760px) ── */
@@ -486,6 +488,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
   @Input() connectionEditMode = false;
   @Output() editNode = new EventEmitter<NamuNode>();
   @ViewChild('container') containerRef!: ElementRef;
+  @ViewChildren('memoTextarea') memoTextareas!: QueryList<ElementRef<HTMLTextAreaElement>>;
 
   Math = Math;
   zoomScale: number = 1.0;
@@ -533,6 +536,8 @@ export class NamuFlowViewComponent implements AfterViewInit {
   constructor(private namuStorageService: NamuStorageService) {}
 
   ngAfterViewInit() {
+    this.memoTextareas.changes.subscribe(() => this.scheduleNoteTextareaResize());
+    this.scheduleNoteTextareaResize();
     setTimeout(() => {
       this.centerTreeInCanvas();
     }, 120);
@@ -912,6 +917,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
     if (this.focusedNodeId !== node.id) {
       this.focusedNodeId = node.id;
       this.centerNodeInCanvas(node);
+      this.scheduleNoteTextareaResize();
     }
   }
 
@@ -1010,7 +1016,20 @@ export class NamuFlowViewComponent implements AfterViewInit {
     const el = e.target as HTMLTextAreaElement;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.max(90, el.scrollHeight) + 'px';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  noteRows(content: string | null | undefined): number {
+    return Math.max(3, String(content || '').split(/\r?\n/).length);
+  }
+
+  private scheduleNoteTextareaResize() {
+    requestAnimationFrame(() => {
+      this.memoTextareas?.forEach(({ nativeElement }) => {
+        nativeElement.style.height = 'auto';
+        nativeElement.style.height = `${nativeElement.scrollHeight}px`;
+      });
+    });
   }
 
   saveNode(node: NamuNode) {
@@ -1038,6 +1057,7 @@ export class NamuFlowViewComponent implements AfterViewInit {
       ['Protocol'],
       '#10b981'
     );
+    this.scheduleNoteTextareaResize();
   }
 
   deleteLeafNote(node: NamuNode, leafId: string) {
