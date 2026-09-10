@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, BigInteger, Boolean, DateTime, ForeignKey, JSON, Text, Float, Integer
+from sqlalchemy import Column, String, BigInteger, Boolean, DateTime, ForeignKey, JSON, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from .db import Base
@@ -190,7 +190,6 @@ class PcrPreset(Base):
     is_public = Column(Boolean, default=False)
     # ERD fields
     category = Column(String)
-    source = Column(String)
     description = Column(Text)
     is_system = Column(Boolean, default=False)
     owner_user_id = Column(BigInteger, ForeignKey("users.id"))
@@ -213,24 +212,6 @@ class PcrPresetLabShare(Base):
     lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-class PcrPresetComponent(Base):
-    __tablename__ = "pcr_preset_components"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    preset_id = Column(UUID(as_uuid=True), ForeignKey("pcr_presets.id"))
-    name = Column(String)
-    component_type = Column(String)
-    calculation_mode = Column(String)
-    stock_concentration = Column(Float)
-    stock_unit = Column(String)
-    final_concentration = Column(Float)
-    final_unit = Column(String)
-    fixed_volume = Column(Float)
-    volume_per_25ul = Column(Float)
-    ratio_denominator = Column(Float)
-    include_in_master_mix = Column(Boolean, default=True)
-    is_optional = Column(Boolean, default=False)
-    display_order = Column(Integer)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Facility Booking System

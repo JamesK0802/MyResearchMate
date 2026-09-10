@@ -8,13 +8,16 @@ export interface ServerDataEntry {
   path: string;
   kind: 'directory' | 'file';
   size: number | null;
+  item_count: number | null;
+  managed: boolean;
   modified_at: string;
 }
 
 export interface DatabaseTableSummary {
   name: string;
   row_count: number;
-  columns: { name: string; type: string; nullable: boolean; primary_key: boolean }[];
+  managed: boolean;
+  columns: { name: string; type: string; nullable: boolean; primary_key: boolean; managed: boolean }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -53,6 +56,10 @@ export class ServerAdminService {
     form.append('archive', file);
     form.append('confirmation', 'RESTORE');
     return firstValueFrom(this.http.post<any>(`${this.apiUrl}/restore`, form, { headers: await this.headers() }));
+  }
+
+  async cleanup(payload: { data_roots: string[]; tables: string[]; columns: { table: string; column: string }[] }): Promise<any> {
+    return firstValueFrom(this.http.post<any>(`${this.apiUrl}/cleanup`, { ...payload, confirmation: 'CLEANUP' }, { headers: await this.headers() }));
   }
 
   async downloadData(entry: ServerDataEntry): Promise<void> {

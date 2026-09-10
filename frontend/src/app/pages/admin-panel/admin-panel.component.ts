@@ -11,7 +11,7 @@ import { OwnerServerAdminComponent } from './owner-server-admin.component';
   standalone: true,
   imports: [CommonModule, FormsModule, OwnerServerAdminComponent],
   template: `
-    <div class="admin-container">
+    <div class="admin-container" [class.owner-workspace]="activeAdminTab === 'server-data' || activeAdminTab === 'database'">
       <div class="page-header">
         <h1>Admin Dashboard</h1>
         <p>Manage lab access, storage, and owner-only server operations.</p>
@@ -110,6 +110,7 @@ import { OwnerServerAdminComponent } from './owner-server-admin.component';
   `,
   styles: [`
     .admin-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
+    .admin-container.owner-workspace { max-width: 1540px; }
     .page-header { margin-bottom: var(--space-5); }
     .tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border);margin-bottom:var(--space-7)}.tabs button{padding:10px 16px;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-weight:700;color:var(--color-text-secondary);cursor:pointer}.tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}.request-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:.68rem;font-weight:800;line-height:1;vertical-align:middle}
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); letter-spacing: -0.025em; margin-bottom: var(--space-2); }

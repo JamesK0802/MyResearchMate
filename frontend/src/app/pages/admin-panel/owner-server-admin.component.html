@@ -2,64 +2,88 @@
 <div class="status notice" *ngIf="notice">{{ notice }}</div>
 
 <ng-container *ngIf="view === 'data'">
-  <section class="migration-card">
-    <div class="migration-copy">
-      <span class="eyebrow">Server migration</span>
-      <h2>Backup & restore</h2>
-      <p>A backup contains the server .env, PostgreSQL database, and data folder. Backups stay on this server until you download them.</p>
-    </div>
-    <div class="migration-actions">
-      <button class="primary" (click)="createBackup()" [disabled]="actionBusy">{{ actionBusy ? 'Working…' : 'Create backup' }}</button>
-      <label class="file-picker">
-        <span>{{ restoreFile?.name || 'Choose backup file' }}</span>
-        <input type="file" accept=".gz,application/gzip" (change)="chooseRestore($event)" [disabled]="actionBusy">
-      </label>
-      <button class="danger" (click)="restore()" [disabled]="actionBusy || !restoreFile">Restore</button>
-    </div>
-    <p class="restart-note">Restoring creates a safety backup first. Restart the application afterward so restored environment settings take effect.</p>
-  </section>
+  <div class="server-summary-grid">
+    <section class="migration-card">
+      <div class="migration-copy"><span class="eyebrow">Server migration</span><h2>Backup & restore</h2><p>Includes .env, PostgreSQL, and the complete data folder.</p></div>
+      <div class="migration-actions">
+        <button class="primary" (click)="createBackup()" [disabled]="actionBusy">{{ actionBusy ? 'Working…' : 'Create backup' }}</button>
+        <label class="file-picker"><span>{{ restoreFile?.name || 'Choose backup' }}</span><input type="file" accept=".gz,application/gzip" (change)="chooseRestore($event)" [disabled]="actionBusy"></label>
+        <button class="danger" (click)="restore()" [disabled]="actionBusy || !restoreFile">Restore</button>
+      </div>
+      <p class="restart-note">Restore creates a safety backup first. Restart afterward to apply restored environment settings.</p>
+    </section>
 
-  <section class="panel backups-panel">
-    <div class="panel-heading"><div><span class="eyebrow">Saved on server</span><h2>Backups</h2></div><button class="quiet" (click)="loadBackups()">Refresh</button></div>
-    <div class="backup-list" *ngIf="backups.length; else noBackups">
-      <div class="backup-row" *ngFor="let backup of backups">
-        <div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'medium' }}</small></div>
-        <button class="quiet" (click)="server.downloadBackup(backup)">Download</button>
+    <section class="panel backups-panel">
+      <div class="panel-heading"><div><span class="eyebrow">Saved on server</span><h2>Backups <small>{{ backups.length }}</small></h2></div><button class="quiet icon-button" (click)="loadBackups()" [disabled]="backupsLoading" aria-label="Refresh backups">↻</button></div>
+      <div class="backup-list" *ngIf="backups.length; else noBackups"><div class="backup-row" *ngFor="let backup of backups"><div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'short' }}</small></div><button class="quiet" (click)="server.downloadBackup(backup)">Download</button></div></div>
+      <ng-template #noBackups><p class="empty">{{ backupsLoading ? 'Loading backups…' : 'No server backups yet.' }}</p></ng-template>
+    </section>
+  </div>
+
+  <section class="file-explorer">
+    <div class="explorer-toolbar">
+      <button class="icon-button quiet" (click)="loadData(parent)" [disabled]="!path || dataLoading" aria-label="Go to parent folder">↑</button>
+      <nav class="breadcrumbs" aria-label="Data folder path"><ng-container *ngFor="let crumb of crumbs(); let last = last"><button (click)="loadData(crumb.path)" [class.current]="last">{{ crumb.label }}</button><span *ngIf="!last">/</span></ng-container></nav>
+      <span class="updated" *ngIf="refreshedAt">Updated {{ refreshedAt | date:'mediumTime' }}</span>
+      <button class="quiet" (click)="refreshData()" [disabled]="loading">{{ dataLoading ? 'Refreshing…' : 'Refresh' }}</button>
+    </div>
+
+    <div class="explorer-body">
+      <aside class="folder-sidebar">
+        <div class="sidebar-title">Locations</div>
+        <button (click)="loadData('')" [class.active]="!path"><span>▣</span><strong>data</strong></button>
+        <button *ngFor="let directory of rootDirectories" (click)="loadData(directory.path)" [class.active]="path === directory.path || path.startsWith(directory.path + '/')"><span>▸</span><span class="location-name">{{ directory.name }}</span><small [class.legacy]="!directory.managed">{{ directory.managed ? directory.item_count : 'legacy' }}</small></button>
+      </aside>
+
+      <div class="file-list" [class.is-loading]="dataLoading">
+        <div class="file-head"><span></span><span>Name</span><span>Contents / size</span><span>Modified</span><span></span></div>
+        <div class="file-row" *ngFor="let entry of entries" [class.legacy-row]="!entry.managed && !path">
+          <span class="select-cell"><input *ngIf="!path && entry.kind === 'directory' && !entry.managed" type="checkbox" [checked]="selectedDataRoots.has(entry.name)" (change)="toggleDataRoot(entry)" [attr.aria-label]="'Select legacy folder ' + entry.name"></span>
+          <button class="file-open" (click)="open(entry)"><span class="file-name"><i>{{ entry.kind === 'directory' ? '📁' : '📄' }}</i><strong>{{ entry.name }}</strong><em *ngIf="!entry.managed && !path">Legacy</em></span></button>
+          <span>{{ entry.kind === 'directory' ? (entry.item_count + ' items') : formatBytes(entry.size) }}</span><span class="modified">{{ entry.modified_at | date:'short' }}</span>
+          <button class="row-action" (click)="open(entry)" [attr.aria-label]="entry.kind === 'directory' ? 'Open folder' : 'Download file'">{{ entry.kind === 'directory' ? '›' : '↓' }}</button>
+        </div>
+        <p class="empty" *ngIf="!entries.length && !dataLoading">This folder is empty.</p><div class="inline-loading" *ngIf="dataLoading">Loading folder…</div>
       </div>
     </div>
-    <ng-template #noBackups><p class="empty">No server backups yet.</p></ng-template>
   </section>
 
-  <section class="panel">
-    <div class="panel-heading"><div><span class="eyebrow">Live storage</span><h2>Data folder</h2></div><button class="quiet" (click)="loadData(path)">Refresh</button></div>
-    <nav class="breadcrumbs" aria-label="Data folder path"><button *ngFor="let crumb of crumbs(); let last = last" (click)="loadData(crumb.path)" [class.current]="last">{{ crumb.label }}</button></nav>
-    <div class="file-head"><span>Name</span><span>Size</span><span>Modified</span><span></span></div>
-    <button class="file-row" *ngFor="let entry of entries" (click)="open(entry)">
-      <span class="file-name"><i>{{ entry.kind === 'directory' ? '📁' : '📄' }}</i><strong>{{ entry.name }}</strong></span>
-      <span>{{ formatBytes(entry.size) }}</span><span class="modified">{{ entry.modified_at | date:'short' }}</span><span class="open-mark">{{ entry.kind === 'directory' ? '›' : '↓' }}</span>
-    </button>
-    <p class="empty" *ngIf="!entries.length && !loading">This folder is empty.</p>
-  </section>
+  <div class="cleanup-bar" *ngIf="selectedDataRoots.size"><div><strong>{{ selectedDataRoots.size }} legacy folder(s) selected</strong><span>A full backup is created before removal.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="actionBusy">Back up & remove</button></div>
 </ng-container>
 
 <ng-container *ngIf="view === 'database'">
-  <section class="database-intro"><div><span class="eyebrow">PostgreSQL</span><h2>Database tables</h2><p>Read-only preview of the live database. Up to 50 rows are shown at once.</p></div><button class="quiet" (click)="loadTables()">Refresh</button></section>
+  <section class="database-intro">
+    <div><span class="eyebrow">PostgreSQL</span><h2>Database inspector</h2><p>Application schema is separated from unmanaged legacy objects. Rows are read-only.</p></div>
+    <div class="database-stats"><span><strong>{{ managedTableCount }}</strong> app tables</span><span><strong>{{ legacyTableCount }}</strong> legacy</span><span><strong>{{ emptyTableCount }}</strong> empty</span></div>
+    <button class="quiet" (click)="refreshDatabase()" [disabled]="databaseLoading">{{ databaseLoading ? 'Refreshing…' : 'Refresh' }}</button>
+  </section>
+
+  <div class="database-toolbar">
+    <input type="search" [(ngModel)]="tableSearch" placeholder="Find a table…" aria-label="Find a database table">
+    <button [class.active]="showEmptyTables" (click)="toggleEmptyTables()">{{ showEmptyTables ? 'Hide' : 'Show' }} empty ({{ emptyTableCount }})</button>
+    <button [class.active]="showLegacyTables" (click)="toggleLegacyTables()">{{ showLegacyTables ? 'Hide' : 'Review' }} legacy ({{ legacyTableCount }})</button>
+    <button [class.active]="wrapCells" (click)="wrapCells = !wrapCells">{{ wrapCells ? 'Clip' : 'Wrap' }} cells</button>
+  </div>
+
   <div class="database-layout">
     <aside class="table-list">
-      <label for="mobile-table">Table</label>
-      <select id="mobile-table" [(ngModel)]="selectedTable" (ngModelChange)="selectTable($event)"><option *ngFor="let table of tables" [value]="table.name">{{ table.name }} ({{ table.row_count }})</option></select>
-      <button *ngFor="let table of tables" [class.active]="selectedTable === table.name" (click)="selectTable(table.name)"><span>{{ table.name }}</span><small>{{ table.row_count }} rows</small></button>
-    </aside>
-    <section class="panel database-panel" *ngIf="preview">
-      <div class="panel-heading"><div><span class="eyebrow">Table preview</span><h2>{{ preview.table }}</h2></div><strong class="row-count">{{ preview.total }} rows</strong></div>
-      <div class="column-chips"><span *ngFor="let column of tableSummary(preview.table)?.columns" [class.primary-key]="column.primary_key"><strong>{{ column.name }}</strong>{{ column.type }}</span></div>
-      <div class="data-scroll">
-        <table><thead><tr><th *ngFor="let column of preview.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of preview.rows"><td *ngFor="let column of preview.columns" [title]="displayCell(row[column])">{{ displayCell(row[column]) }}</td></tr></tbody></table>
-        <p class="empty" *ngIf="!preview.rows.length">This table has no rows.</p>
+      <label for="mobile-table">Table</label><select id="mobile-table" [(ngModel)]="selectedTable" (ngModelChange)="selectTable($event)"><option *ngFor="let table of filteredTables" [value]="table.name">{{ table.name }} ({{ table.row_count }})</option></select>
+      <div class="table-list-scroll">
+        <div class="table-option" *ngFor="let table of filteredTables" [class.active]="selectedTable === table.name" [class.legacy-table]="!table.managed">
+          <input *ngIf="!table.managed" type="checkbox" [checked]="selectedLegacyTables.has(table.name)" (change)="toggleLegacyTable(table)" [attr.aria-label]="'Select legacy table ' + table.name">
+          <button (click)="selectTable(table.name)"><span>{{ table.name }}</span><small>{{ table.row_count }}</small></button>
+        </div><p class="empty" *ngIf="!filteredTables.length">No tables match these filters.</p>
       </div>
+    </aside>
+
+    <section class="panel database-panel" *ngIf="preview" [class.is-loading]="databaseLoading">
+      <div class="panel-heading table-title"><div><span class="eyebrow">{{ tableSummary(preview.table)?.managed ? 'Application table' : 'Legacy table' }}</span><h2>{{ preview.table }}</h2></div><label class="select-current-table" *ngIf="tableSummary(preview.table) as currentTable"><input *ngIf="!currentTable.managed" type="checkbox" [checked]="selectedLegacyTables.has(currentTable.name)" (change)="toggleLegacyTable(currentTable)"><span *ngIf="!currentTable.managed">Remove table</span></label><strong class="row-count">{{ preview.total }} rows</strong></div>
+      <div class="column-chips"><label *ngFor="let column of tableSummary(preview.table)?.columns" [class.primary-key]="column.primary_key" [class.legacy-column]="!column.managed"><input *ngIf="!column.managed" type="checkbox" [checked]="selectedLegacyColumns.has(preview.table + '.' + column.name)" (change)="toggleLegacyColumn(preview.table, column.name)"><strong>{{ column.name }}</strong><span>{{ column.type }}</span><em *ngIf="!column.managed">legacy</em></label></div>
+      <div class="data-scroll" [class.wrap-cells]="wrapCells"><table><thead><tr><th *ngFor="let column of preview.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of preview.rows"><td *ngFor="let column of preview.columns" [title]="displayCell(row[column])">{{ displayCell(row[column]) }}</td></tr></tbody></table><p class="empty" *ngIf="!preview.rows.length">This table has no rows.</p></div>
       <div class="pagination" *ngIf="preview.total > preview.limit"><button class="quiet" (click)="selectTable(preview.table, preview.offset - preview.limit)" [disabled]="preview.offset === 0">Previous</button><span>{{ preview.offset + 1 }}–{{ pageEnd() }} of {{ preview.total }}</span><button class="quiet" (click)="selectTable(preview.table, preview.offset + preview.limit)" [disabled]="preview.offset + preview.limit >= preview.total">Next</button></div>
+      <div class="inline-loading" *ngIf="databaseLoading">Loading database…</div>
     </section>
   </div>
-</ng-container>
 
-<div class="loading" *ngIf="loading">Loading server information…</div>
+  <div class="cleanup-bar" *ngIf="selectedLegacyTables.size || selectedLegacyColumns.size"><div><strong>{{ selectedLegacyTables.size }} table(s), {{ selectedLegacyColumns.size }} column(s) selected</strong><span>Only objects absent from the application schema can be removed. A full backup is created first.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="actionBusy">Back up & remove</button></div>
+</ng-container>

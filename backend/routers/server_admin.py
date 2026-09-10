@@ -18,10 +18,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import MetaData, Table, func, inspect, select
+from pydantic import BaseModel, Field
+from sqlalchemy import MetaData, Table, func, inspect, select, text
 
 from auth.dependencies import get_current_user
-from database.db import DATABASE_URL, engine
+from database import models as database_models  # noqa: F401 - registers application tables
+from database.db import Base, DATABASE_URL, engine
 from storage.file_store import DATA_ROOT, resolve_data_path
 
 
@@ -32,6 +34,24 @@ BACKUP_PATTERN = re.compile(r"^my-lab-mate-backup-[A-Za-z0-9_-]+\.tar\.gz$")
 EXCLUDED_DATA_NAMES = {"server-backups", "deployment-update"}
 MAX_RESTORE_BYTES = int(os.getenv("SERVER_BACKUP_MAX_BYTES", str(50 * 1024**3)))
 _migration_lock = threading.RLock()
+APP_TABLE_NAMES = frozenset(table.name for table in Base.metadata.sorted_tables)
+APP_TABLE_COLUMNS = {
+    table.name: frozenset(column.name for column in table.columns)
+    for table in Base.metadata.sorted_tables
+}
+MANAGED_DATA_ROOTS = frozenset({"personal", "lab", "server-backups", "deployment-update"})
+
+
+class DatabaseColumnCleanup(BaseModel):
+    table: str
+    column: str
+
+
+class ServerCleanupRequest(BaseModel):
+    data_roots: list[str] = Field(default_factory=list)
+    tables: list[str] = Field(default_factory=list)
+    columns: list[DatabaseColumnCleanup] = Field(default_factory=list)
+    confirmation: str
 
 
 async def require_owner(user: dict = Depends(get_current_user)) -> dict:
@@ -61,11 +81,14 @@ def _backup_path(name: str) -> Path:
 
 def _human_entry(path: Path) -> dict[str, Any]:
     stat = path.stat()
+    is_directory = path.is_dir()
     return {
         "name": path.name,
         "path": path.relative_to(DATA_ROOT).as_posix(),
-        "kind": "directory" if path.is_dir() else "file",
-        "size": None if path.is_dir() else stat.st_size,
+        "kind": "directory" if is_directory else "file",
+        "size": None if is_directory else stat.st_size,
+        "item_count": sum(1 for item in path.iterdir() if not item.is_symlink()) if is_directory else None,
+        "managed": path.relative_to(DATA_ROOT).parts[0] in MANAGED_DATA_ROOTS,
         "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
     }
 
@@ -261,17 +284,27 @@ def download_data_file(path: str, _owner: dict = Depends(require_owner)):
 @router.get("/database/tables")
 def list_database_tables(_owner: dict = Depends(require_owner)):
     inspector = inspect(engine)
+    names = inspector.get_table_names(schema="public")
+    metadata = MetaData()
+    metadata.reflect(bind=engine, schema="public", only=names)
     tables = []
     with engine.connect() as connection:
-        for name in inspector.get_table_names(schema="public"):
-            table = _table_or_404(name)
+        for name in names:
+            table = metadata.tables[f"public.{name}"]
             count = connection.execute(select(func.count()).select_from(table)).scalar_one()
             columns = inspector.get_columns(name, schema="public")
             primary = set((inspector.get_pk_constraint(name, schema="public") or {}).get("constrained_columns") or [])
             tables.append({
                 "name": name,
                 "row_count": count,
-                "columns": [{"name": c["name"], "type": str(c["type"]), "nullable": c.get("nullable", True), "primary_key": c["name"] in primary} for c in columns],
+                "managed": name in APP_TABLE_NAMES,
+                "columns": [{
+                    "name": c["name"],
+                    "type": str(c["type"]),
+                    "nullable": c.get("nullable", True),
+                    "primary_key": c["name"] in primary,
+                    "managed": c["name"] in APP_TABLE_COLUMNS.get(name, frozenset()),
+                } for c in columns],
             })
     return sorted(tables, key=lambda item: item["name"].lower())
 
@@ -288,6 +321,71 @@ def preview_database_table(table_name: str, limit: int = Query(50, ge=1, le=100)
         result = connection.execute(statement.limit(limit).offset(offset))
         rows = [{key: _json_value(value) for key, value in row._mapping.items()} for row in result]
     return {"table": table_name, "total": total, "limit": limit, "offset": offset, "columns": [column.name for column in table.columns], "rows": rows}
+
+
+@router.post("/cleanup")
+def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_owner)):
+    """Remove explicitly selected storage roots and unmanaged database objects.
+
+    A complete backup is created before any destructive operation. Application
+    model tables/columns and canonical storage roots can never be selected.
+    """
+    if payload.confirmation != "CLEANUP":
+        raise HTTPException(status_code=400, detail="Cleanup confirmation is required")
+    if not payload.data_roots and not payload.tables and not payload.columns:
+        raise HTTPException(status_code=400, detail="Select at least one legacy item")
+    if not _migration_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Another server backup, restore, or cleanup is already running")
+    try:
+        inspector = inspect(engine)
+        live_tables = set(inspector.get_table_names(schema="public"))
+        legacy_tables = live_tables - APP_TABLE_NAMES
+        requested_tables = set(payload.tables)
+        if not requested_tables.issubset(legacy_tables):
+            raise HTTPException(status_code=400, detail="Only unmanaged database tables can be removed")
+
+        requested_columns: list[tuple[str, str]] = []
+        for item in payload.columns:
+            if item.table not in live_tables or item.table in requested_tables:
+                continue
+            live_columns = {column["name"] for column in inspector.get_columns(item.table, schema="public")}
+            managed_columns = APP_TABLE_COLUMNS.get(item.table, frozenset())
+            if item.column not in live_columns or item.column in managed_columns:
+                raise HTTPException(status_code=400, detail=f"{item.table}.{item.column} is not a removable legacy column")
+            requested_columns.append((item.table, item.column))
+
+        data_paths: list[Path] = []
+        for root_name in set(payload.data_roots):
+            if root_name in MANAGED_DATA_ROOTS or not root_name or "/" in root_name or "\\" in root_name:
+                raise HTTPException(status_code=400, detail=f"{root_name or 'Root'} is a protected data location")
+            path = _safe_data_path(root_name)
+            if path.parent != DATA_ROOT or not path.is_dir() or path.is_symlink():
+                raise HTTPException(status_code=400, detail=f"{root_name} is not a removable root folder")
+            data_paths.append(path)
+
+        safety_backup = _create_backup(owner)
+        quote = engine.dialect.identifier_preparer.quote
+        with engine.begin() as connection:
+            for table_name, column_name in requested_columns:
+                connection.execute(text(f"ALTER TABLE public.{quote(table_name)} DROP COLUMN {quote(column_name)}"))
+            if requested_tables:
+                targets = ", ".join(f"public.{quote(name)}" for name in sorted(requested_tables))
+                connection.execute(text(f"DROP TABLE {targets}"))
+
+        for path in data_paths:
+            shutil.rmtree(path)
+        engine.dispose()
+        return {
+            "message": "Legacy server data removed.",
+            "safety_backup": safety_backup["name"],
+            "removed": {
+                "data_roots": sorted(path.name for path in data_paths),
+                "tables": sorted(requested_tables),
+                "columns": [{"table": table, "column": column} for table, column in requested_columns],
+            },
+        }
+    finally:
+        _migration_lock.release()
 
 
 @router.get("/backups")
