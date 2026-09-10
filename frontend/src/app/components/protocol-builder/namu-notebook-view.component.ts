@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, EventEmitter, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, EventEmitter, HostListener, Input, OnChanges, Output, QueryList, SimpleChanges, ViewChild, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -223,10 +223,9 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
             <li *ngFor="let step of stepsForPage(notebookPage); let index = index; trackBy: trackByIndex">
               <span *ngIf="!editable">{{ step }}</span>
               <span class="editable-step" *ngIf="editable">
-                <textarea
+                <textarea #stepTextarea
                   [(ngModel)]="notebookPage.node.steps[notebookPage.stepStart + index]"
-                  [rows]="stepRows(step)"
-                  [style.height]="'calc(' + stepRows(step) + ' * var(--rule))'"
+                  rows="1"
                   (input)="autoGrowTextarea($event)"
                   (blur)="saveNode(notebookPage.node)"
                   aria-label="Protocol step"></textarea>
@@ -328,7 +327,7 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
     .notebook-overview .overview-spread { width:200%; max-width:none; min-height:0; aspect-ratio:297 / 210; margin:0; transform:scale(.5); transform-origin:top left; pointer-events:none; user-select:none; }
     .mobile-screen-notebook { display:none; }
     .page-title-input { width:100%; box-sizing:border-box; border:0; border-radius:0; outline:none; color:#252422; background:transparent; margin:0; height:var(--rule); font:700 1.35rem/var(--rule) Georgia,serif; }
-    .editable-step { display:flex; align-items:center; gap:5px; min-height:var(--rule); line-height:var(--rule); }
+    .editable-step { display:flex; align-items:flex-start; gap:5px; min-height:var(--rule); line-height:var(--rule); }
     .editable-step textarea { flex:1; min-width:0; width:100%; box-sizing:border-box; border:0; outline:none; resize:none; overflow:hidden; field-sizing:content; background:transparent; color:#252422; font:400 .92rem/var(--rule) Georgia,serif; padding:0; margin:0; }
     .editable-step .inline-delete { opacity:0; transition:opacity .15s ease; margin-left:auto; }
     .editable-step:hover .inline-delete { opacity:1; }
@@ -431,7 +430,7 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
     }
   `]
 })
-export class NamuNotebookViewComponent implements OnChanges {
+export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   @Input({ required: true }) tree!: NamuTree;
   @Input() trees: NamuTree[] = [];
   @Output() treeChange = new EventEmitter<string>();
@@ -451,6 +450,7 @@ export class NamuNotebookViewComponent implements OnChanges {
   private pdfBlobUrl = '';
   pdfFileName = 'protocol-notebook.pdf';
   @ViewChild('pdfNotebook') private pdfNotebook?: ElementRef<HTMLElement>;
+  @ViewChildren('stepTextarea') private stepTextareas!: QueryList<ElementRef<HTMLTextAreaElement>>;
 
   cachedPages: NotebookPage[] = [];
   private currentTreeId = '';
@@ -482,9 +482,15 @@ export class NamuNotebookViewComponent implements OnChanges {
     }
   }
 
+  ngAfterViewInit() {
+    this.stepTextareas.changes.subscribe(() => this.scheduleStepHeightSync());
+    this.scheduleStepHeightSync();
+  }
+
   @HostListener('window:resize')
   onWindowResize() {
     this.isMobileView = window.innerWidth <= 900;
+    this.scheduleStepHeightSync();
   }
 
   refreshPages() {
@@ -563,14 +569,19 @@ export class NamuNotebookViewComponent implements OnChanges {
     return Math.max(1, lines.reduce((acc, line) => acc + Math.max(1, Math.ceil((line.length || 1) / 50)), 0));
   }
 
-  stepRows(content: string): number {
-    return this.wrappedLineCount(content, 48);
-  }
-
   autoGrowTextarea(event: Event) {
     const textarea = event.target as HTMLTextAreaElement;
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
+  }
+
+  private scheduleStepHeightSync() {
+    requestAnimationFrame(() => {
+      this.stepTextareas?.forEach(({ nativeElement }) => {
+        nativeElement.style.height = 'auto';
+        nativeElement.style.height = `${nativeElement.scrollHeight}px`;
+      });
+    });
   }
 
   trackByIndex(index: number): number { return index; }
