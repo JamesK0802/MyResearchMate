@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { AppStateService } from '../../services/app-state.service';
 import { ResultDashboardComponent } from '../../components/result-dashboard/result-dashboard.component';
 import { ExcelExportService } from '../../services/excel-export.service';
+import { OperationProgressService } from '../../services/operation-progress.service';
 
 @Component({
   selector: 'app-result-viewer-page',
@@ -14,6 +15,7 @@ export class ResultViewerPageComponent implements OnInit {
   constructor(
     public state: AppStateService,
     private excelExportService: ExcelExportService,
+    private operationProgress: OperationProgressService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -37,16 +39,19 @@ export class ResultViewerPageComponent implements OnInit {
   onDragLeave(event: DragEvent) { event.preventDefault(); this.state.isDragging = false; }
 
   async loadExcelResult(file: File) {
+    const progressId = this.operationProgress.begin(`Opening ${file.name}`, 'Reading Excel report…', 10);
     try {
       this.state.addLog(`Loading excel file: ${file.name}`);
       const data = await this.excelExportService.importFromExcel(file);
-      
+      this.operationProgress.update(progressId, { detail: 'Rendering analysis result…', percent: 80 });
       this.state.loadResultData(data);
       this.cdr.detectChanges();
       this.state.addLog(`Excel report imported successfully.`);
+      this.operationProgress.complete(progressId, 'Excel report opened');
     } catch (e: any) {
       console.error('Excel import failed:', e);
       this.state.addLog(`Excel import failed: ${e.message}`);
+      this.operationProgress.fail(progressId, 'Could not open this Excel report');
     }
   }
 }

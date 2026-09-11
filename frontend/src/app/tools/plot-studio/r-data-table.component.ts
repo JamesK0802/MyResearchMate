@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as XLSX from 'xlsx';
 import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service';
+import { OperationProgressService } from '../../services/operation-progress.service';
 
 @Component({
   selector: 'app-r-data-table',
@@ -438,7 +439,7 @@ export class RDataTableComponent implements OnInit {
     return ['bar', 'line'].includes(this.plotState?.chartType || '');
   }
 
-  constructor(private rSyncService: RPlotSyncService) {}
+  constructor(private rSyncService: RPlotSyncService, private operationProgress: OperationProgressService) {}
 
   ngOnInit() {
     this.rSyncService.columns$.subscribe(cols => this.columns = cols);
@@ -568,17 +569,30 @@ export class RDataTableComponent implements OnInit {
   importFile(event: any) {
     const file = event.target.files[0];
     if (!file) return;
+    const progressId = this.operationProgress.begin(`Importing ${file.name}`, 'Reading spreadsheet…', 0);
 
     const reader = new FileReader();
+    reader.onprogress = progressEvent => {
+      this.operationProgress.update(progressId, {
+        detail: 'Reading spreadsheet…',
+        percent: progressEvent.lengthComputable ? Math.min(65, (progressEvent.loaded / progressEvent.total) * 65) : null,
+        transferred: progressEvent.loaded,
+        total: progressEvent.lengthComputable ? progressEvent.total : undefined,
+      });
+    };
     reader.onload = (e: any) => {
       try {
+        this.operationProgress.update(progressId, { detail: 'Parsing spreadsheet rows…', percent: 72 });
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        if (!json || json.length < 2) return;
+        if (!json || json.length < 2) {
+          this.operationProgress.fail(progressId, 'The spreadsheet does not contain data rows');
+          return;
+        }
 
         const headers = json[0].map((h: any, idx: number) => String(h || `Col_${idx + 1}`).trim());
         const parsedRows: Array<Record<string, any>> = [];
@@ -610,10 +624,14 @@ export class RDataTableComponent implements OnInit {
           groupColumn: groupCol,
           errorColumn: errCol
         });
+        this.operationProgress.complete(progressId, 'Plot data imported');
       } catch (err) {
         console.error('Error reading file:', err);
+        this.operationProgress.fail(progressId, 'Could not import this spreadsheet');
       }
     };
+    reader.onerror = () => this.operationProgress.fail(progressId, 'Could not read this file');
+    reader.onabort = () => this.operationProgress.remove(progressId);
     reader.readAsArrayBuffer(file);
   }
 }

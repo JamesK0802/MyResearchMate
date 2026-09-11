@@ -9,6 +9,7 @@ import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { OperationProgressService } from '../../services/operation-progress.service';
 
 @Component({
   selector: 'app-lab-group-archive-page',
@@ -177,6 +178,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private labService: LabService,
     private archiveService: LabArchiveService,
+    private operationProgress: OperationProgressService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -2247,6 +2249,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   async importExcelFile(event: any) {
     const file = event.target.files[0];
     if (!file) return;
+    const progressId = this.operationProgress.begin(`Importing ${file.name}`, 'Reading Lab Archive spreadsheet…', 10);
     
     this.isFsLoading = true;
     this.cdr.detectChanges();
@@ -2254,6 +2257,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     try {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
+      this.operationProgress.update(progressId, { detail: 'Checking and importing sample rows…', percent: 55 });
       
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
@@ -2344,9 +2348,11 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
       });
       
       this.onSamplesChange();
+      this.operationProgress.complete(progressId, `Imported ${importedCount} sample${importedCount === 1 ? '' : 's'}`);
       alert(`Import complete!\nSuccessfully imported ${importedCount} samples.\nSkipped ${skippedCount} duplicates with existing barcodes.`);
     } catch (e) {
       console.error('Import excel failed', e);
+      this.operationProgress.fail(progressId, 'Could not import this Lab Archive spreadsheet');
       alert('Failed to import Excel: ' + (e as any).message);
     } finally {
       this.isFsLoading = false;

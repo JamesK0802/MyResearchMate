@@ -11,6 +11,7 @@ import type { IlluminaMateFailureReason, IlluminaPreprocessDiagnostics } from '.
 import { extractWindow, findGrnaCutSite } from '../../workers/core/classifier';
 import { SequenceMatcher } from '../../workers/core/sequence-matcher';
 import { parseIlluminaFilename } from '../../models/illumina.model';
+import { OperationProgressService } from '../../services/operation-progress.service';
 
 interface MergeTargetRow {
   targetName: string;
@@ -79,6 +80,7 @@ export class BenchmarkPageComponent {
     private workspace: SequenceWorkspaceService,
     private router: Router,
     private cdr: ChangeDetectorRef,
+    private operationProgress: OperationProgressService,
   ) {}
 
   private emptyMergeTarget(): MergeTargetRow {
@@ -274,9 +276,11 @@ export class BenchmarkPageComponent {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    const progressId = this.operationProgress.begin(`Importing ${file.name}`, 'Reading benchmark template…', 10);
     try {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
+      this.operationProgress.update(progressId, { detail: 'Validating reference rows…', percent: 65 });
       const worksheet = workbook.getWorksheet(1);
       const grouped = new Map<string, MergeGeneRow>();
       worksheet?.eachRow((row, rowNumber) => {
@@ -292,14 +296,17 @@ export class BenchmarkPageComponent {
       });
       if (!grouped.size) {
         this.mergeError = 'No valid reference rows were found in the Excel file.';
+        this.operationProgress.fail(progressId, this.mergeError);
         return;
       }
       this.mergeGenes = [...grouped.values()];
       this.mergeShowAutofill = false;
       this.mergeError = '';
       if (this.mergeShowWindowCheck) this.recalculateMergeWindowCheck();
+      this.operationProgress.complete(progressId, 'Benchmark template imported');
     } catch (error: any) {
       this.mergeError = error?.message || 'Failed to read the reference template.';
+      this.operationProgress.fail(progressId, this.mergeError);
     } finally {
       // ExcelJS completes through async work that can finish outside Angular's
       // change-detection turn. Ensure newly imported genes/targets (or errors)

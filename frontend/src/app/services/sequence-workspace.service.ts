@@ -6,6 +6,7 @@ import { shiftFeatures } from '../utils/biology.utils';
 import { exportToFasta, exportToGenBank } from '../utils/export.utils';
 import { AuthService } from './auth.service';
 import { SequenceStorageService, SequenceStorageUsage, StoredSequenceFile } from './sequence-storage.service';
+import { OperationProgressService } from './operation-progress.service';
 
 const DB_NAME = 'SequenceWorkspaceDB';
 const STORE_NAME = 'ProjectItems';
@@ -58,7 +59,11 @@ export class SequenceWorkspaceService {
   private readonly MAX_HISTORY = 20;
   private storageUserId: string | null | undefined;
 
-  constructor(private auth: AuthService, private cloudStorage: SequenceStorageService) {
+  constructor(
+    private auth: AuthService,
+    private cloudStorage: SequenceStorageService,
+    private operationProgress: OperationProgressService
+  ) {
     this.initDB().then(() => {
       // Wait until Supabase has restored the session. Loading IndexedDB first made the
       // temporary example appear briefly before the signed-in cloud workspace replaced it.
@@ -512,66 +517,65 @@ export class SequenceWorkspaceService {
   }
 
   async importFile(file: File) {
-    const isFastq = file.name.endsWith('.fastq') || file.name.endsWith('.fq') || file.name.endsWith('.fastq.gz') || file.name.endsWith('.fq.gz');
-    
-    if (isFastq) {
-      try {
+    const progressId = this.operationProgress.begin(`Importing ${file.name}`, 'Reading file…', 5);
+    try {
+      const isFastq = file.name.endsWith('.fastq') || file.name.endsWith('.fq') || file.name.endsWith('.fastq.gz') || file.name.endsWith('.fq.gz');
+
+      if (isFastq) {
+        this.operationProgress.update(progressId, { detail: 'Parsing FASTQ reads…', percent: 20 });
         const doc = await parseFastqFile(file);
+        this.operationProgress.update(progressId, { detail: 'Saving parsed reads…', percent: 55 });
         await this.persistImportedFile(file, [doc]);
-      } catch (e) {
-        console.error('Failed to parse FASTQ', e);
+        this.operationProgress.complete(progressId, 'Imported into Sequence Viewer');
+        return;
       }
-      return;
-    }
 
-    const text = await file.text();
-    const isFasta = file.name.endsWith('.fasta') || file.name.endsWith('.fa') || text.startsWith('>');
-    const isGenBank = file.name.endsWith('.gb') || file.name.endsWith('.gbk') || text.startsWith('LOCUS');
+      const text = await file.text();
+      this.operationProgress.update(progressId, { detail: 'Parsing sequence data…', percent: 35 });
+      const isFasta = file.name.endsWith('.fasta') || file.name.endsWith('.fa') || text.startsWith('>');
+      const isGenBank = file.name.endsWith('.gb') || file.name.endsWith('.gbk') || text.startsWith('LOCUS');
 
-    const importedItems: ProjectItem[] = [];
-    if (isGenBank) {
-      const doc = parseGenBank(text);
-      if (doc) {
-        doc.id = Math.random().toString(36).substring(2, 9);
-        doc.type = 'sequence';
-        doc.sourceFormat = 'genbank';
-        doc.createdTimestamp = Date.now();
-        doc.primers = doc.primers || [];
-        importedItems.push(doc as SequenceDocument);
+      const importedItems: ProjectItem[] = [];
+      if (isGenBank) {
+        const doc = parseGenBank(text);
+        if (doc) {
+          doc.id = Math.random().toString(36).substring(2, 9);
+          doc.type = 'sequence';
+          doc.sourceFormat = 'genbank';
+          doc.createdTimestamp = Date.now();
+          doc.primers = doc.primers || [];
+          importedItems.push(doc as SequenceDocument);
+        }
+      } else if (isFasta) {
+        const docs = parseFasta(text);
+        for (const d of docs) {
+          d.id = Math.random().toString(36).substring(2, 9);
+          d.type = 'sequence';
+          d.sourceFormat = 'fasta';
+          d.topology = 'linear';
+          d.features = [];
+          d.primers = [];
+          d.createdTimestamp = Date.now();
+          importedItems.push(d as SequenceDocument);
+        }
+      } else {
+        const cleanSeq = text.replace(/[^A-Za-z]/g, '').toUpperCase();
+        if (cleanSeq.length > 0) {
+          const doc: SequenceDocument = {
+            id: Math.random().toString(36).substring(2, 9), type: 'sequence', name: file.name,
+            description: 'Imported from text', sequence: cleanSeq, topology: 'linear', features: [], primers: [],
+            sourceFormat: 'text', createdTimestamp: Date.now(), updatedTimestamp: Date.now()
+          };
+          importedItems.push(doc);
+        }
       }
-    } else if (isFasta) {
-      const docs = parseFasta(text);
-      for (const d of docs) {
-        d.id = Math.random().toString(36).substring(2, 9);
-        d.type = 'sequence';
-        d.sourceFormat = 'fasta';
-        d.topology = 'linear';
-        d.features = [];
-        d.primers = [];
-        d.createdTimestamp = Date.now();
-        importedItems.push(d as SequenceDocument);
-      }
-    } else {
-      // Treat as plain sequence
-      const cleanSeq = text.replace(/[^A-Za-z]/g, '').toUpperCase();
-      if (cleanSeq.length > 0) {
-        const doc: SequenceDocument = {
-          id: Math.random().toString(36).substring(2, 9),
-          type: 'sequence',
-          name: file.name,
-          description: 'Imported from text',
-          sequence: cleanSeq,
-          topology: 'linear',
-          features: [],
-          primers: [],
-          sourceFormat: 'text',
-          createdTimestamp: Date.now(),
-          updatedTimestamp: Date.now()
-        };
-        importedItems.push(doc);
-      }
+      this.operationProgress.update(progressId, { detail: 'Saving imported file…', percent: 65 });
+      await this.persistImportedFile(file, importedItems);
+      this.operationProgress.complete(progressId, 'Imported into Sequence Viewer');
+    } catch (error) {
+      console.error('Failed to import sequence file', error);
+      this.operationProgress.fail(progressId, 'Could not import this file');
     }
-    await this.persistImportedFile(file, importedItems);
   }
 
   async importGeneratedFastq(file: File, autoAlign?: AutoAlignPayload) {
