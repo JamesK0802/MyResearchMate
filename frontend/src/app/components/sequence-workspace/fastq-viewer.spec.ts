@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FastqDocument } from '../../models/sequence.model';
-import { FastqViewerComponent } from './fastq-viewer.component';
+import { createAlignmentCacheId, FastqViewerComponent } from './fastq-viewer.component';
 
 const document = (): FastqDocument => ({
   id: 'reads',
@@ -14,6 +14,17 @@ const document = (): FastqDocument => ({
 });
 
 describe('FastqViewerComponent alignment persistence', () => {
+  it('creates a valid UUID when randomUUID is unavailable', () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: (bytes: Uint8Array) => bytes.fill(0)
+    });
+    try {
+      expect(createAlignmentCacheId()).toBe('00000000-0000-4000-8000-000000000000');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('stores alignment inputs and restores the active view', async () => {
     const saveItem = vi.fn().mockResolvedValue(undefined);
     const component = new FastqViewerComponent({ saveItem } as any);

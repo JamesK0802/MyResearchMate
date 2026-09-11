@@ -63,6 +63,19 @@ function buildMotifRegex(query: string): RegExp | null {
   }
 }
 
+export function createAlignmentCacheId(): string {
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 @Component({
   selector: 'app-fastq-viewer',
   standalone: true,
@@ -1171,9 +1184,9 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       return;
     }
 
-    const cacheId = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const cacheId = globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : createAlignmentCacheId();
     const totalToAlign = Math.min(this.document.stats.readCount, 25_000);
     const batchSize = 100;
     let processedCount = 0;
@@ -1226,13 +1239,26 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
         this.alignedCutSiteInWindow = -1;
         this.initProcessedReads();
       }
+      const detail = this.alignmentErrorMessage(error);
       alert(previousAlignmentState
-        ? 'Alignment could not be completed or saved. The previous saved alignment was kept.'
-        : 'Alignment could not be completed or saved. Please try again.');
+        ? `Alignment could not be completed or saved. The previous saved alignment was kept.\n\n${detail}`
+        : `Alignment could not be completed or saved.\n\n${detail}`);
     } finally {
       this.isAligning = false;
       this.alignmentStatus = '';
     }
+  }
+
+  private alignmentErrorMessage(error: unknown): string {
+    const response = error as any;
+    const detail = response?.error?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail.map(item => item?.msg).filter(Boolean);
+      if (messages.length) return messages.join('; ');
+    }
+    if (response?.status) return `Server request failed (HTTP ${response.status}).`;
+    return response?.message || 'Please try again.';
   }
 
   private processRead(read: FastqRead): ProcessedRead {
