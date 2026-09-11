@@ -1,27 +1,57 @@
 import { Component, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
+import { ProjectItem } from '../../models/sequence.model';
+
+type FileSortMode = 'updated-desc' | 'updated-asc' | 'name-asc' | 'name-desc' | 'type';
+
+export function sortProjectItems(items: ProjectItem[], mode: FileSortMode): ProjectItem[] {
+  const sorted = [...items];
+  const nameCompare = (a: ProjectItem, b: ProjectItem) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  switch (mode) {
+    case 'updated-asc':
+      return sorted.sort((a, b) => (a.updatedTimestamp || a.createdTimestamp) - (b.updatedTimestamp || b.createdTimestamp) || nameCompare(a, b));
+    case 'name-asc':
+      return sorted.sort(nameCompare);
+    case 'name-desc':
+      return sorted.sort((a, b) => nameCompare(b, a));
+    case 'type':
+      return sorted.sort((a, b) => a.type.localeCompare(b.type) || nameCompare(a, b));
+    default:
+      return sorted.sort((a, b) => (b.updatedTimestamp || b.createdTimestamp) - (a.updatedTimestamp || a.createdTimestamp) || nameCompare(a, b));
+  }
+}
 
 @Component({
   selector: 'app-project-explorer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="explorer-header">
-      <label class="btn-import-primary" title="Import Files">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        IMPORT
-        <input type="file" multiple accept=".fasta,.fa,.gb,.gbk,.txt,.fastq,.fq,.fastq.gz,.fq.gz" (change)="onFileSelected($event)" style="display:none">
-      </label>
+      <div class="explorer-controls">
+        <label class="btn-import-primary" title="Import Files">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          IMPORT
+          <input type="file" multiple accept=".fasta,.fa,.gb,.gbk,.txt,.fastq,.fq,.fastq.gz,.fq.gz" (change)="onFileSelected($event)" style="display:none">
+        </label>
+        <select class="sort-select" [(ngModel)]="sortMode" aria-label="Sort files" title="Sort files">
+          <option value="updated-desc">Newest</option>
+          <option value="updated-asc">Oldest</option>
+          <option value="name-asc">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="type">File type</option>
+        </select>
+      </div>
 
       <button type="button" class="btn-collapse" (click)="collapse.emit()" title="Collapse Explorer Panel">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
     </div>
     
-    <div class="item-list">
+    <div class="item-list" *ngIf="workspace.items$ | async as items">
       <div 
-        *ngFor="let item of workspace.items$ | async" 
+        *ngFor="let item of sortedItems(items)"
         class="item-row"
         [class.selected]="(workspace.selectedItemId$ | async) === item.id"
         (click)="workspace.selectItem(item.id)">
@@ -44,7 +74,10 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
         <div class="item-details">
           <div class="item-name" [title]="item.name" (dblclick)="renameItem(item, $event)">{{ item.name }}</div>
           <div class="item-meta" *ngIf="item.type === 'sequence'">{{ item.sequence.length }} bp</div>
-          <div class="item-meta" *ngIf="item.type === 'fastq'">{{ item.stats.readCount | number }} reads</div>
+          <div class="item-meta" *ngIf="item.type === 'fastq'">
+            {{ item.stats.readCount | number }} reads
+            <span class="alignment-saved" *ngIf="item.alignmentState?.active">• Align saved</span>
+          </div>
         </div>
         <div class="item-actions">
           <button class="icon-btn rename-btn" (click)="renameItem(item, $event)" title="Rename file" aria-label="Rename file">
@@ -62,7 +95,7 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
         </div>
       </div>
       
-      <div *ngIf="(workspace.items$ | async)?.length === 0" class="empty-state">
+      <div *ngIf="items.length === 0" class="empty-state">
         No items imported.<br>Click "IMPORT" above to add files.
       </div>
     </div>
@@ -78,6 +111,19 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
       align-items: center;
       background: #f8fafc;
       box-sizing: border-box;
+    }
+    .explorer-controls { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .sort-select {
+      width: 96px;
+      min-width: 0;
+      padding: 5px 22px 5px 7px;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #ffffff;
+      color: #334155;
+      font-size: 0.72rem;
+      font-weight: 650;
+      cursor: pointer;
     }
     .btn-import-primary {
       display: inline-flex;
@@ -133,6 +179,7 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
     .item-details { flex: 1; overflow: hidden; }
     .item-name { font-size: 0.83rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1e293b; }
     .item-meta { font-size: 0.73rem; color: #64748b; }
+    .alignment-saved { color: #15803d; font-weight: 700; }
     .item-actions { display: flex; opacity: 0; transition: opacity 0.2s; }
     .item-row:hover .item-actions { opacity: 1; }
     .icon-btn { 
@@ -149,7 +196,9 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
     
     .empty-state { padding: 16px; text-align: center; color: #64748b; font-size: 0.78rem; line-height: 1.4; }
     @media (max-width:700px) {
-      .explorer-header { justify-content:flex-start; }
+      .explorer-header { height: 46px; padding: 0 12px; justify-content:flex-start; }
+      .explorer-controls { width: 100%; }
+      .sort-select { width: auto; flex: 1; font-size: .78rem; }
       .btn-collapse { display:none; }
       .item-actions { opacity:1; }
     }
@@ -157,8 +206,13 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
 })
 export class ProjectExplorerComponent {
   @Output() collapse = new EventEmitter<void>();
+  sortMode: FileSortMode = 'updated-desc';
 
   constructor(public workspace: SequenceWorkspaceService) {}
+
+  sortedItems(items: ProjectItem[]): ProjectItem[] {
+    return sortProjectItems(items, this.sortMode);
+  }
 
   async onFileSelected(event: any) {
     const files: FileList = event.target.files;

@@ -476,6 +476,8 @@ export class SequenceWorkspaceService {
       parsed.remoteItemIndex = item.remoteItemIndex;
       parsed.originalFileName = item.originalFileName;
       parsed.contentLoaded = true;
+      parsed.autoAlign = item.autoAlign;
+      parsed.alignmentState = item.alignmentState;
       this.suppressRemoteSync = true;
       await this.saveItem(parsed);
       this.suppressRemoteSync = false;

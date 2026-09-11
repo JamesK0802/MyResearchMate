@@ -99,6 +99,19 @@ export interface AutoAlignConfig {
   winSize?: number;
 }
 
+export interface FastqAlignmentState {
+  active: boolean;
+  mode: 'window' | 'ref_target';
+  inputWindowSeq: string;
+  inputRefSeq: string;
+  inputGrnaSeq: string;
+  inputWinSize: number;
+  alignedWindowSeq: string;
+  alignedCutSiteInWindow: number;
+  readOrder: 'aligned' | 'unaligned';
+  updatedTimestamp: number;
+}
+
 export interface FastqDocument {
   type: 'fastq';
   id: string;
@@ -112,6 +125,7 @@ export interface FastqDocument {
   updatedTimestamp: number;
   fileHandle?: any;
   autoAlign?: AutoAlignConfig;
+  alignmentState?: FastqAlignmentState;
   remoteFileId?: string;
   remoteItemIndex?: number;
   originalFileName?: string;

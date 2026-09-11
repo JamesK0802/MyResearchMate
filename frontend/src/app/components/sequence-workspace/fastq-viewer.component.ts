@@ -1,7 +1,7 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FastqDocument } from '../../models/sequence.model';
+import { FastqAlignmentState, FastqDocument } from '../../models/sequence.model';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { isReadUsable, findGrnaCutSite, extractWindow, cutIndexInWindow, reverseComplement } from '../../workers/core/classifier';
 import { classifyMutationWithAlignment, AlignmentToken } from '../../workers/core/analyzer';
@@ -902,17 +902,27 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
   }
 
   ngOnChanges(changes: SimpleChanges) {
+    let changedDocument = false;
     if (changes['document']) {
       const prevId = changes['document'].previousValue?.id;
       const currId = changes['document'].currentValue?.id;
 
       if (prevId !== currId) {
+        changedDocument = true;
         this.currentDocId = currId || null;
         this.isAlignedActive = false;
         this.alignmentReadOrder = 'aligned';
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
       }
+    }
+
+    const savedAlignment = this.document?.alignmentState;
+    if (savedAlignment?.active) {
+      if (changedDocument || !this.alignmentStateMatches(savedAlignment) || this.processedReads.length !== this.document.reads.length) {
+        this.restoreAlignmentState(savedAlignment);
+      }
+      return;
     }
 
     const pending = this.sequenceWorkspaceService.getPendingAutoAlign() || (this.document as any)?.autoAlign;
@@ -945,6 +955,12 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
 
   private checkPendingAutoAlign() {
     if (!this.document) return;
+    if (this.document.alignmentState?.active) {
+      if (!this.alignmentStateMatches(this.document.alignmentState) || this.processedReads.length !== this.document.reads.length) {
+        this.restoreAlignmentState(this.document.alignmentState);
+      }
+      return;
+    }
     const pending = this.sequenceWorkspaceService.getPendingAutoAlign() || (this.document as any)?.autoAlign;
     if (pending) {
       this.inputWindowSeq = pending.windowSeq || '';
@@ -961,6 +977,48 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
       }
       this.runAlign();
     }
+  }
+
+  private alignmentStateMatches(state: FastqAlignmentState): boolean {
+    return this.isAlignedActive
+      && this.alignMode === state.mode
+      && this.inputWindowSeq === state.inputWindowSeq
+      && this.inputRefSeq === state.inputRefSeq
+      && this.inputGrnaSeq === state.inputGrnaSeq
+      && this.inputWinSize === state.inputWinSize
+      && this.alignedWindowSeq === state.alignedWindowSeq
+      && this.alignedCutSiteInWindow === state.alignedCutSiteInWindow
+      && this.alignmentReadOrder === state.readOrder;
+  }
+
+  private restoreAlignmentState(state: FastqAlignmentState) {
+    this.alignMode = state.mode;
+    this.inputWindowSeq = state.inputWindowSeq;
+    this.inputRefSeq = state.inputRefSeq;
+    this.inputGrnaSeq = state.inputGrnaSeq;
+    this.inputWinSize = state.inputWinSize;
+    this.alignedWindowSeq = state.alignedWindowSeq;
+    this.alignedCutSiteInWindow = state.alignedCutSiteInWindow;
+    this.alignmentReadOrder = state.readOrder;
+    this.isAlignedActive = true;
+    this.reprocessAlignment();
+  }
+
+  private persistAlignmentState() {
+    if (!this.document) return;
+    this.document.alignmentState = {
+      active: true,
+      mode: this.alignMode,
+      inputWindowSeq: this.inputWindowSeq,
+      inputRefSeq: this.inputRefSeq,
+      inputGrnaSeq: this.inputGrnaSeq,
+      inputWinSize: this.inputWinSize,
+      alignedWindowSeq: this.alignedWindowSeq,
+      alignedCutSiteInWindow: this.alignedCutSiteInWindow,
+      readOrder: this.alignmentReadOrder,
+      updatedTimestamp: Date.now()
+    };
+    void this.sequenceWorkspaceService.saveItem(this.document);
   }
 
   private initProcessedReads() {
@@ -1017,6 +1075,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
     this.isAlignedActive = true;
 
     this.reprocessAlignment();
+    this.persistAlignmentState();
   }
 
   private reprocessAlignment() {
@@ -1115,7 +1174,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
     this.isAlignedActive = false;
     this.alignedWindowSeq = '';
     this.alignedCutSiteInWindow = -1;
+    delete this.document.alignmentState;
+    delete this.document.autoAlign;
     this.initProcessedReads();
+    void this.sequenceWorkspaceService.saveItem(this.document);
   }
 
   setAlignmentReadOrder(order: 'aligned' | 'unaligned') {
@@ -1123,6 +1185,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
     this.alignmentReadOrder = order;
     this.sortProcessedReadsByAlignment();
     this.applyFilterAndPagination();
+    this.persistAlignmentState();
     if (order === 'aligned') this.centerCutSiteScroll();
   }
 
