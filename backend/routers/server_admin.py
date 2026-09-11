@@ -71,6 +71,31 @@ def _safe_data_path(relative_path: str = "") -> Path:
     return path
 
 
+def _cleanup_data_root_path(root_name: str) -> Path:
+    """Return one direct child of DATA_ROOT without resolving symlinks.
+
+    Legacy deployments can leave compatibility symlinks such as ``data/notes``
+    pointing into the canonical ``data/personal`` tree. Resolving those links
+    makes the path appear nested and previously caused cleanup validation to
+    reject an item that the inspector had offered for removal. Keeping the
+    lexical path lets cleanup unlink only the compatibility entry; its target is
+    never removed.
+    """
+    if (
+        root_name in MANAGED_DATA_ROOTS
+        or not root_name
+        or root_name in {".", ".."}
+        or Path(root_name).name != root_name
+        or "/" in root_name
+        or "\\" in root_name
+    ):
+        raise HTTPException(status_code=400, detail=f"{root_name or 'Root'} is a protected data location")
+    path = DATA_ROOT / root_name
+    if path.parent != DATA_ROOT or (not path.is_symlink() and not path.is_dir()):
+        raise HTTPException(status_code=400, detail=f"{root_name} is not a removable root folder")
+    return path
+
+
 def _backup_path(name: str) -> Path:
     if not BACKUP_PATTERN.fullmatch(name):
         raise HTTPException(status_code=400, detail="Invalid backup name")
@@ -293,7 +318,13 @@ def list_data(path: str = Query(default=""), _owner: dict = Depends(require_owne
         raise HTTPException(status_code=404, detail="Data path not found")
     if not directory.is_dir():
         raise HTTPException(status_code=400, detail="Data path is not a directory")
-    entries = [_human_entry(item) for item in directory.iterdir() if not item.is_symlink()]
+    # Root-level compatibility links are legacy storage entries that owners may
+    # remove after migration. Do not follow links while browsing nested paths.
+    entries = [
+        _human_entry(item)
+        for item in directory.iterdir()
+        if directory == DATA_ROOT or not item.is_symlink()
+    ]
     entries.sort(key=lambda item: (item["kind"] != "directory", item["name"].lower()))
     relative = "" if directory == DATA_ROOT else directory.relative_to(DATA_ROOT).as_posix()
     parent = "" if not relative or "/" not in relative else relative.rsplit("/", 1)[0]
@@ -383,12 +414,7 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
 
         data_paths: list[Path] = []
         for root_name in set(payload.data_roots):
-            if root_name in MANAGED_DATA_ROOTS or not root_name or "/" in root_name or "\\" in root_name:
-                raise HTTPException(status_code=400, detail=f"{root_name or 'Root'} is a protected data location")
-            path = _safe_data_path(root_name)
-            if path.parent != DATA_ROOT or not path.is_dir() or path.is_symlink():
-                raise HTTPException(status_code=400, detail=f"{root_name} is not a removable root folder")
-            data_paths.append(path)
+            data_paths.append(_cleanup_data_root_path(root_name))
 
         safety_backup = _create_backup(owner)
         quote = engine.dialect.identifier_preparer.quote
@@ -400,7 +426,10 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
                 connection.execute(text(f"DROP TABLE {targets}"))
 
         for path in data_paths:
-            shutil.rmtree(path)
+            if path.is_symlink():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
         engine.dispose()
         return {
             "message": "Legacy server data removed.",
