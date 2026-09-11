@@ -121,6 +121,9 @@ export interface FastqDocument {
   stats: FastqStats;
   isReadPreview?: boolean;
   loadedReadCount?: number;
+  readPreviewLoaded?: boolean;
+  readPreviewLoading?: boolean;
+  remoteReadsHasMore?: boolean;
   createdTimestamp: number;
   updatedTimestamp: number;
   fileHandle?: any;

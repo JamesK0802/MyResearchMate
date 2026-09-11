@@ -58,6 +58,7 @@ export class SequenceWorkspaceService {
   private history: Record<string, { past: SequenceDocument[], future: SequenceDocument[] }> = {};
   private readonly MAX_HISTORY = 20;
   private storageUserId: string | null | undefined;
+  private readonly loadingReadPages = new Set<string>();
 
   constructor(
     private auth: AuthService,
@@ -205,8 +206,9 @@ export class SequenceWorkspaceService {
       await this.refreshUsage();
       const selectedId = previouslySelectedId && items.some(item => item.id === previouslySelectedId)
         ? previouslySelectedId
-        : items[0]?.id ?? null;
-      await this.selectItem(selectedId);
+        : null;
+      if (selectedId) await this.selectItem(selectedId);
+      else this.selectedItemIdSubject.next(null);
     } catch (error) {
       console.error('Failed to load saved Sequence Viewer files', error);
     }
@@ -254,7 +256,14 @@ export class SequenceWorkspaceService {
       item.remoteItemIndex = index;
       item.originalFileName = file.original_name;
       item.contentLoaded = item.type !== 'fastq';
-      if (item.type === 'fastq') item.reads = [];
+      if (item.type === 'fastq') {
+        item.reads = [];
+        item.readPreviewLoaded = false;
+        item.readPreviewLoading = false;
+        item.remoteReadsHasMore = item.stats.readCount > 0;
+        item.loadedReadCount = 0;
+        item.isReadPreview = item.stats.readCount > 0;
+      }
       return item;
     });
   }
@@ -341,8 +350,8 @@ export class SequenceWorkspaceService {
     this.selectedItemIdSubject.next(id);
     if (id) {
       const item = this.itemsSubject.value.find(candidate => candidate.id === id);
-      if (item?.type === 'fastq' && item.remoteFileId && !item.contentLoaded) {
-        await this.loadRemoteFastq(item);
+      if (item?.type === 'fastq' && item.remoteFileId && !item.readPreviewLoaded) {
+        await this.loadRemoteFastqPreview(item);
       }
     }
   }
@@ -466,25 +475,37 @@ export class SequenceWorkspaceService {
     await this.saveItem(doc);
   }
 
-  private async loadRemoteFastq(item: import('../models/sequence.model').FastqDocument) {
+  private async loadRemoteFastqPreview(item: import('../models/sequence.model').FastqDocument) {
+    item.readPreviewLoading = true;
+    this.itemsSubject.next([...this.itemsSubject.value]);
     try {
-      const blob = await this.cloudStorage.download(item.remoteFileId!);
-      const sourceFile = new File([blob], item.originalFileName || item.name);
-      const parsed = await parseFastqFile(sourceFile);
-      parsed.id = item.id;
-      parsed.remoteFileId = item.remoteFileId;
-      parsed.remoteItemIndex = item.remoteItemIndex;
-      parsed.originalFileName = item.originalFileName;
-      parsed.contentLoaded = true;
-      parsed.autoAlign = item.autoAlign;
-      parsed.alignmentState = item.alignmentState;
-      this.suppressRemoteSync = true;
-      await this.saveItem(parsed);
-      this.suppressRemoteSync = false;
+      await this.loadMoreRemoteFastqReads(item);
+      item.readPreviewLoaded = true;
     } catch (error) {
-      this.suppressRemoteSync = false;
-      console.error('Failed to load saved FASTQ file', error);
-      alert('The saved FASTQ file could not be opened. Please try downloading it again.');
+      console.error('Failed to load the FASTQ read preview', error);
+      alert('The first FASTQ reads could not be loaded. Please try again.');
+    } finally {
+      item.readPreviewLoading = false;
+      this.itemsSubject.next([...this.itemsSubject.value]);
+    }
+  }
+
+  async loadMoreRemoteFastqReads(item: import('../models/sequence.model').FastqDocument, limit = 100): Promise<number> {
+    if (!item.remoteFileId || !item.remoteReadsHasMore || this.loadingReadPages.has(item.id)) return 0;
+    this.loadingReadPages.add(item.id);
+    try {
+      const page = await this.cloudStorage.getFastqReads(item.remoteFileId, item.reads.length, limit);
+      const reads = page.reads.map(read => ({
+        ...read,
+        qual: Uint8Array.from(read.qualString, char => Math.max(0, char.charCodeAt(0) - 33)),
+      }));
+      item.reads.push(...reads);
+      item.loadedReadCount = item.reads.length;
+      item.remoteReadsHasMore = page.has_more;
+      item.isReadPreview = page.has_more || item.stats.readCount > item.reads.length;
+      return reads.length;
+    } finally {
+      this.loadingReadPages.delete(item.id);
     }
   }
 

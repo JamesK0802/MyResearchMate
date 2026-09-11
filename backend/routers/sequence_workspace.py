@@ -17,6 +17,7 @@ from database.db import get_db
 from database.models import SequenceWorkspaceFile
 from storage.file_store import personal_tool_dir, read_json, relative_data_path, resolve_data_path, write_json
 from storage.quota import personal_usage, personal_quota
+from utils.fastq_paging import read_fastq_page
 
 
 router = APIRouter(prefix="/sequence-workspace", tags=["sequence-workspace"])
@@ -376,6 +377,33 @@ async def download_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="Stored sequence file is missing")
     return FileResponse(file_path, filename=row.original_name, media_type="application/octet-stream")
+
+
+@router.get("/files/{file_id}/reads")
+async def read_file_reads(
+    file_id: uuid.UUID,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=250),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = get_owned_file(file_id, db, current_user)
+    name = row.original_name.lower()
+    if not name.endswith((".fastq", ".fq", ".fastq.gz", ".fq.gz")):
+        raise HTTPException(status_code=400, detail="Read paging is only available for FASTQ files")
+    file_path = resolve_data_path(row.storage_path) if row.storage_path else user_storage_dir(current_user) / row.stored_name
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Stored sequence file is missing")
+    try:
+        reads, has_more = read_fastq_page(file_path, offset, limit)
+    except (OSError, EOFError, UnicodeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Stored FASTQ file could not be read") from exc
+    return {
+        "reads": reads,
+        "offset": offset,
+        "next_offset": offset + len(reads),
+        "has_more": has_more,
+    }
 
 
 @router.delete("/files/{file_id}")

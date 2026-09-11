@@ -162,7 +162,7 @@ function buildMotifRegex(query: string): RegExp | null {
                 <span class="msa-id-tag ref-tag">REFERENCE ({{ alignedWindowSeq.length }} bp)</span>
               </div>
               <div class="msa-id-row" *ngFor="let read of visibleAlignedReads; let readIndex = index">
-                <span class="mobile-read-index">#{{ readIndex + 1 }}</span>
+                <button type="button" class="mobile-read-index" (click)="showReadInfo(read)">#{{ readIndex + 1 }}</button>
                 <span class="msa-id-tag" [title]="'@' + read.id">{{ '@' + read.id }}</span>
               </div>
             </div>
@@ -232,7 +232,7 @@ function buildMotifRegex(query: string): RegExp | null {
             <div class="raw-ids-column">
               <div class="raw-id-header"><span class="desktop-label">READ ID</span><span class="mobile-label">READ</span></div>
               <div class="raw-id-row" *ngFor="let read of (isAlignedActive ? visibleUnalignedReads : visibleReads); let readIndex = index">
-                <span class="mobile-read-index">#{{ readIndex + 1 }}</span>
+                <button type="button" class="mobile-read-index" (click)="showReadInfo(read)">#{{ readIndex + 1 }}</button>
                 <span class="raw-id-tag" [title]="'@' + read.id">{{ '@' + read.id }}</span>
                 <span
                   class="alignment-failure-badge"
@@ -258,12 +258,27 @@ function buildMotifRegex(query: string): RegExp | null {
         </div>
         
         <div class="load-more" *ngIf="hasMore">
-          <button (click)="loadMore()">Showing {{ visibleReads.length | number }} of {{ filteredReads.length | number }} (Scroll down to auto-load)</button>
+          <button (click)="loadMore()" [disabled]="isLoadingMore">
+            {{ isLoadingMore ? 'Loading reads…' : 'Show next 10' }} ·
+            {{ visibleReads.length | number }} of {{ ((!searchQuery.trim() && document.isReadPreview) ? document.stats.readCount : filteredReads.length) | number }}
+          </button>
         </div>
 
-        <div class="empty-state" *ngIf="visibleReads.length === 0">
+        <div class="read-loading-state" *ngIf="document.readPreviewLoading">
+          <span class="read-loading-spinner"></span>
+          Loading the first reads…
+        </div>
+
+        <div class="empty-state" *ngIf="!document.readPreviewLoading && visibleReads.length === 0">
           No reads found matching "{{ searchQuery }}"
         </div>
+      </div>
+
+      <div class="mobile-read-info" *ngIf="selectedReadInfo" role="dialog" aria-label="Read information">
+        <button type="button" class="read-info-close" (click)="selectedReadInfo = null" aria-label="Close read information">×</button>
+        <span class="read-info-label">READ INFORMATION</span>
+        <strong>{{ selectedReadInfo.id }}</strong>
+        <span>{{ selectedReadInfo.seq.length | number }} bp</span>
       </div>
     </div>
   `,
@@ -786,6 +801,10 @@ function buildMotifRegex(query: string): RegExp | null {
     }
     .load-more button:hover { background: #2563eb; }
     .empty-state { text-align: center; padding: 24px; color: #64748b; }
+    .read-loading-state { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 28px; color: #475569; font-size: .82rem; font-weight: 700; }
+    .read-loading-spinner { width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #16a34a; border-radius: 50%; animation: read-spin .7s linear infinite; }
+    @keyframes read-spin { to { transform: rotate(360deg); } }
+    .mobile-read-info { display: none; }
     .mobile-label,
     .mobile-read-index,
     .mobile-reference-label { display: none; }
@@ -814,7 +833,7 @@ function buildMotifRegex(query: string): RegExp | null {
       .msa-wrapper,
       .raw-table-wrapper { border-radius: 0; border-left: 0; border-right: 0; }
       .msa-ids-column,
-      .raw-ids-column { width: 92px; }
+      .raw-ids-column { width: 58px; }
       .msa-id-header,
       .raw-id-header,
       .msa-id-row,
@@ -825,15 +844,20 @@ function buildMotifRegex(query: string): RegExp | null {
       .mobile-label,
       .mobile-read-index,
       .mobile-reference-label { display: inline; }
-      .mobile-read-index { color: #475569; font: 700 0.7rem/1 system-ui, sans-serif; }
+      .mobile-read-index { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 28px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #2563eb; font: 800 0.7rem/1 system-ui, sans-serif; }
       .mobile-reference-label { color: #2563eb; font: 800 0.68rem/1 system-ui, sans-serif; }
-      .raw-len-badge { margin-left: auto; padding: 1px 4px; font-size: 0.62rem; }
+      .raw-len-badge { display: none; }
       .alignment-failure-badge { display: none; }
       .raw-seq-header,
       .msa-seq-header { padding-left: 8px; font-size: 0.68rem; }
       .raw-seq-row,
       .msa-seq-row { padding-left: 8px; padding-right: 8px; }
       .load-more { padding: 0 8px; }
+      .mobile-read-info { position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 1200; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; padding: 15px 46px 15px 16px; border: 1px solid #93c5fd; border-radius: 12px; background: #fff; box-shadow: 0 14px 38px rgba(15,23,42,.24); }
+      .mobile-read-info strong { grid-column: 1 / -1; overflow-wrap: anywhere; color: #0f172a; font: 700 .78rem/1.35 ui-monospace, monospace; }
+      .mobile-read-info > span:last-child { color: #475569; font-size: .76rem; font-weight: 750; }
+      .read-info-label { color: #2563eb; font-size: .64rem; font-weight: 850; letter-spacing: .08em; }
+      .read-info-close { position: absolute; top: 8px; right: 9px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f5f9; color: #64748b; font-size: 1.2rem; }
     }
   `]
 })
@@ -845,14 +869,14 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
   filteredReads: ProcessedRead[] = [];
   visibleReads: ProcessedRead[] = [];
   searchQuery = '';
-  chunkSize = 100;
+  chunkSize = 10;
   hasMore = false;
   maxPreCutLen = 0;
   refLeadPadding = '';
   cutSiteGuideLeftPx = 0;
   isLoadingMore = false;
 
-  onViewerScroll(event: Event) {
+  async onViewerScroll(event: Event) {
     const el = event.target as HTMLElement;
     if (!el || !this.hasMore || this.isLoadingMore) return;
 
@@ -862,10 +886,11 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
 
     if (height - position < threshold) {
       this.isLoadingMore = true;
-      this.loadMore();
-      setTimeout(() => {
+      try {
+        await this.loadMore();
+      } finally {
         this.isLoadingMore = false;
-      }, 100);
+      }
     }
   }
 
@@ -890,6 +915,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
   scrollLeft = 0;
 
   private currentDocId: string | null = null;
+  selectedReadInfo: ProcessedRead | null = null;
 
   constructor(private sequenceWorkspaceService: SequenceWorkspaceService) {}
 
@@ -914,6 +940,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
         this.alignmentReadOrder = 'aligned';
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
+        this.selectedReadInfo = null;
       }
     }
 
@@ -1328,6 +1355,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
     this.applyFilterAndPagination();
   }
 
+  showReadInfo(read: ProcessedRead) {
+    this.selectedReadInfo = read;
+  }
+
   private applyFilterAndPagination() {
     const q = this.searchQuery ? this.searchQuery.trim().toLowerCase() : '';
     if (!q) {
@@ -1358,13 +1389,25 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
       });
     }
     this.visibleReads = this.filteredReads.slice(0, this.chunkSize);
-    this.hasMore = this.filteredReads.length > this.visibleReads.length;
+    this.hasMore = this.filteredReads.length > this.visibleReads.length
+      || (!q && !!this.document.remoteReadsHasMore);
   }
 
-  loadMore() {
+  async loadMore() {
     const currLen = this.visibleReads.length;
     const nextChunk = this.filteredReads.slice(currLen, currLen + this.chunkSize);
-    this.visibleReads = [...this.visibleReads, ...nextChunk];
-    this.hasMore = this.filteredReads.length > this.visibleReads.length;
+    if (nextChunk.length) {
+      this.visibleReads = [...this.visibleReads, ...nextChunk];
+    } else if (!this.searchQuery.trim() && this.document.remoteReadsHasMore) {
+      const added = await this.sequenceWorkspaceService.loadMoreRemoteFastqReads(this.document);
+      if (added) {
+        const targetVisibleCount = currLen + this.chunkSize;
+        if (this.isAlignedActive) this.reprocessAlignment();
+        else this.initProcessedReads();
+        this.visibleReads = this.filteredReads.slice(0, targetVisibleCount);
+      }
+    }
+    this.hasMore = this.filteredReads.length > this.visibleReads.length
+      || (!this.searchQuery.trim() && !!this.document.remoteReadsHasMore);
   }
 }

@@ -51,4 +51,41 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(component.isAlignedActive).toBe(false);
     expect(saveItem).toHaveBeenCalledTimes(2);
   });
+
+  it('renders reads in groups of ten and requests another server page only after exhausting the local page', async () => {
+    const loadMoreRemoteFastqReads = vi.fn().mockImplementation(async (doc: FastqDocument) => {
+      doc.reads.push({ id: 'remote-read', seq: 'ACGT', qual: [], qualString: 'IIII' });
+      doc.remoteReadsHasMore = false;
+      return 1;
+    });
+    const component = new FastqViewerComponent({ saveItem: vi.fn(), loadMoreRemoteFastqReads } as any);
+    component.document = document();
+    component.document.reads = Array.from({ length: 12 }, (_, index) => ({
+      id: `read-${index + 1}`,
+      seq: 'AACCGG',
+      qual: [],
+      qualString: 'IIIIII'
+    }));
+    component.document.remoteReadsHasMore = true;
+    (component as any).initProcessedReads();
+
+    expect(component.visibleReads).toHaveLength(10);
+    await component.loadMore();
+    expect(component.visibleReads).toHaveLength(12);
+    expect(loadMoreRemoteFastqReads).not.toHaveBeenCalled();
+
+    await component.loadMore();
+    expect(loadMoreRemoteFastqReads).toHaveBeenCalledOnce();
+    expect(component.visibleReads).toHaveLength(13);
+  });
+
+  it('exposes the full read identifier and length from a mobile read number', () => {
+    const component = new FastqViewerComponent({ saveItem: vi.fn() } as any);
+    const read = { id: 'full-read-name', seq: 'AACCGG', isAligned: false };
+
+    component.showReadInfo(read);
+
+    expect(component.selectedReadInfo).toBe(read);
+    expect(component.selectedReadInfo?.seq.length).toBe(6);
+  });
 });

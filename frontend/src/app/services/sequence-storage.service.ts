@@ -18,6 +18,13 @@ export interface StoredSequenceFile {
   updated_at: string | null;
 }
 
+export interface FastqReadPage {
+  reads: Array<{ id: string; seq: string; qualString: string }>;
+  offset: number;
+  next_offset: number;
+  has_more: boolean;
+}
+
 interface SequenceUploadSession {
   upload_id: string;
   chunk_size: number;
@@ -104,6 +111,13 @@ export class SequenceStorageService {
     return firstValueFrom(this.http.get(`${this.apiUrl}/files/${fileId}/download`, {
       headers: await this.headers(),
       responseType: 'blob',
+    }));
+  }
+
+  async getFastqReads(fileId: string, offset: number, limit = 100): Promise<FastqReadPage> {
+    return firstValueFrom(this.http.get<FastqReadPage>(`${this.apiUrl}/files/${fileId}/reads`, {
+      headers: await this.headers(),
+      params: { offset, limit },
     }));
   }
 
