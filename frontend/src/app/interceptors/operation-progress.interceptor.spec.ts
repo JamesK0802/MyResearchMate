@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { operationLabel } from './operation-progress.interceptor';
 
 describe('operationLabel', () => {
-  it('identifies server backup and restore work', () => {
-    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/backups', {}))).toBe('Creating full server backup');
-    expect(operationLabel(new HttpRequest('DELETE', '/api/server-admin/backups/my-lab-mate-backup-test.tar.gz'))).toBe('Deleting server backup');
-    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/restore', new FormData()))).toBe('Restoring server backup');
-    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/cleanup', {}))).toBe('Backing up and cleaning server data');
+  it('leaves server mutations to the persistent Admin status card', () => {
+    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/backups', {}))).toBeNull();
+    expect(operationLabel(new HttpRequest('DELETE', '/api/server-admin/backups/my-lab-mate-backup-test.tar.gz'))).toBeNull();
+    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/restore', new FormData()))).toBeNull();
+    expect(operationLabel(new HttpRequest('POST', '/api/server-admin/cleanup', {}))).toBeNull();
   });
 
   it('identifies archive and sequence uploads', () => {

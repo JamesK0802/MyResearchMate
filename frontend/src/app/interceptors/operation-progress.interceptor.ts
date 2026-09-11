@@ -5,10 +5,12 @@ import { OperationProgressService } from '../services/operation-progress.service
 
 export function operationLabel(request: Pick<HttpRequest<unknown>, 'method' | 'url' | 'body' | 'responseType'>): string | null {
   const url = request.url.toLowerCase();
-  if (url.includes('/server-admin/restore')) return 'Restoring server backup';
-  if (url.includes('/server-admin/cleanup')) return 'Backing up and cleaning server data';
-  if (url.includes('/server-admin/backups/') && request.method === 'DELETE') return 'Deleting server backup';
-  if (url.includes('/server-admin/backups') && request.method === 'POST') return 'Creating full server backup';
+  const isServerAdminMutation = url.includes('/server-admin/') &&
+    (request.method === 'POST' || request.method === 'DELETE') &&
+    (url.includes('/restore') || url.includes('/cleanup') || url.includes('/backups'));
+  // Owner server operations already have a persistent, stage-aware status card.
+  // A request-scoped popup duplicates it and becomes stale after navigation.
+  if (isServerAdminMutation) return null;
   if (url.includes('deployment-update')) return 'Updating application server';
   if (url.includes('/lab-archive/') && (request.body instanceof FormData || url.includes('/upload'))) return 'Uploading to Lab Archive';
   if (url.includes('/sequence-workspace/files') && request.method === 'POST') return 'Uploading to Sequence Viewer';

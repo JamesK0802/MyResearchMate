@@ -1,5 +1,5 @@
 <div class="status error" *ngIf="error">{{ error }}</div>
-<div class="status notice" *ngIf="notice">{{ notice }}</div>
+<div class="status notice" *ngIf="notice && !serverOperation.active">{{ notice }}</div>
 <section class="server-operation-status" *ngIf="serverOperation.active" role="status" aria-live="polite">
   <div><span>Server operation</span><strong>{{ serverOperation.label }}</strong><small>{{ serverOperation.stage }}</small></div>
   <b>{{ operationElapsed() }}</b>
