@@ -703,3 +703,85 @@ a { color: inherit; }
     transform: none !important;
   }
 }
+
+/* Owner server operations remain visible after navigation or page reload. */
+.server-operation-status {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  padding: 13px 14px 11px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 12px;
+  background: var(--color-primary-subtle);
+  color: var(--color-text-primary);
+}
+
+.server-operation-status div > span,
+.server-operation-status div > strong,
+.server-operation-status div > small {
+  display: block;
+}
+
+.server-operation-status div > span {
+  color: var(--color-primary);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.server-operation-status div > strong {
+  margin-top: 2px;
+  font-size: 0.9rem;
+}
+
+.server-operation-status div > small,
+.server-operation-status p {
+  color: var(--color-text-secondary);
+  font-size: 0.69rem;
+}
+
+.server-operation-status div > small {
+  margin-top: 3px;
+}
+
+.server-operation-status > b {
+  color: var(--color-primary);
+  font-size: 0.82rem;
+}
+
+.server-operation-status > i {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 7px;
+  overflow: hidden;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.server-operation-status > i > em {
+  position: absolute;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #22c55e);
+  animation: server-operation-slide 1.2s ease-in-out infinite;
+}
+
+.server-operation-status p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+
+@keyframes server-operation-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(360%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .server-operation-status > i > em { animation-duration: 2.5s; }
+}

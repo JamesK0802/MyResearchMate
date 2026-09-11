@@ -20,6 +20,14 @@ export interface DatabaseTableSummary {
   columns: { name: string; type: string; nullable: boolean; primary_key: boolean; managed: boolean }[];
 }
 
+export interface ServerOperationStatus {
+  active: boolean;
+  kind?: 'backup' | 'restore' | 'cleanup' | 'delete';
+  label?: string;
+  stage?: string;
+  started_at?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ServerAdminService {
   private readonly apiUrl = '/api/server-admin';
@@ -45,6 +53,10 @@ export class ServerAdminService {
 
   async listBackups(): Promise<ServerDataEntry[]> {
     return firstValueFrom(this.http.get<ServerDataEntry[]>(`${this.apiUrl}/backups`, { headers: await this.headers() }));
+  }
+
+  async operationStatus(): Promise<ServerOperationStatus> {
+    return firstValueFrom(this.http.get<ServerOperationStatus>(`${this.apiUrl}/operation-status`, { headers: await this.headers() }));
   }
 
   async createBackup(): Promise<ServerDataEntry> {

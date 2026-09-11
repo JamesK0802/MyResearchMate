@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DatabaseTableSummary, ServerAdminService, ServerDataEntry } from '../../services/server-admin.service';
+import { DatabaseTableSummary, ServerAdminService, ServerDataEntry, ServerOperationStatus } from '../../services/server-admin.service';
 
 @Component({
   selector: 'app-owner-server-admin',
@@ -24,6 +24,9 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   backups: ServerDataEntry[] = [];
   restoreFile: File | null = null;
   deletingBackupName = '';
+  serverOperation: ServerOperationStatus = { active: false };
+  private operationStatusLoading = false;
+  private operationPollTimer: number | null = null;
   tables: DatabaseTableSummary[] = [];
   selectedTable = '';
   preview: any = null;
@@ -40,6 +43,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   constructor(public server: ServerAdminService, private cdr: ChangeDetectorRef, private destroyRef: DestroyRef) {}
 
   get loading(): boolean { return this.dataLoading || this.backupsLoading || this.databaseLoading; }
+  get serverBusy(): boolean { return this.actionBusy || this.serverOperation.active; }
   get managedTableCount(): number { return this.tables.filter(table => table.managed).length; }
   get legacyTableCount(): number { return this.tables.filter(table => !table.managed).length; }
   get emptyTableCount(): number { return this.tables.filter(table => table.row_count === 0).length; }
@@ -55,7 +59,14 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
     return this.selectedDataRoots.size + this.selectedLegacyTables.size + this.selectedLegacyColumns.size;
   }
 
-  ngOnInit(): void { this.loadCurrentView(); }
+  ngOnInit(): void {
+    this.loadCurrentView();
+    void this.loadServerOperation();
+    this.operationPollTimer = window.setInterval(() => void this.loadServerOperation(), 2000);
+    this.destroyRef.onDestroy(() => {
+      if (this.operationPollTimer !== null) window.clearInterval(this.operationPollTimer);
+    });
+  }
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['view']?.firstChange) this.loadCurrentView();
   }
@@ -90,6 +101,36 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
     finally { this.backupsLoading = false; this.syncView(); }
   }
 
+  async loadServerOperation(): Promise<void> {
+    if (this.operationStatusLoading) return;
+    this.operationStatusLoading = true;
+    const wasActive = this.serverOperation.active;
+    try {
+      this.serverOperation = await this.server.operationStatus();
+      if (wasActive && !this.serverOperation.active && this.view === 'data') {
+        await Promise.all([this.loadBackups(), this.loadData(this.path), this.loadRootDirectories()]);
+      }
+    } catch {
+      // The inspector remains usable when status polling is temporarily unavailable.
+    } finally {
+      this.operationStatusLoading = false;
+      this.syncView();
+    }
+  }
+
+  operationElapsed(): string {
+    if (!this.serverOperation.started_at) return '';
+    const seconds = Math.max(1, Math.floor((Date.now() - new Date(this.serverOperation.started_at).getTime()) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
+
+  private async showActionError(error: any, fallback: string): Promise<void> {
+    await this.loadServerOperation();
+    this.notice = '';
+    this.error = this.serverOperation.active ? '' : this.message(error, fallback);
+  }
+
   open(entry: ServerDataEntry): void {
     if (entry.kind === 'directory') this.loadData(entry.path);
     else this.server.downloadData(entry).catch(error => this.error = this.message(error, 'Could not download this file.'));
@@ -106,7 +147,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
       const backup = await this.server.createBackup();
       this.notice = `Backup created: ${backup.name}`;
       await this.loadBackups();
-    } catch (error: any) { this.notice = ''; this.error = this.message(error, 'Backup failed.'); }
+    } catch (error: any) { await this.showActionError(error, 'Backup failed.'); }
     finally { this.actionBusy = false; this.syncView(); }
   }
 
@@ -124,7 +165,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
       this.notice = `${result.message} Safety backup: ${result.safety_backup}`;
       this.restoreFile = null;
       await Promise.all([this.loadBackups(), this.loadData('')]);
-    } catch (error: any) { this.notice = ''; this.error = this.message(error, 'Restore failed. Current files may require checking.'); }
+    } catch (error: any) { await this.showActionError(error, 'Restore failed. Current files may require checking.'); }
     finally { this.actionBusy = false; this.syncView(); }
   }
 
@@ -136,7 +177,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
       this.backups = this.backups.filter(item => item.name !== backup.name);
       this.notice = `Backup deleted: ${backup.name}`;
     } catch (error: any) {
-      this.notice = ''; this.error = this.message(error, 'The backup could not be deleted.');
+      await this.showActionError(error, 'The backup could not be deleted.');
     } finally {
       this.actionBusy = false; this.deletingBackupName = ''; this.syncView();
     }
@@ -199,7 +240,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
       this.notice = `${result.message} Safety backup: ${result.safety_backup}`;
       this.selectedDataRoots.clear(); this.selectedLegacyTables.clear(); this.selectedLegacyColumns.clear();
       await this.loadCurrentView();
-    } catch (error: any) { this.notice = ''; this.error = this.message(error, 'Cleanup failed. Nothing was removed unless a safety backup completed.'); }
+    } catch (error: any) { await this.showActionError(error, 'Cleanup failed. Nothing was removed unless a safety backup completed.'); }
     finally { this.actionBusy = false; this.syncView(); }
   }
   private toggleSet(values: Set<string>, value: string): void {

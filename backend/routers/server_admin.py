@@ -35,12 +35,43 @@ BACKUP_PATTERN = re.compile(r"^my-lab-mate-backup-[A-Za-z0-9_-]+\.tar\.gz$")
 EXCLUDED_DATA_NAMES = {"server-backups", "deployment-update"}
 MAX_RESTORE_BYTES = int(os.getenv("SERVER_BACKUP_MAX_BYTES", str(50 * 1024**3)))
 _migration_lock = threading.RLock()
+_operation_lock = threading.Lock()
+_operation_state: dict[str, Any] = {"active": False}
 APP_TABLE_NAMES = frozenset(table.name for table in Base.metadata.sorted_tables)
 APP_TABLE_COLUMNS = {
     table.name: frozenset(column.name for column in table.columns)
     for table in Base.metadata.sorted_tables
 }
 MANAGED_DATA_ROOTS = frozenset({"personal", "lab", "server-backups", "deployment-update"})
+
+
+def _start_operation(kind: str, label: str, stage: str) -> None:
+    with _operation_lock:
+        _operation_state.clear()
+        _operation_state.update({
+            "active": True,
+            "kind": kind,
+            "label": label,
+            "stage": stage,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+
+def _update_operation(stage: str) -> None:
+    with _operation_lock:
+        if _operation_state.get("active"):
+            _operation_state["stage"] = stage
+
+
+def _finish_operation() -> None:
+    with _operation_lock:
+        _operation_state.clear()
+        _operation_state["active"] = False
+
+
+def _operation_snapshot() -> dict[str, Any]:
+    with _operation_lock:
+        return dict(_operation_state)
 
 
 class DatabaseColumnCleanup(BaseModel):
@@ -209,8 +240,10 @@ def _create_backup(owner: dict) -> dict[str, Any]:
         temp = Path(temp_name)
         payload = temp / "payload"
         payload.mkdir()
+        _update_operation("Copying server environment and data folder")
         shutil.copy2(ENV_FILE, payload / ".env")
         _copy_data_for_backup(payload / "data")
+        _update_operation("Exporting PostgreSQL database")
         _run_postgres_tool([
             "pg_dump", "--format=custom", "--no-owner", "--no-acl",
             "--file", str(payload / "database.dump"),
@@ -226,6 +259,7 @@ def _create_backup(owner: dict) -> dict[str, Any]:
         (payload / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         temporary_archive = BACKUP_ROOT / f".{name}.{uuid.uuid4().hex}.tmp"
         try:
+            _update_operation("Compressing backup archive")
             with tarfile.open(temporary_archive, "w:gz") as archive:
                 for child in payload.iterdir():
                     archive.add(child, arcname=child.name, recursive=True)
@@ -339,6 +373,11 @@ def download_data_file(path: str, _owner: dict = Depends(require_owner)):
     return FileResponse(file_path, filename=file_path.name)
 
 
+@router.get("/operation-status")
+def operation_status(_owner: dict = Depends(require_owner)):
+    return _operation_snapshot()
+
+
 @router.get("/database/tables")
 def list_database_tables(_owner: dict = Depends(require_owner)):
     inspector = inspect(engine)
@@ -394,6 +433,7 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
         raise HTTPException(status_code=400, detail="Select at least one legacy item")
     if not _migration_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Another server backup, restore, or cleanup is already running")
+    _start_operation("cleanup", "Cleaning legacy server data", "Checking selected legacy items")
     try:
         inspector = inspect(engine)
         live_tables = set(inspector.get_table_names(schema="public"))
@@ -416,7 +456,9 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
         for root_name in set(payload.data_roots):
             data_paths.append(_cleanup_data_root_path(root_name))
 
+        _update_operation("Creating complete safety backup")
         safety_backup = _create_backup(owner)
+        _update_operation("Removing legacy database objects")
         quote = engine.dialect.identifier_preparer.quote
         with engine.begin() as connection:
             for table_name, column_name in requested_columns:
@@ -425,6 +467,7 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
                 targets = ", ".join(f"public.{quote(name)}" for name in sorted(requested_tables))
                 connection.execute(text(f"DROP TABLE {targets}"))
 
+        _update_operation("Removing legacy data folders")
         for path in data_paths:
             if path.is_symlink():
                 path.unlink()
@@ -441,6 +484,7 @@ def cleanup_server(payload: ServerCleanupRequest, owner: dict = Depends(require_
             },
         }
     finally:
+        _finish_operation()
         _migration_lock.release()
 
 
@@ -455,9 +499,11 @@ def list_backups(_owner: dict = Depends(require_owner)):
 def create_backup(owner: dict = Depends(require_owner)):
     if not _migration_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Another server backup or restore is already running")
+    _start_operation("backup", "Creating full server backup", "Preparing backup")
     try:
         return _create_backup(owner)
     finally:
+        _finish_operation()
         _migration_lock.release()
 
 
@@ -476,11 +522,13 @@ def delete_backup(name: str, _owner: dict = Depends(require_owner)):
         raise HTTPException(status_code=404, detail="Backup not found")
     if not _migration_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Another server backup, restore, or cleanup is already running")
+    _start_operation("delete", "Deleting server backup", f"Removing {name}")
     try:
         path.unlink()
     except OSError as exc:
         raise HTTPException(status_code=500, detail="The backup could not be deleted") from exc
     finally:
+        _finish_operation()
         _migration_lock.release()
     return {"deleted": True, "name": name}
 
@@ -494,6 +542,7 @@ def restore_backup(archive: UploadFile = File(...), confirmation: str = Form(...
 
     if not _migration_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Another server backup or restore is already running")
+    _start_operation("restore", "Restoring server backup", "Reading uploaded backup")
     try:
         with tempfile.TemporaryDirectory(prefix="mrm-restore-") as temp_name:
             temp = Path(temp_name)
@@ -507,22 +556,28 @@ def restore_backup(archive: UploadFile = File(...), confirmation: str = Form(...
                     target.write(chunk)
             extracted = temp / "extracted"
             extracted.mkdir()
+            _update_operation("Validating and extracting backup")
             manifest = _extract_archive(upload_path, extracted)
+            _update_operation("Creating safety backup of current server")
             safety_backup = _create_backup(owner)
 
             engine.dispose()
+            _update_operation("Restoring PostgreSQL database")
             _run_postgres_tool([
                 "pg_restore", "--clean", "--if-exists", "--no-owner", "--no-acl",
                 "--exit-on-error", str(extracted / "database.dump"),
             ])
+            _update_operation("Replacing server data folder")
             _replace_data(extracted / "data")
             try:
+                _update_operation("Applying restored server environment")
                 with ENV_FILE.open("wb") as target:
                     target.write((extracted / ".env").read_bytes())
             except OSError as exc:
                 raise HTTPException(status_code=500, detail="Database and data were restored, but the environment file could not be replaced") from exc
             engine.dispose()
     finally:
+        _finish_operation()
         _migration_lock.release()
     return {
         "restored": True,

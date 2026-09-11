@@ -1,21 +1,27 @@
 <div class="status error" *ngIf="error">{{ error }}</div>
 <div class="status notice" *ngIf="notice">{{ notice }}</div>
+<section class="server-operation-status" *ngIf="serverOperation.active" role="status" aria-live="polite">
+  <div><span>Server operation</span><strong>{{ serverOperation.label }}</strong><small>{{ serverOperation.stage }}</small></div>
+  <b>{{ operationElapsed() }}</b>
+  <i aria-hidden="true"><em></em></i>
+  <p>This operation continues on the server if this page is refreshed or closed.</p>
+</section>
 
 <ng-container *ngIf="view === 'data'">
   <div class="server-summary-grid">
     <section class="migration-card">
       <div class="migration-copy"><span class="eyebrow">Server migration</span><h2>Backup & restore</h2><p>Includes .env, PostgreSQL, and the complete data folder.</p></div>
       <div class="migration-actions">
-        <button class="primary" (click)="createBackup()" [disabled]="actionBusy">{{ actionBusy ? 'Working…' : 'Create backup' }}</button>
-        <label class="file-picker"><span>{{ restoreFile?.name || 'Choose backup' }}</span><input type="file" accept=".gz,application/gzip" (change)="chooseRestore($event)" [disabled]="actionBusy"></label>
-        <button class="danger" (click)="restore()" [disabled]="actionBusy || !restoreFile">Restore</button>
+        <button class="primary" (click)="createBackup()" [disabled]="serverBusy">{{ serverBusy ? 'Server busy…' : 'Create backup' }}</button>
+        <label class="file-picker"><span>{{ restoreFile?.name || 'Choose backup' }}</span><input type="file" accept=".gz,application/gzip" (change)="chooseRestore($event)" [disabled]="serverBusy"></label>
+        <button class="danger" (click)="restore()" [disabled]="serverBusy || !restoreFile">Restore</button>
       </div>
       <p class="restart-note">Restore creates a safety backup first. Restart afterward to apply restored environment settings.</p>
     </section>
 
     <section class="panel backups-panel">
       <div class="panel-heading"><div><span class="eyebrow">Saved on server</span><h2>Backups <small>{{ backups.length }}</small></h2></div><button class="quiet icon-button" (click)="loadBackups()" [disabled]="backupsLoading" aria-label="Refresh backups">↻</button></div>
-      <div class="backup-list" *ngIf="backups.length; else noBackups"><div class="backup-row" *ngFor="let backup of backups"><div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'short' }}</small></div><span class="backup-actions"><button class="quiet" (click)="server.downloadBackup(backup)" [disabled]="actionBusy">Download</button><button class="danger backup-delete" (click)="deleteBackup(backup)" [disabled]="actionBusy">{{ deletingBackupName === backup.name ? 'Deleting…' : 'Delete' }}</button></span></div></div>
+      <div class="backup-list" *ngIf="backups.length; else noBackups"><div class="backup-row" *ngFor="let backup of backups"><div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'short' }}</small></div><span class="backup-actions"><button class="quiet" (click)="server.downloadBackup(backup)" [disabled]="serverBusy">Download</button><button class="danger backup-delete" (click)="deleteBackup(backup)" [disabled]="serverBusy">{{ deletingBackupName === backup.name ? 'Deleting…' : 'Delete' }}</button></span></div></div>
       <ng-template #noBackups><p class="empty">{{ backupsLoading ? 'Loading backups…' : 'No server backups yet.' }}</p></ng-template>
     </section>
   </div>
@@ -48,7 +54,7 @@
     </div>
   </section>
 
-  <div class="cleanup-bar" *ngIf="selectedDataRoots.size"><div><strong>{{ selectedDataRoots.size }} legacy folder(s) selected</strong><span>A full backup is created before removal.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="actionBusy">Back up & remove</button></div>
+  <div class="cleanup-bar" *ngIf="selectedDataRoots.size"><div><strong>{{ selectedDataRoots.size }} legacy folder(s) selected</strong><span>A full backup is created before removal.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="serverBusy">Back up & remove</button></div>
 </ng-container>
 
 <ng-container *ngIf="view === 'database'">
@@ -85,5 +91,5 @@
     </section>
   </div>
 
-  <div class="cleanup-bar" *ngIf="selectedLegacyTables.size || selectedLegacyColumns.size"><div><strong>{{ selectedLegacyTables.size }} table(s), {{ selectedLegacyColumns.size }} column(s) selected</strong><span>Only objects absent from the application schema can be removed. A full backup is created first.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="actionBusy">Back up & remove</button></div>
+  <div class="cleanup-bar" *ngIf="selectedLegacyTables.size || selectedLegacyColumns.size"><div><strong>{{ selectedLegacyTables.size }} table(s), {{ selectedLegacyColumns.size }} column(s) selected</strong><span>Only objects absent from the application schema can be removed. A full backup is created first.</span></div><button class="danger solid" (click)="cleanupSelected()" [disabled]="serverBusy">Back up & remove</button></div>
 </ng-container>
