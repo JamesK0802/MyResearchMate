@@ -77,7 +77,7 @@ export interface AlignmentDocument {
 export interface FastqRead {
   id: string;
   seq: string;
-  qual: number[];
+  qual: number[] | Uint8Array;
   qualString: string;
 }
 
@@ -106,6 +106,8 @@ export interface FastqDocument {
   description: string;
   reads: FastqRead[];
   stats: FastqStats;
+  isReadPreview?: boolean;
+  loadedReadCount?: number;
   createdTimestamp: number;
   updatedTimestamp: number;
   fileHandle?: any;

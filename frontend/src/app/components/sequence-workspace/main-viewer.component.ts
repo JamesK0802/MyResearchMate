@@ -20,6 +20,7 @@ import { FastqViewerComponent } from './fastq-viewer.component';
             <span class="doc-badge fastq-badge" *ngIf="item.type === 'fastq'">FASTQ</span>
             <span class="doc-badge seq-badge" *ngIf="item.type === 'sequence'">SEQ</span>
             <span class="doc-meta-text" *ngIf="item.type === 'fastq'">{{ item.stats.readCount | number }} reads</span>
+            <span class="doc-preview-note" *ngIf="item.type === 'fastq' && item.isReadPreview">Viewing first {{ item.loadedReadCount | number }}</span>
             <span class="doc-meta-text" *ngIf="item.type === 'sequence'">{{ item.topology }} • {{ item.sequence.length }} bp</span>
           </div>
 
@@ -133,6 +134,12 @@ import { FastqViewerComponent } from './fastq-viewer.component';
       font-size: 0.8rem;
       color: #64748b;
       font-weight: 500;
+      white-space: nowrap;
+    }
+    .doc-preview-note {
+      color: #9a6700;
+      font-size: 0.72rem;
+      font-weight: 700;
       white-space: nowrap;
     }
 

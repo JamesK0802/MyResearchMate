@@ -1,5 +1,7 @@
 import { SequenceDocument, SequenceFeature, Topology, Strand, FastqDocument, FastqRead, FastqStats } from '../models/sequence.model';
-import * as fflate from 'fflate';
+import { parseFastqFileInBatches } from '../workers/core/fastq-parser';
+
+const MAX_VIEWER_FASTQ_READS = 25_000;
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 9);
@@ -233,56 +235,86 @@ export function calculateFastqStats(reads: FastqRead[]): FastqStats {
 }
 
 export async function parseFastqFile(file: File): Promise<FastqDocument> {
-  const isGz = file.name.endsWith('.gz');
-  const buffer = await file.arrayBuffer();
-  let text = '';
-
-  if (isGz) {
-    const decompressed = fflate.gunzipSync(new Uint8Array(buffer));
-    text = fflate.strFromU8(decompressed);
-  } else {
-    text = new TextDecoder().decode(buffer);
-  }
-
-  const lines = text.split(/\r?\n/);
   const reads: FastqRead[] = [];
-  
-  let i = 0;
-  while (i < lines.length) {
-    if (lines[i].trim() === '') {
-      i++;
-      continue;
+  let readCount = 0;
+  let minLength = Infinity;
+  let maxLength = 0;
+  let totalLength = 0;
+  let totalGC = 0;
+  let totalQuality = 0;
+  let totalBases = 0;
+  const lengthDistribution: Record<number, number> = {};
+  const qualityDistribution: Record<number, number> = {};
+
+  await parseFastqFileInBatches(file, batch => {
+    for (const read of batch) {
+      const seq = read.seq;
+      const length = seq.length;
+      if (!length) continue;
+      readCount++;
+      minLength = Math.min(minLength, length);
+      maxLength = Math.max(maxLength, length);
+      totalLength += length;
+      const lengthBucket = Math.floor(length / 10) * 10;
+      lengthDistribution[lengthBucket] = (lengthDistribution[lengthBucket] || 0) + 1;
+
+      let gc = 0;
+      for (let index = 0; index < length; index++) {
+        const base = seq[index];
+        if (base === 'G' || base === 'C' || base === 'g' || base === 'c') gc++;
+      }
+      totalGC += (gc / length) * 100;
+
+      for (const quality of read.qual) {
+        totalQuality += quality;
+        const qualityBucket = Math.floor(quality / 2) * 2;
+        qualityDistribution[qualityBucket] = (qualityDistribution[qualityBucket] || 0) + 1;
+      }
+      totalBases += length;
+
+      if (reads.length < MAX_VIEWER_FASTQ_READS) {
+        let qualString = '';
+        for (const quality of read.qual) qualString += String.fromCharCode(quality + 33);
+        reads.push({
+          id: (read.id || `read-${readCount}`).replace(/^@/, '').split(/\s+/)[0],
+          seq,
+          qual: read.qual instanceof Uint8Array ? read.qual : Uint8Array.from(read.qual),
+          qualString,
+        });
+      }
     }
+  });
 
-    if (!lines[i].startsWith('@')) {
-      i++;
-      continue;
-    }
-
-    if (i + 3 >= lines.length) break;
-
-    const id = lines[i].substring(1).split(/\s+/)[0]; // get ID part
-    const seq = lines[i + 1].trim();
-    const qualString = lines[i + 3].trim();
-    
-    const qual: number[] = [];
-    for (let j = 0; j < qualString.length; j++) {
-      qual.push(qualString.charCodeAt(j) - 33);
-    }
-
-    reads.push({ id, seq, qual, qualString });
-    i += 4;
-  }
-
-  const stats = calculateFastqStats(reads);
+  const stats: FastqStats = readCount ? {
+    readCount,
+    avgLength: totalLength / readCount,
+    minLength: minLength === Infinity ? 0 : minLength,
+    maxLength,
+    avgGC: totalGC / readCount,
+    avgQuality: totalBases ? totalQuality / totalBases : 0,
+    lengthDistribution,
+    qualityDistribution,
+  } : {
+    readCount: 0,
+    avgLength: 0,
+    minLength: 0,
+    maxLength: 0,
+    avgGC: 0,
+    avgQuality: 0,
+    lengthDistribution: {},
+    qualityDistribution: {},
+  };
+  const isReadPreview = readCount > reads.length;
 
   return {
     type: 'fastq',
     id: generateId(),
     name: file.name,
-    description: `Imported FASTQ with ${reads.length} reads`,
+    description: `Imported FASTQ with ${readCount} reads${isReadPreview ? ` (showing first ${reads.length})` : ''}`,
     reads,
     stats,
+    isReadPreview,
+    loadedReadCount: reads.length,
     createdTimestamp: Date.now(),
     updatedTimestamp: Date.now()
   };
