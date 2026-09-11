@@ -1,10 +1,11 @@
 import json
 import logging
 import os
+import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -105,6 +106,12 @@ class SequenceUploadInit(BaseModel):
     filename: str
     size_bytes: int
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class AlignmentPagePayload(BaseModel):
+    alignment_id: uuid.UUID
+    offset: int = Field(ge=0)
+    results: list[dict[str, Any]] = Field(max_length=250)
 
 
 @router.get("/usage")
@@ -384,6 +391,7 @@ async def read_file_reads(
     file_id: uuid.UUID,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=250),
+    alignment_id: Optional[uuid.UUID] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -398,12 +406,45 @@ async def read_file_reads(
         reads, has_more = read_fastq_page(file_path, offset, limit)
     except (OSError, EOFError, UnicodeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="Stored FASTQ file could not be read") from exc
+    if alignment_id:
+        page_path = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(alignment_id) / f"{offset}.json"
+        page = read_json(relative_data_path(page_path), {})
+        results = page.get("results", []) if isinstance(page, dict) else []
+        for read, result in zip(reads, results):
+            if isinstance(result, dict):
+                read["alignment"] = result
     return {
         "reads": reads,
         "offset": offset,
         "next_offset": offset + len(reads),
         "has_more": has_more,
     }
+
+
+@router.put("/files/{file_id}/alignment-pages")
+async def save_alignment_page(
+    file_id: uuid.UUID,
+    payload: AlignmentPagePayload,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = get_owned_file(file_id, db, current_user)
+    page_path = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(payload.alignment_id) / f"{payload.offset}.json"
+    write_json(page_path, {"results": payload.results})
+    return {"ok": True, "count": len(payload.results)}
+
+
+@router.delete("/files/{file_id}/alignments/{alignment_id}")
+async def delete_alignment_cache(
+    file_id: uuid.UUID,
+    alignment_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = get_owned_file(file_id, db, current_user)
+    cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(alignment_id)
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    return {"ok": True}
 
 
 @router.delete("/files/{file_id}")
@@ -419,4 +460,6 @@ async def delete_file(
     file_path.unlink(missing_ok=True)
     metadata_path = personal_tool_dir(current_user, "sequence-viewer") / "metadata" / f"{row.id}.json"
     metadata_path.unlink(missing_ok=True)
+    alignment_path = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id)
+    shutil.rmtree(alignment_path, ignore_errors=True)
     return {"ok": True}

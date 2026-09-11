@@ -79,6 +79,22 @@ export interface FastqRead {
   seq: string;
   qual: number[] | Uint8Array;
   qualString: string;
+  alignment?: FastqCachedAlignment;
+}
+
+export interface FastqCachedAlignment {
+  isAligned: boolean;
+  category?: string;
+  netIndel?: number;
+  hasSub?: boolean;
+  grid?: Array<{ char: string; type: 'equal' | 'substitute' | 'delete' | 'unobserved'; insertion?: string }>;
+  gridChars?: string;
+  gridTypes?: string;
+  gridInsertions?: Record<number, string>;
+  preWinSeq?: string;
+  postWinSeq?: string;
+  isRc?: boolean;
+  alignmentFailureReason?: string;
 }
 
 export interface FastqStats {
@@ -109,6 +125,10 @@ export interface FastqAlignmentState {
   alignedWindowSeq: string;
   alignedCutSiteInWindow: number;
   readOrder: 'aligned' | 'unaligned';
+  cacheId?: string;
+  processedReadCount?: number;
+  alignedCount?: number;
+  unalignedCount?: number;
   updatedTimestamp: number;
 }
 

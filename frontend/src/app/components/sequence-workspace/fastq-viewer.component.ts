@@ -1,7 +1,7 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FastqAlignmentState, FastqDocument } from '../../models/sequence.model';
+import { FastqAlignmentState, FastqCachedAlignment, FastqDocument, FastqRead } from '../../models/sequence.model';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { isReadUsable, findGrnaCutSite, extractWindow, cutIndexInWindow, reverseComplement } from '../../workers/core/classifier';
 import { classifyMutationWithAlignment, AlignmentToken } from '../../workers/core/analyzer';
@@ -148,8 +148,14 @@ function buildMotifRegex(query: string): RegExp | null {
           </div>
 
           <div class="align-panel-actions">
-            <button type="button" class="btn-run-align" (click)="runAlign()">Run Alignment & Center Cut Sites</button>
-            <button type="button" class="btn-reset-align" (click)="resetAlign()" *ngIf="isAlignedActive">Reset Alignment</button>
+            <button type="button" class="btn-run-align" (click)="runAlign()" [disabled]="isAligning">
+              {{ isAligning ? 'Aligning & saving…' : 'Run Alignment & Center Cut Sites' }}
+            </button>
+            <button type="button" class="btn-reset-align" (click)="resetAlign()" [disabled]="isAligning" *ngIf="isAlignedActive">Reset Alignment</button>
+          </div>
+          <div class="alignment-progress" *ngIf="isAligning" aria-live="polite">
+            <div class="alignment-progress-copy"><span>{{ alignmentStatus }}</span><strong>{{ alignmentProgress | number:'1.0-0' }}%</strong></div>
+            <div class="alignment-progress-track"><span [style.width.%]="alignmentProgress"></span></div>
           </div>
         </div>
 
@@ -469,6 +475,10 @@ function buildMotifRegex(query: string): RegExp | null {
     .btn-reset-align {
       padding: 6px 14px; background: #ef4444; color: #ffffff; font-weight: 600; border: none; border-radius: 5px; cursor: pointer; font-size: 0.8rem;
     }
+    .alignment-progress { margin-top: 10px; }
+    .alignment-progress-copy { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 5px; color: #475569; font-size: .74rem; font-weight: 700; }
+    .alignment-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: #dbe5ef; }
+    .alignment-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#2563eb,#16a34a); transition: width .18s ease; }
 
     /* ── Unified Multi-Sequence Alignment Block ── */
     .alignment-results {
@@ -902,6 +912,9 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   inputWinSize = 90;
 
   isAlignedActive = false;
+  isAligning = false;
+  alignmentProgress = 0;
+  alignmentStatus = '';
   alignedWindowSeq = '';
   alignedCutSiteInWindow = -1;
   alignedStats = { total: 0, alignedCount: 0, unalignedCount: 0, percentage: 0 };
@@ -1067,9 +1080,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.reprocessAlignment();
   }
 
-  private persistAlignmentState() {
+  private persistAlignmentState(extra: Partial<FastqAlignmentState> = {}) {
     if (!this.document) return;
     this.document.alignmentState = {
+      ...this.document.alignmentState,
       active: true,
       mode: this.alignMode,
       inputWindowSeq: this.inputWindowSeq,
@@ -1079,9 +1093,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       alignedWindowSeq: this.alignedWindowSeq,
       alignedCutSiteInWindow: this.alignedCutSiteInWindow,
       readOrder: this.alignmentReadOrder,
+      ...extra,
       updatedTimestamp: Date.now()
     };
-    void this.sequenceWorkspaceService.saveItem(this.document);
+    return this.sequenceWorkspaceService.saveItem(this.document);
   }
 
   private initProcessedReads() {
@@ -1109,7 +1124,8 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.showAlignPanel = !this.showAlignPanel;
   }
 
-  runAlign() {
+  async runAlign() {
+    if (this.isAligning) return;
     let targetWin = '';
     let cutSiteInWin = -1;
 
@@ -1136,9 +1152,145 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.alignedWindowSeq = targetWin;
     this.alignedCutSiteInWindow = cutSiteInWin;
     this.isAlignedActive = true;
+    const previousAlignmentState = this.document.alignmentState
+      ? { ...this.document.alignmentState }
+      : undefined;
+    const previousCacheId = previousAlignmentState?.cacheId;
 
-    this.reprocessAlignment();
-    this.persistAlignmentState();
+    if (!this.document.remoteFileId) {
+      const processed = this.document.reads.map(read => this.processRead(read));
+      processed.forEach((result, index) => { this.document.reads[index].alignment = this.toCachedAlignment(result); });
+      const alignedCount = processed.filter(read => read.isAligned).length;
+      await this.persistAlignmentState({
+        cacheId: 'local',
+        processedReadCount: processed.length,
+        alignedCount,
+        unalignedCount: processed.length - alignedCount
+      });
+      this.reprocessAlignment();
+      return;
+    }
+
+    const cacheId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const totalToAlign = Math.min(this.document.stats.readCount, 25_000);
+    const batchSize = 100;
+    let processedCount = 0;
+    let alignedCount = 0;
+    this.isAligning = true;
+    this.alignmentProgress = 0;
+    this.alignmentStatus = `Preparing ${totalToAlign.toLocaleString()} reads…`;
+    try {
+      for (let offset = 0; offset < totalToAlign; offset += batchSize) {
+        const expected = Math.min(batchSize, totalToAlign - offset);
+        const localBatch = offset < this.document.reads.length
+          ? this.document.reads.slice(offset, offset + expected)
+          : [];
+        const reads = localBatch.length === expected
+          ? localBatch
+          : await this.sequenceWorkspaceService.fetchRemoteFastqReads(this.document, offset, expected);
+        if (!reads.length) break;
+        const results = reads.map(read => this.processRead(read));
+        const cachedResults = results.map(result => this.toCachedAlignment(result));
+        await this.sequenceWorkspaceService.saveRemoteAlignmentPage(this.document, cacheId, offset, cachedResults);
+        if (offset < this.document.reads.length) {
+          cachedResults.forEach((result, index) => {
+            if (this.document.reads[offset + index]) this.document.reads[offset + index].alignment = result;
+          });
+        }
+        processedCount += results.length;
+        alignedCount += results.filter(read => read.isAligned).length;
+        this.alignmentProgress = totalToAlign ? (processedCount / totalToAlign) * 100 : 100;
+        this.alignmentStatus = `Aligned and saved ${processedCount.toLocaleString()} of ${totalToAlign.toLocaleString()} reads`;
+      }
+      await this.persistAlignmentState({
+        cacheId,
+        processedReadCount: processedCount,
+        alignedCount,
+        unalignedCount: processedCount - alignedCount
+      });
+      this.reprocessAlignment();
+      if (previousCacheId && previousCacheId !== cacheId && previousCacheId !== 'local') {
+        void this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, previousCacheId);
+      }
+    } catch (error) {
+      console.error('Failed to align and save FASTQ reads', error);
+      await this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, cacheId).catch(() => undefined);
+      if (previousAlignmentState) {
+        this.document.alignmentState = previousAlignmentState;
+        this.restoreAlignmentState(previousAlignmentState);
+      } else {
+        this.isAlignedActive = false;
+        this.alignedWindowSeq = '';
+        this.alignedCutSiteInWindow = -1;
+        this.initProcessedReads();
+      }
+      alert(previousAlignmentState
+        ? 'Alignment could not be completed or saved. The previous saved alignment was kept.'
+        : 'Alignment could not be completed or saved. Please try again.');
+    } finally {
+      this.isAligning = false;
+      this.alignmentStatus = '';
+    }
+  }
+
+  private processRead(read: FastqRead): ProcessedRead {
+    const result = this.findAlignmentInRead(
+      read.seq,
+      this.alignedWindowSeq,
+      this.alignedCutSiteInWindow,
+      this.inputGrnaSeq.trim().toUpperCase()
+    );
+    return {
+      id: read.id,
+      seq: read.seq,
+      qualString: read.qualString,
+      isAligned: result.isAligned,
+      category: result.category,
+      netIndel: result.netIndel,
+      hasSub: result.hasSub,
+      grid: result.grid,
+      preWinSeq: result.preWinSeq,
+      postWinSeq: result.postWinSeq,
+      isRc: result.isRc,
+      alignmentFailureReason: result.alignmentFailureReason,
+      leadPadding: ''
+    };
+  }
+
+  private toCachedAlignment(read: ProcessedRead): FastqCachedAlignment {
+    const grid = read.grid || [];
+    const gridInsertions: Record<number, string> = {};
+    grid.forEach((cell, index) => {
+      if (cell.insertion) gridInsertions[index] = cell.insertion;
+    });
+    return {
+      isAligned: read.isAligned,
+      category: read.category,
+      netIndel: read.netIndel,
+      hasSub: read.hasSub,
+      gridChars: grid.map(cell => cell.char).join(''),
+      gridTypes: grid.map(cell => ({ equal: 'e', substitute: 's', delete: 'd', unobserved: 'u' }[cell.type])).join(''),
+      gridInsertions: Object.keys(gridInsertions).length ? gridInsertions : undefined,
+      preWinSeq: read.preWinSeq,
+      postWinSeq: read.postWinSeq,
+      isRc: read.isRc,
+      alignmentFailureReason: read.alignmentFailureReason
+    };
+  }
+
+  private expandCachedAlignment(cached: FastqCachedAlignment): FastqCachedAlignment {
+    if (cached.grid || !cached.gridChars || !cached.gridTypes) return cached;
+    const typeMap: Record<string, WindowGridCell['type']> = { e: 'equal', s: 'substitute', d: 'delete', u: 'unobserved' };
+    return {
+      ...cached,
+      grid: cached.gridChars.split('').map((char, index) => ({
+        char,
+        type: typeMap[cached.gridTypes![index]] || 'unobserved',
+        insertion: cached.gridInsertions?.[index]
+      }))
+    };
   }
 
   private reprocessAlignment() {
@@ -1148,8 +1300,13 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
 
     let alignedCount = 0;
 
+    const useSavedResults = !!this.document.alignmentState?.cacheId;
     const list: ProcessedRead[] = this.document.reads.map(r => {
-      const res = this.findAlignmentInRead(r.seq, targetWin, cutSiteInWin, grna);
+      const res = r.alignment
+        ? this.expandCachedAlignment(r.alignment)
+        : useSavedResults
+          ? { isAligned: false, alignmentFailureReason: 'not_cached' }
+          : this.findAlignmentInRead(r.seq, targetWin, cutSiteInWin, grna);
       if (res.isAligned) alignedCount++;
       return {
         id: r.id,
@@ -1196,6 +1353,15 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       unalignedCount: total - alignedCount,
       percentage: total > 0 ? (alignedCount / total) * 100 : 0
     };
+    const savedState = this.document.alignmentState;
+    if (useSavedResults && savedState?.processedReadCount !== undefined) {
+      this.alignedStats = {
+        total: savedState.processedReadCount,
+        alignedCount: savedState.alignedCount || 0,
+        unalignedCount: savedState.unalignedCount || 0,
+        percentage: savedState.processedReadCount > 0 ? ((savedState.alignedCount || 0) / savedState.processedReadCount) * 100 : 0
+      };
+    }
 
     this.processedReads = list;
     this.sortProcessedReadsByAlignment();
@@ -1233,14 +1399,17 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     element.scrollLeft = this.scrollLeft - walk;
   }
 
-  resetAlign() {
+  async resetAlign() {
+    const cacheId = this.document.alignmentState?.cacheId;
     this.isAlignedActive = false;
     this.alignedWindowSeq = '';
     this.alignedCutSiteInWindow = -1;
     delete this.document.alignmentState;
     delete this.document.autoAlign;
+    this.document.reads.forEach(read => { delete read.alignment; });
     this.initProcessedReads();
-    void this.sequenceWorkspaceService.saveItem(this.document);
+    await this.sequenceWorkspaceService.saveItem(this.document);
+    if (cacheId && cacheId !== 'local') void this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, cacheId);
   }
 
   setAlignmentReadOrder(order: 'aligned' | 'unaligned') {
@@ -1248,7 +1417,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.alignmentReadOrder = order;
     this.sortProcessedReadsByAlignment();
     this.applyFilterAndPagination();
-    this.persistAlignmentState();
+    void this.persistAlignmentState();
     if (order === 'aligned') this.centerCutSiteScroll();
   }
 

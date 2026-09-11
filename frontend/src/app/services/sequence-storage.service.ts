@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { FastqCachedAlignment } from '../models/sequence.model';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
@@ -19,7 +20,7 @@ export interface StoredSequenceFile {
 }
 
 export interface FastqReadPage {
-  reads: Array<{ id: string; seq: string; qualString: string }>;
+  reads: Array<{ id: string; seq: string; qualString: string; alignment?: FastqCachedAlignment }>;
   offset: number;
   next_offset: number;
   has_more: boolean;
@@ -114,11 +115,23 @@ export class SequenceStorageService {
     }));
   }
 
-  async getFastqReads(fileId: string, offset: number, limit = 100): Promise<FastqReadPage> {
+  async getFastqReads(fileId: string, offset: number, limit = 100, alignmentId?: string): Promise<FastqReadPage> {
     return firstValueFrom(this.http.get<FastqReadPage>(`${this.apiUrl}/files/${fileId}/reads`, {
       headers: await this.headers(),
-      params: { offset, limit },
+      params: { offset, limit, ...(alignmentId ? { alignment_id: alignmentId } : {}) },
     }));
+  }
+
+  async saveAlignmentPage(fileId: string, alignmentId: string, offset: number, results: FastqCachedAlignment[]): Promise<void> {
+    await firstValueFrom(this.http.put(`${this.apiUrl}/files/${fileId}/alignment-pages`, {
+      alignment_id: alignmentId,
+      offset,
+      results,
+    }, { headers: await this.headers() }));
+  }
+
+  async deleteAlignment(fileId: string, alignmentId: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`${this.apiUrl}/files/${fileId}/alignments/${alignmentId}`, { headers: await this.headers() }));
   }
 
   async delete(fileId: string): Promise<void> {

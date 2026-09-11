@@ -14,13 +14,13 @@ const document = (): FastqDocument => ({
 });
 
 describe('FastqViewerComponent alignment persistence', () => {
-  it('stores alignment inputs and restores the active view', () => {
+  it('stores alignment inputs and restores the active view', async () => {
     const saveItem = vi.fn().mockResolvedValue(undefined);
     const component = new FastqViewerComponent({ saveItem } as any);
     component.document = document();
     component.inputWindowSeq = 'AACCGGTT';
 
-    component.runAlign();
+    await component.runAlign();
 
     expect(component.document.alignmentState).toMatchObject({
       active: true,
@@ -38,14 +38,14 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(restored.alignedWindowSeq).toBe('AACCGGTT');
   });
 
-  it('persists resetting the alignment', () => {
+  it('persists resetting the alignment', async () => {
     const saveItem = vi.fn().mockResolvedValue(undefined);
     const component = new FastqViewerComponent({ saveItem } as any);
     component.document = document();
     component.inputWindowSeq = 'AACCGGTT';
-    component.runAlign();
+    await component.runAlign();
 
-    component.resetAlign();
+    await component.resetAlign();
 
     expect(component.document.alignmentState).toBeUndefined();
     expect(component.isAlignedActive).toBe(false);
@@ -87,5 +87,34 @@ describe('FastqViewerComponent alignment persistence', () => {
 
     expect(component.selectedReadInfo).toBe(read);
     expect(component.selectedReadInfo?.seq.length).toBe(6);
+  });
+
+  it('saves remote alignment batches once and reuses cached results without realigning', async () => {
+    const saveItem = vi.fn().mockResolvedValue(undefined);
+    const saveRemoteAlignmentPage = vi.fn().mockResolvedValue(undefined);
+    const deleteRemoteAlignment = vi.fn().mockResolvedValue(undefined);
+    const component = new FastqViewerComponent({
+      saveItem,
+      saveRemoteAlignmentPage,
+      deleteRemoteAlignment,
+      fetchRemoteFastqReads: vi.fn()
+    } as any);
+    component.document = document();
+    component.document.remoteFileId = 'remote-file';
+    component.inputWindowSeq = 'AACCGGTT';
+
+    await component.runAlign();
+
+    expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
+    expect(component.document.alignmentState?.cacheId).toBeTruthy();
+    expect(component.document.reads[0].alignment).toBeDefined();
+
+    const reopened = new FastqViewerComponent({ saveItem } as any);
+    reopened.document = component.document;
+    const calculate = vi.spyOn(reopened as any, 'findAlignmentInRead');
+    (reopened as any).restoreAlignmentState(component.document.alignmentState);
+
+    expect(calculate).not.toHaveBeenCalled();
+    expect(reopened.processedReads).toHaveLength(1);
   });
 });

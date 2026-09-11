@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, combineLatest, map } from 'rxjs';
-import { ProjectItem, SequenceDocument, SequenceFeature } from '../models/sequence.model';
+import { FastqCachedAlignment, FastqDocument, FastqRead, ProjectItem, SequenceDocument, SequenceFeature } from '../models/sequence.model';
 import { parseFasta, parseGenBank, parseFastqFile } from '../utils/parsers.utils';
 import { shiftFeatures } from '../utils/biology.utils';
 import { exportToFasta, exportToGenBank } from '../utils/export.utils';
@@ -498,19 +498,40 @@ export class SequenceWorkspaceService {
     if (!item.remoteFileId || !item.remoteReadsHasMore || this.loadingReadPages.has(item.id)) return 0;
     this.loadingReadPages.add(item.id);
     try {
-      const page = await this.cloudStorage.getFastqReads(item.remoteFileId, item.reads.length, limit);
-      const reads = page.reads.map(read => ({
-        ...read,
-        qual: Uint8Array.from(read.qualString, char => Math.max(0, char.charCodeAt(0) - 33)),
-      }));
+      const page = await this.cloudStorage.getFastqReads(item.remoteFileId, item.reads.length, limit, item.alignmentState?.cacheId);
+      const reads = this.mapRemoteFastqReads(page.reads);
       item.reads.push(...reads);
       item.loadedReadCount = item.reads.length;
-      item.remoteReadsHasMore = page.has_more;
+      const savedAlignmentLimit = item.alignmentState?.processedReadCount;
+      item.remoteReadsHasMore = page.has_more && (!savedAlignmentLimit || item.reads.length < savedAlignmentLimit);
       item.isReadPreview = page.has_more || item.stats.readCount > item.reads.length;
       return reads.length;
     } finally {
       this.loadingReadPages.delete(item.id);
     }
+  }
+
+  async fetchRemoteFastqReads(item: FastqDocument, offset: number, limit = 100): Promise<FastqRead[]> {
+    if (!item.remoteFileId) return item.reads.slice(offset, offset + limit);
+    const page = await this.cloudStorage.getFastqReads(item.remoteFileId, offset, limit, item.alignmentState?.cacheId);
+    return this.mapRemoteFastqReads(page.reads);
+  }
+
+  private mapRemoteFastqReads(reads: Array<{ id: string; seq: string; qualString: string; alignment?: FastqCachedAlignment }>): FastqRead[] {
+    return reads.map(read => ({
+      ...read,
+      qual: Uint8Array.from(read.qualString, char => Math.max(0, char.charCodeAt(0) - 33)),
+    }));
+  }
+
+  async saveRemoteAlignmentPage(item: FastqDocument, cacheId: string, offset: number, results: FastqCachedAlignment[]) {
+    if (!item.remoteFileId) return;
+    await this.cloudStorage.saveAlignmentPage(item.remoteFileId, cacheId, offset, results);
+  }
+
+  async deleteRemoteAlignment(item: FastqDocument, cacheId?: string) {
+    if (!item.remoteFileId || !cacheId) return;
+    await this.cloudStorage.deleteAlignment(item.remoteFileId, cacheId);
   }
 
   private async persistImportedFile(file: File, items: ProjectItem[], onUploadProgress?: (fraction: number) => void) {
