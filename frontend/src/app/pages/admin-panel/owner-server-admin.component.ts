@@ -23,6 +23,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   entries: ServerDataEntry[] = [];
   backups: ServerDataEntry[] = [];
   restoreFile: File | null = null;
+  deletingBackupName = '';
   tables: DatabaseTableSummary[] = [];
   selectedTable = '';
   preview: any = null;
@@ -125,6 +126,20 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
       await Promise.all([this.loadBackups(), this.loadData('')]);
     } catch (error: any) { this.notice = ''; this.error = this.message(error, 'Restore failed. Current files may require checking.'); }
     finally { this.actionBusy = false; this.syncView(); }
+  }
+
+  async deleteBackup(backup: ServerDataEntry): Promise<void> {
+    if (this.actionBusy || !confirm(`Permanently delete backup “${backup.name}”? This cannot be undone.`)) return;
+    this.actionBusy = true; this.deletingBackupName = backup.name; this.error = ''; this.notice = 'Deleting server backup…'; this.syncView();
+    try {
+      await this.server.deleteBackup(backup);
+      this.backups = this.backups.filter(item => item.name !== backup.name);
+      this.notice = `Backup deleted: ${backup.name}`;
+    } catch (error: any) {
+      this.notice = ''; this.error = this.message(error, 'The backup could not be deleted.');
+    } finally {
+      this.actionBusy = false; this.deletingBackupName = ''; this.syncView();
+    }
   }
 
   async loadTables(): Promise<void> {

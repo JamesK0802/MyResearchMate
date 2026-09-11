@@ -469,6 +469,22 @@ def download_backup(name: str, _owner: dict = Depends(require_owner)):
     return FileResponse(path, filename=path.name, media_type="application/gzip")
 
 
+@router.delete("/backups/{name}")
+def delete_backup(name: str, _owner: dict = Depends(require_owner)):
+    path = _backup_path(name)
+    if not path.is_file() or path.is_symlink():
+        raise HTTPException(status_code=404, detail="Backup not found")
+    if not _migration_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Another server backup, restore, or cleanup is already running")
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="The backup could not be deleted") from exc
+    finally:
+        _migration_lock.release()
+    return {"deleted": True, "name": name}
+
+
 @router.post("/restore")
 def restore_backup(archive: UploadFile = File(...), confirmation: str = Form(...), owner: dict = Depends(require_owner)):
     if confirmation != "RESTORE":

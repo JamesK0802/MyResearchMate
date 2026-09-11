@@ -15,7 +15,7 @@
 
     <section class="panel backups-panel">
       <div class="panel-heading"><div><span class="eyebrow">Saved on server</span><h2>Backups <small>{{ backups.length }}</small></h2></div><button class="quiet icon-button" (click)="loadBackups()" [disabled]="backupsLoading" aria-label="Refresh backups">↻</button></div>
-      <div class="backup-list" *ngIf="backups.length; else noBackups"><div class="backup-row" *ngFor="let backup of backups"><div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'short' }}</small></div><button class="quiet" (click)="server.downloadBackup(backup)">Download</button></div></div>
+      <div class="backup-list" *ngIf="backups.length; else noBackups"><div class="backup-row" *ngFor="let backup of backups"><div><strong>{{ backup.name }}</strong><small>{{ formatBytes(backup.size) }} · {{ backup.modified_at | date:'short' }}</small></div><span class="backup-actions"><button class="quiet" (click)="server.downloadBackup(backup)" [disabled]="actionBusy">Download</button><button class="danger backup-delete" (click)="deleteBackup(backup)" [disabled]="actionBusy">{{ deletingBackupName === backup.name ? 'Deleting…' : 'Delete' }}</button></span></div></div>
       <ng-template #noBackups><p class="empty">{{ backupsLoading ? 'Loading backups…' : 'No server backups yet.' }}</p></ng-template>
     </section>
   </div>

@@ -7,6 +7,7 @@ export function operationLabel(request: Pick<HttpRequest<unknown>, 'method' | 'u
   const url = request.url.toLowerCase();
   if (url.includes('/server-admin/restore')) return 'Restoring server backup';
   if (url.includes('/server-admin/cleanup')) return 'Backing up and cleaning server data';
+  if (url.includes('/server-admin/backups/') && request.method === 'DELETE') return 'Deleting server backup';
   if (url.includes('/server-admin/backups') && request.method === 'POST') return 'Creating full server backup';
   if (url.includes('deployment-update')) return 'Updating application server';
   if (url.includes('/lab-archive/') && (request.body instanceof FormData || url.includes('/upload'))) return 'Uploading to Lab Archive';

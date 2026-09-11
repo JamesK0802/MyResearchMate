@@ -70,6 +70,10 @@ export class ServerAdminService {
     await this.download(`${this.apiUrl}/backups/${encodeURIComponent(entry.name)}`, entry.name);
   }
 
+  async deleteBackup(entry: ServerDataEntry): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.apiUrl}/backups/${encodeURIComponent(entry.name)}`, { headers: await this.headers() }));
+  }
+
   private async download(url: string, filename: string): Promise<void> {
     const blob = await firstValueFrom(this.http.get(url, { headers: await this.headers(), responseType: 'blob' }));
     const objectUrl = URL.createObjectURL(blob);

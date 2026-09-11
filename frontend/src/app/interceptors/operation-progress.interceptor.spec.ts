@@ -5,6 +5,7 @@ import { operationLabel } from './operation-progress.interceptor';
 describe('operationLabel', () => {
   it('identifies server backup and restore work', () => {
     expect(operationLabel(new HttpRequest('POST', '/api/server-admin/backups', {}))).toBe('Creating full server backup');
+    expect(operationLabel(new HttpRequest('DELETE', '/api/server-admin/backups/my-lab-mate-backup-test.tar.gz'))).toBe('Deleting server backup');
     expect(operationLabel(new HttpRequest('POST', '/api/server-admin/restore', new FormData()))).toBe('Restoring server backup');
     expect(operationLabel(new HttpRequest('POST', '/api/server-admin/cleanup', {}))).toBe('Backing up and cleaning server data');
   });
