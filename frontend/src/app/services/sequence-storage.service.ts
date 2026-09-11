@@ -18,6 +18,11 @@ export interface StoredSequenceFile {
   updated_at: string | null;
 }
 
+interface SequenceUploadSession {
+  upload_id: string;
+  chunk_size: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SequenceStorageService {
   private readonly apiUrl = `${environment.apiBaseUrl}/sequence-workspace`;
@@ -37,11 +42,33 @@ export class SequenceStorageService {
     return firstValueFrom(this.http.get<StoredSequenceFile[]>(`${this.apiUrl}/files`, { headers: await this.headers() }));
   }
 
-  async upload(file: File, metadata: Record<string, unknown>): Promise<StoredSequenceFile> {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('metadata_json', JSON.stringify(metadata));
-    return firstValueFrom(this.http.post<StoredSequenceFile>(`${this.apiUrl}/files`, formData, { headers: await this.headers() }));
+  async upload(file: File, metadata: Record<string, unknown>, onProgress?: (fraction: number) => void): Promise<StoredSequenceFile> {
+    const headers = await this.headers();
+    const session = await firstValueFrom(this.http.post<SequenceUploadSession>(`${this.apiUrl}/uploads`, {
+      filename: file.name,
+      size_bytes: file.size,
+      metadata_json: metadata,
+    }, { headers }));
+
+    let offset = 0;
+    try {
+      while (offset < file.size) {
+        const chunk = file.slice(offset, Math.min(file.size, offset + session.chunk_size));
+        await firstValueFrom(this.http.put(`${this.apiUrl}/uploads/${session.upload_id}?offset=${offset}`, chunk, {
+          headers: headers.set('Content-Type', 'application/octet-stream'),
+        }));
+        offset += chunk.size;
+        onProgress?.(file.size ? offset / file.size : 1);
+      }
+      return await firstValueFrom(this.http.post<StoredSequenceFile>(`${this.apiUrl}/uploads/${session.upload_id}/complete`, {}, { headers }));
+    } catch (error) {
+      try {
+        await firstValueFrom(this.http.delete(`${this.apiUrl}/uploads/${session.upload_id}`, { headers }));
+      } catch {
+        // Stale upload sessions are cleaned by the server after 24 hours.
+      }
+      throw error;
+    }
   }
 
   async updateMetadata(fileId: string, metadata: Record<string, unknown>): Promise<StoredSequenceFile> {

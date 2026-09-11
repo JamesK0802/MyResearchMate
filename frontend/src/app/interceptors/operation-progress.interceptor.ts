@@ -5,6 +5,8 @@ import { OperationProgressService } from '../services/operation-progress.service
 
 export function operationLabel(request: Pick<HttpRequest<unknown>, 'method' | 'url' | 'body' | 'responseType'>): string | null {
   const url = request.url.toLowerCase();
+  // Chunked Sequence Viewer imports report one aggregate progress operation.
+  if (url.includes('/sequence-workspace/uploads')) return null;
   const isServerAdminMutation = url.includes('/server-admin/') &&
     (request.method === 'POST' || request.method === 'DELETE') &&
     (url.includes('/restore') || url.includes('/cleanup') || url.includes('/backups'));

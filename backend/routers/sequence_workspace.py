@@ -1,11 +1,14 @@
 import json
+import logging
+import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -19,10 +22,50 @@ from storage.quota import personal_usage, personal_quota
 router = APIRouter(prefix="/sequence-workspace", tags=["sequence-workspace"])
 
 CHUNK_SIZE = 1024 * 1024
+UPLOAD_CHUNK_SIZE = 512 * 1024
+UPLOAD_SESSION_MAX_AGE = 24 * 60 * 60
+logger = logging.getLogger(__name__)
+
+
 def user_storage_dir(current_user: dict) -> Path:
     directory = personal_tool_dir(current_user, "sequence-viewer") / "files"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def upload_storage_dir(current_user: dict) -> Path:
+    directory = personal_tool_dir(current_user, "sequence-viewer") / "uploads"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def upload_session_paths(current_user: dict, upload_id: uuid.UUID) -> tuple[Path, Path]:
+    directory = upload_storage_dir(current_user)
+    stem = str(upload_id)
+    return directory / f"{stem}.part", directory / f"{stem}.json"
+
+
+def read_upload_session(state_path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail="Upload session not found or expired") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid upload session")
+    return payload
+
+
+def cleanup_stale_uploads(current_user: dict) -> None:
+    cutoff = time.time() - UPLOAD_SESSION_MAX_AGE
+    for state_path in upload_storage_dir(current_user).glob("*.json"):
+        try:
+            if state_path.stat().st_mtime >= cutoff:
+                continue
+            part_path = state_path.with_suffix(".part")
+            state_path.unlink(missing_ok=True)
+            part_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove stale sequence upload %s", state_path, exc_info=True)
 
 
 def current_usage(db: Session, user_id: int) -> int:
@@ -57,6 +100,12 @@ class SequenceFileRename(BaseModel):
     item_index: int = 0
 
 
+class SequenceUploadInit(BaseModel):
+    filename: str
+    size_bytes: int
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/usage")
 async def get_usage(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     return {"used_bytes": current_usage(db, current_user["id"]), "quota_bytes": personal_quota(db, current_user["id"])}
@@ -68,6 +117,131 @@ async def list_files(db: Session = Depends(get_db), current_user: dict = Depends
         SequenceWorkspaceFile.owner_user_id == current_user["id"]
     ).order_by(SequenceWorkspaceFile.updated_at.desc(), SequenceWorkspaceFile.created_at.desc()).all()
     return [serialize(row) for row in rows]
+
+
+@router.post("/uploads")
+async def create_upload_session(
+    payload: SequenceUploadInit,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    filename = Path(payload.filename).name
+    if not filename or filename != payload.filename or filename in (".", ".."):
+        raise HTTPException(status_code=400, detail="Enter a valid file name without a folder path")
+    if payload.size_bytes < 0:
+        raise HTTPException(status_code=400, detail="Invalid file size")
+
+    cleanup_stale_uploads(current_user)
+    used_bytes = current_usage(db, current_user["id"])
+    quota_bytes = personal_quota(db, current_user["id"])
+    if used_bytes + payload.size_bytes > quota_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "Storage limit exceeded. Your current personal storage allocation is "
+                f"{quota_bytes / 1024 ** 3:.2f} GB "
+                f"({used_bytes / 1024 ** 3:.2f} GB currently used). "
+                "Please use Request increase to ask an administrator for more storage."
+            ),
+        )
+
+    upload_id = uuid.uuid4()
+    part_path, state_path = upload_session_paths(current_user, upload_id)
+    part_path.touch(exist_ok=False)
+    write_json(state_path, {
+        "filename": filename,
+        "size_bytes": payload.size_bytes,
+        "metadata_json": payload.metadata_json,
+        "created_at": time.time(),
+    })
+    return {"upload_id": str(upload_id), "chunk_size": UPLOAD_CHUNK_SIZE}
+
+
+@router.put("/uploads/{upload_id}")
+async def append_upload_chunk(
+    upload_id: uuid.UUID,
+    request: Request,
+    offset: int = Query(ge=0),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    part_path, state_path = upload_session_paths(current_user, upload_id)
+    state = read_upload_session(state_path)
+    chunk = await request.body()
+    if not chunk or len(chunk) > UPLOAD_CHUNK_SIZE:
+        raise HTTPException(status_code=400, detail=f"Upload chunks must be 1 to {UPLOAD_CHUNK_SIZE} bytes")
+
+    current_size = part_path.stat().st_size if part_path.is_file() else -1
+    if current_size != offset:
+        raise HTTPException(status_code=409, detail=f"Upload offset mismatch; expected {current_size}")
+    expected_size = int(state.get("size_bytes", -1))
+    if current_size + len(chunk) > expected_size:
+        raise HTTPException(status_code=400, detail="Upload exceeds the declared file size")
+    if current_usage(db, current_user["id"]) + len(chunk) > personal_quota(db, current_user["id"]):
+        raise HTTPException(status_code=413, detail="Storage limit exceeded while uploading this file")
+
+    try:
+        with part_path.open("ab") as output:
+            output.write(chunk)
+    except OSError as exc:
+        logger.exception("Could not append Sequence Viewer upload chunk")
+        raise HTTPException(status_code=500, detail="Server could not write the uploaded file chunk") from exc
+    return {"received_bytes": current_size + len(chunk), "size_bytes": expected_size}
+
+
+@router.post("/uploads/{upload_id}/complete")
+async def complete_upload_session(
+    upload_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    part_path, state_path = upload_session_paths(current_user, upload_id)
+    state = read_upload_session(state_path)
+    expected_size = int(state.get("size_bytes", -1))
+    actual_size = part_path.stat().st_size if part_path.is_file() else -1
+    if actual_size != expected_size:
+        raise HTTPException(status_code=409, detail=f"Upload is incomplete ({actual_size} of {expected_size} bytes)")
+
+    filename = str(state["filename"])
+    stored_name = f"{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
+    destination = user_storage_dir(current_user) / stored_name
+    row_id = uuid.uuid4()
+    metadata_path = personal_tool_dir(current_user, "sequence-viewer") / "metadata" / f"{row_id}.json"
+    try:
+        os.replace(part_path, destination)
+        write_json(metadata_path, state.get("metadata_json", {}))
+        row = SequenceWorkspaceFile(
+            id=row_id,
+            owner_user_id=current_user["id"],
+            original_name=filename,
+            stored_name=stored_name,
+            size_bytes=actual_size,
+            metadata_json={},
+            storage_path=relative_data_path(destination),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    except Exception as exc:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        logger.exception("Could not finalize Sequence Viewer upload")
+        raise HTTPException(status_code=500, detail="Server could not finalize the uploaded sequence file") from exc
+    finally:
+        state_path.unlink(missing_ok=True)
+    return serialize(row)
+
+
+@router.delete("/uploads/{upload_id}")
+async def cancel_upload_session(
+    upload_id: uuid.UUID,
+    current_user: dict = Depends(get_current_user),
+):
+    part_path, state_path = upload_session_paths(current_user, upload_id)
+    part_path.unlink(missing_ok=True)
+    state_path.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 @router.post("/files")

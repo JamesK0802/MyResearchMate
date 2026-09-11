@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { operationLabel } from './operation-progress.interceptor';
 
 describe('operationLabel', () => {
+  it('leaves chunked Sequence Viewer upload progress to the aggregate importer', () => {
+    expect(operationLabel({
+      method: 'PUT',
+      url: '/api/sequence-workspace/uploads/upload-id?offset=0',
+      body: new Blob(['chunk']),
+      responseType: 'json',
+    })).toBeNull();
+  });
+
   it('leaves server mutations to the persistent Admin status card', () => {
     expect(operationLabel(new HttpRequest('POST', '/api/server-admin/backups', {}))).toBeNull();
     expect(operationLabel(new HttpRequest('DELETE', '/api/server-admin/backups/my-lab-mate-backup-test.tar.gz'))).toBeNull();

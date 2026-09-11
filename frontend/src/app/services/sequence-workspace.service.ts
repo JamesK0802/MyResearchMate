@@ -486,7 +486,7 @@ export class SequenceWorkspaceService {
     }
   }
 
-  private async persistImportedFile(file: File, items: ProjectItem[]) {
+  private async persistImportedFile(file: File, items: ProjectItem[], onUploadProgress?: (fraction: number) => void) {
     if (!items.length) return;
     if (!this.usesCloudStorage) {
       for (const item of items) await this.saveItem(item);
@@ -495,7 +495,7 @@ export class SequenceWorkspaceService {
     }
 
     try {
-      const stored = await this.cloudStorage.upload(file, this.metadataForItems(items));
+      const stored = await this.cloudStorage.upload(file, this.metadataForItems(items), onUploadProgress);
       this.suppressRemoteSync = true;
       for (const [index, item] of items.entries()) {
         item.id = `${stored.id}:${index}`;
@@ -512,8 +512,17 @@ export class SequenceWorkspaceService {
     } catch (error: any) {
       this.suppressRemoteSync = false;
       console.error('Failed to save Sequence Viewer file', error);
-      alert(error?.error?.detail || 'Could not save this file to your Sequence Viewer storage.');
+      throw error;
     }
+  }
+
+  private uploadErrorMessage(error: any): string {
+    const detail = error?.error?.detail;
+    if (typeof detail === 'string') return detail;
+    if (typeof error?.error === 'string' && error.error.trim()) return error.error;
+    if (error?.status === 0) return 'The upload connection was interrupted before the server could save the file. Please retry on a stable connection.';
+    if (error?.status) return `The server rejected the upload (HTTP ${error.status}).`;
+    return error?.message || 'Could not save this file to your Sequence Viewer storage.';
   }
 
   async importFile(file: File) {
@@ -525,7 +534,12 @@ export class SequenceWorkspaceService {
         this.operationProgress.update(progressId, { detail: 'Parsing FASTQ reads…', percent: 20 });
         const doc = await parseFastqFile(file);
         this.operationProgress.update(progressId, { detail: 'Saving parsed reads…', percent: 55 });
-        await this.persistImportedFile(file, [doc]);
+        await this.persistImportedFile(file, [doc], fraction => this.operationProgress.update(progressId, {
+          detail: 'Uploading original FASTQ file…',
+          percent: 55 + (fraction * 40),
+          transferred: Math.round(file.size * fraction),
+          total: file.size,
+        }));
         this.operationProgress.complete(progressId, 'Imported into Sequence Viewer');
         return;
       }
@@ -570,11 +584,18 @@ export class SequenceWorkspaceService {
         }
       }
       this.operationProgress.update(progressId, { detail: 'Saving imported file…', percent: 65 });
-      await this.persistImportedFile(file, importedItems);
+      await this.persistImportedFile(file, importedItems, fraction => this.operationProgress.update(progressId, {
+        detail: 'Uploading original file…',
+        percent: 65 + (fraction * 30),
+        transferred: Math.round(file.size * fraction),
+        total: file.size,
+      }));
       this.operationProgress.complete(progressId, 'Imported into Sequence Viewer');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to import sequence file', error);
-      this.operationProgress.fail(progressId, 'Could not import this file');
+      const message = this.uploadErrorMessage(error);
+      this.operationProgress.fail(progressId, message);
+      alert(message);
     }
   }
 
