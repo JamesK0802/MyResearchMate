@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from utils.fastq_paging import read_fastq_page
+from utils.fastq_paging import iter_fastq_reads, read_fastq_page
 
 
 FASTQ = """@read one
@@ -45,6 +45,16 @@ class FastqPagingTests(unittest.TestCase):
 
             self.assertEqual(reads[0]["seq"], "TTGGCC")
             self.assertTrue(has_more)
+
+    def test_streams_every_gzip_record_in_one_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reads.fastq.gz"
+            with gzip.open(path, "wt", encoding="utf-8") as output:
+                output.write(FASTQ)
+
+            reads = list(iter_fastq_reads(path))
+
+            self.assertEqual([read["id"] for read in reads], ["read one", "read two", "read three"])
 
 
 if __name__ == "__main__":

@@ -122,6 +122,55 @@ export class SequenceStorageService {
     }));
   }
 
+  async streamFastqReads(
+    fileId: string,
+    onBatch: (reads: FastqReadPage['reads']) => Promise<void>,
+    batchSize = 5000
+  ): Promise<void> {
+    const headers = await this.headers();
+    const response = await fetch(`${this.apiUrl}/files/${fileId}/reads-stream`, {
+      headers: { Authorization: headers.get('Authorization') || '' },
+      cache: 'no-store',
+    });
+    if (!response.ok || !response.body) {
+      let detail = `Server request failed (HTTP ${response.status}).`;
+      try {
+        const payload = await response.json();
+        if (typeof payload?.detail === 'string') detail = payload.detail;
+      } catch {}
+      throw new Error(detail);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    let batch: FastqReadPage['reads'] = [];
+    const consumeLines = async (text: string, flush = false) => {
+      pending += text;
+      const lines = pending.split('\n');
+      const tail = lines.pop() || '';
+      pending = flush ? '' : tail;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        batch.push(JSON.parse(line));
+        if (batch.length >= batchSize) {
+          const ready = batch;
+          batch = [];
+          await onBatch(ready);
+        }
+      }
+      if (flush && tail.trim()) batch.push(JSON.parse(tail));
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      await consumeLines(decoder.decode(value, { stream: true }));
+    }
+    await consumeLines(decoder.decode(), true);
+    if (batch.length) await onBatch(batch);
+  }
+
   async saveAlignmentPage(fileId: string, alignmentId: string, offset: number, results: FastqCachedAlignment[]): Promise<void> {
     await firstValueFrom(this.http.put(`${this.apiUrl}/files/${fileId}/alignment-pages`, {
       alignment_id: alignmentId,

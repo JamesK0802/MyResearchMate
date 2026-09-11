@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ from database.db import get_db
 from database.models import SequenceWorkspaceFile
 from storage.file_store import personal_tool_dir, read_json, relative_data_path, resolve_data_path, write_json
 from storage.quota import personal_usage, personal_quota
-from utils.fastq_paging import read_fastq_page
+from utils.fastq_paging import iter_fastq_reads, read_fastq_page
 
 
 router = APIRouter(prefix="/sequence-workspace", tags=["sequence-workspace"])
@@ -111,7 +111,7 @@ class SequenceUploadInit(BaseModel):
 class AlignmentPagePayload(BaseModel):
     alignment_id: uuid.UUID
     offset: int = Field(ge=0)
-    results: list[dict[str, Any]] = Field(max_length=250)
+    results: list[dict[str, Any]] = Field(max_length=1000)
 
 
 @router.get("/usage")
@@ -390,7 +390,7 @@ async def download_file(
 async def read_file_reads(
     file_id: uuid.UUID,
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=250),
+    limit: int = Query(default=100, ge=1, le=5000),
     alignment_id: Optional[uuid.UUID] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -421,6 +421,28 @@ async def read_file_reads(
     }
 
 
+@router.get("/files/{file_id}/reads-stream")
+async def stream_file_reads(
+    file_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = get_owned_file(file_id, db, current_user)
+    file_path = resolve_data_path(row.storage_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Stored sequence file is missing")
+
+    def stream_records():
+        for read in iter_fastq_reads(file_path):
+            yield json.dumps(read, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+    return StreamingResponse(
+        stream_records(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.put("/files/{file_id}/alignment-pages")
 async def save_alignment_page(
     file_id: uuid.UUID,
@@ -429,8 +451,10 @@ async def save_alignment_page(
     current_user: dict = Depends(get_current_user),
 ):
     row = get_owned_file(file_id, db, current_user)
-    page_path = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(payload.alignment_id) / f"{payload.offset}.json"
-    write_json(page_path, {"results": payload.results})
+    cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(payload.alignment_id)
+    for page_start in range(0, len(payload.results), 100):
+        page_path = cache_dir / f"{payload.offset + page_start}.json"
+        write_json(page_path, {"results": payload.results[page_start:page_start + 100]})
     return {"ok": True, "count": len(payload.results)}
 
 

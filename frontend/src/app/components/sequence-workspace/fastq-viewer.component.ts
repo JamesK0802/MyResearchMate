@@ -160,6 +160,18 @@ export function createAlignmentCacheId(): string {
             </div>
           </div>
 
+          <div class="alignment-scope" *ngIf="document.remoteFileId">
+            <span>Reads to align</span>
+            <div class="alignment-scope-options">
+              <button type="button" [class.active]="alignmentScope === 'preview'" (click)="alignmentScope = 'preview'" [disabled]="isAligning">
+                Loaded preview ({{ document.reads.length | number }})
+              </button>
+              <button type="button" [class.active]="alignmentScope === 'all'" (click)="alignmentScope = 'all'" [disabled]="isAligning">
+                All reads ({{ document.stats.readCount | number }})
+              </button>
+            </div>
+          </div>
+
           <div class="align-panel-actions">
             <button type="button" class="btn-run-align" (click)="runAlign()" [disabled]="isAligning">
               {{ isAligning ? 'Aligning & saving…' : 'Run Alignment & Center Cut Sites' }}
@@ -481,6 +493,10 @@ export function createAlignmentCacheId(): string {
     .form-field label { font-size: 0.78rem; font-weight: 600; color: #475569; }
     .text-mono { font-family: 'Courier New', Courier, monospace !important; font-size: 0.82rem !important; }
     .form-control { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; }
+    .alignment-scope { display: flex; align-items: center; gap: 10px; color: #475569; font-size: .78rem; font-weight: 700; }
+    .alignment-scope-options { display: flex; gap: 6px; flex: 1; }
+    .alignment-scope-options button { flex: 1; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #475569; font-size: .75rem; font-weight: 700; cursor: pointer; }
+    .alignment-scope-options button.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
     .align-panel-actions { display: flex; gap: 8px; }
     .btn-run-align {
       padding: 6px 14px; background: #16a34a; color: #ffffff; font-weight: 600; border: none; border-radius: 5px; cursor: pointer; font-size: 0.8rem;
@@ -848,6 +864,8 @@ export function createAlignmentCacheId(): string {
       .align-config-panel { margin: 0 8px 8px; padding: 9px; }
       .align-mode-tabs,
       .form-row { flex-direction: column; }
+      .alignment-scope { align-items: stretch; flex-direction: column; gap: 5px; }
+      .alignment-scope-options { flex-direction: column; }
       .mode-tab-btn { width: 100%; }
       .alignment-results { width: 100%; }
       .msa-section,
@@ -923,6 +941,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   inputRefSeq = '';
   inputGrnaSeq = '';
   inputWinSize = 90;
+  alignmentScope: 'preview' | 'all' = 'all';
 
   isAlignedActive = false;
   isAligning = false;
@@ -1077,7 +1096,15 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       && this.inputWinSize === state.inputWinSize
       && this.alignedWindowSeq === state.alignedWindowSeq
       && this.alignedCutSiteInWindow === state.alignedCutSiteInWindow
+      && this.alignmentScope === this.savedAlignmentScope(state)
       && this.alignmentReadOrder === state.readOrder;
+  }
+
+  private savedAlignmentScope(state: FastqAlignmentState): 'preview' | 'all' {
+    if (state.scope) return state.scope;
+    return state.processedReadCount !== undefined && state.processedReadCount < this.document.stats.readCount
+      ? 'preview'
+      : 'all';
   }
 
   private restoreAlignmentState(state: FastqAlignmentState) {
@@ -1088,6 +1115,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.inputWinSize = state.inputWinSize;
     this.alignedWindowSeq = state.alignedWindowSeq;
     this.alignedCutSiteInWindow = state.alignedCutSiteInWindow;
+    this.alignmentScope = this.savedAlignmentScope(state);
     this.alignmentReadOrder = state.readOrder;
     this.isAlignedActive = true;
     this.reprocessAlignment();
@@ -1106,6 +1134,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       alignedWindowSeq: this.alignedWindowSeq,
       alignedCutSiteInWindow: this.alignedCutSiteInWindow,
       readOrder: this.alignmentReadOrder,
+      scope: this.alignmentScope,
       ...extra,
       updatedTimestamp: Date.now()
     };
@@ -1187,35 +1216,51 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     const cacheId = globalThis.crypto?.randomUUID
       ? globalThis.crypto.randomUUID()
       : createAlignmentCacheId();
-    const totalToAlign = Math.min(this.document.stats.readCount, 25_000);
-    const batchSize = 100;
+    const totalToAlign = this.alignmentScope === 'preview'
+      ? this.document.reads.length
+      : this.document.stats.readCount;
+    const saveBatchSize = 500;
     let processedCount = 0;
     let alignedCount = 0;
     this.isAligning = true;
     this.alignmentProgress = 0;
     this.alignmentStatus = `Preparing ${totalToAlign.toLocaleString()} reads…`;
     try {
-      for (let offset = 0; offset < totalToAlign; offset += batchSize) {
-        const expected = Math.min(batchSize, totalToAlign - offset);
-        const localBatch = offset < this.document.reads.length
-          ? this.document.reads.slice(offset, offset + expected)
-          : [];
-        const reads = localBatch.length === expected
-          ? localBatch
-          : await this.sequenceWorkspaceService.fetchRemoteFastqReads(this.document, offset, expected);
-        if (!reads.length) break;
-        const results = reads.map(read => this.processRead(read));
-        const cachedResults = results.map(result => this.toCachedAlignment(result));
-        await this.sequenceWorkspaceService.saveRemoteAlignmentPage(this.document, cacheId, offset, cachedResults);
-        if (offset < this.document.reads.length) {
-          cachedResults.forEach((result, index) => {
-            if (this.document.reads[offset + index]) this.document.reads[offset + index].alignment = result;
-          });
+      const processAndSaveBatch = async (reads: FastqRead[], offset: number) => {
+        for (let saveOffset = 0; saveOffset < reads.length; saveOffset += saveBatchSize) {
+          const results = reads.slice(saveOffset, saveOffset + saveBatchSize).map(read => this.processRead(read));
+          const cachedResults = results.map(result => this.toCachedAlignment(result));
+          await this.sequenceWorkspaceService.saveRemoteAlignmentPage(
+            this.document,
+            cacheId,
+            offset + saveOffset,
+            cachedResults
+          );
+          if (offset + saveOffset < this.document.reads.length) {
+            cachedResults.forEach((result, index) => {
+              const loadedRead = this.document.reads[offset + saveOffset + index];
+              if (loadedRead) loadedRead.alignment = result;
+            });
+          }
+          processedCount += results.length;
+          alignedCount += results.filter(read => read.isAligned).length;
+          this.alignmentProgress = totalToAlign ? (processedCount / totalToAlign) * 100 : 100;
+          this.alignmentStatus = `Aligned and saved ${processedCount.toLocaleString()} of ${totalToAlign.toLocaleString()} reads`;
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
-        processedCount += results.length;
-        alignedCount += results.filter(read => read.isAligned).length;
-        this.alignmentProgress = totalToAlign ? (processedCount / totalToAlign) * 100 : 100;
-        this.alignmentStatus = `Aligned and saved ${processedCount.toLocaleString()} of ${totalToAlign.toLocaleString()} reads`;
+      };
+
+      if (this.alignmentScope === 'preview') {
+        await processAndSaveBatch(this.document.reads.slice(0, totalToAlign), 0);
+      } else {
+        let streamOffset = 0;
+        await this.sequenceWorkspaceService.streamRemoteFastqReads(this.document, async reads => {
+          if (streamOffset >= totalToAlign) return;
+          const remaining = totalToAlign - streamOffset;
+          const selected = reads.length > remaining ? reads.slice(0, remaining) : reads;
+          await processAndSaveBatch(selected, streamOffset);
+          streamOffset += selected.length;
+        });
       }
       await this.persistAlignmentState({
         cacheId,

@@ -125,6 +125,7 @@ export interface FastqAlignmentState {
   alignedWindowSeq: string;
   alignedCutSiteInWindow: number;
   readOrder: 'aligned' | 'unaligned';
+  scope?: 'preview' | 'all';
   cacheId?: string;
   processedReadCount?: number;
   alignedCount?: number;

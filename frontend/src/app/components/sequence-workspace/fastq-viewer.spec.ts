@@ -112,6 +112,7 @@ describe('FastqViewerComponent alignment persistence', () => {
     } as any);
     component.document = document();
     component.document.remoteFileId = 'remote-file';
+    component.alignmentScope = 'preview';
     component.inputWindowSeq = 'AACCGGTT';
 
     await component.runAlign();
@@ -127,5 +128,31 @@ describe('FastqViewerComponent alignment persistence', () => {
 
     expect(calculate).not.toHaveBeenCalled();
     expect(reopened.processedReads).toHaveLength(1);
+  });
+
+  it('streams every remote read when the all-reads scope is selected', async () => {
+    const saveRemoteAlignmentPage = vi.fn().mockResolvedValue(undefined);
+    const allReads = [
+      document().reads[0],
+      { id: 'read-2', seq: 'AACCGGTTAACC', qual: [], qualString: 'IIIIIIIIIIII' }
+    ];
+    const streamRemoteFastqReads = vi.fn(async (_document, onBatch) => onBatch(allReads));
+    const component = new FastqViewerComponent({
+      saveItem: vi.fn().mockResolvedValue(undefined),
+      saveRemoteAlignmentPage,
+      deleteRemoteAlignment: vi.fn().mockResolvedValue(undefined),
+      streamRemoteFastqReads
+    } as any);
+    component.document = document();
+    component.document.remoteFileId = 'remote-file';
+    component.document.stats.readCount = 2;
+    component.alignmentScope = 'all';
+    component.inputWindowSeq = 'AACCGGTT';
+
+    await component.runAlign();
+
+    expect(streamRemoteFastqReads).toHaveBeenCalledOnce();
+    expect(component.document.alignmentState).toMatchObject({ scope: 'all', processedReadCount: 2 });
+    expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
   });
 });

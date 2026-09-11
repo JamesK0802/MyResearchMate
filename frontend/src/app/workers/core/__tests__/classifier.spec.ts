@@ -39,6 +39,26 @@ describe('Classifier Core Utilities', () => {
     expect(res.pam).toBe('TGG');
   });
 
+  it('uses the same cut coordinate when a forward PAM is included in the guide input', () => {
+    const spacer = 'ATCGATCGATCGATCGATCG';
+    const reference = `GCGCATGC${spacer}TGGATCGATCG`;
+    const result = findGrnaCutSite(reference, `${spacer}TGG`);
+
+    expect(result.strand).toBe('forward');
+    expect(result.pam_found).toBe(true);
+    expect(result.cut_site).toBe(25);
+  });
+
+  it('resolves a reverse reference-oriented guide with its included CCN PAM', () => {
+    const matchedGuide = `CCA${'ATCG'.repeat(5)}`;
+    const reference = `TTTT${matchedGuide}AAAA`;
+    const result = findGrnaCutSite(reference, matchedGuide);
+
+    expect(result.strand).toBe('reverse');
+    expect(result.pam_found).toBe(true);
+    expect(result.cut_site).toBe(10);
+  });
+
   it('should get correct window bounds', () => {
     const ref = 'A'.repeat(100);
     expect(getWindowBounds(ref, 50, 40)).toEqual([30, 70]);

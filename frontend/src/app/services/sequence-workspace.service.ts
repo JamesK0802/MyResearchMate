@@ -517,6 +517,16 @@ export class SequenceWorkspaceService {
     return this.mapRemoteFastqReads(page.reads);
   }
 
+  async streamRemoteFastqReads(item: FastqDocument, onBatch: (reads: FastqRead[]) => Promise<void>): Promise<void> {
+    if (!item.remoteFileId) {
+      await onBatch(item.reads);
+      return;
+    }
+    await this.cloudStorage.streamFastqReads(item.remoteFileId, async reads => {
+      await onBatch(this.mapRemoteFastqReads(reads));
+    });
+  }
+
   private mapRemoteFastqReads(reads: Array<{ id: string; seq: string; qualString: string; alignment?: FastqCachedAlignment }>): FastqRead[] {
     return reads.map(read => ({
       ...read,

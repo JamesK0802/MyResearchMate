@@ -70,6 +70,37 @@ export interface CutSiteInfo {
   pam_found: boolean;
 }
 
+export function resolveMatchedCutSite(
+  reference: string,
+  matchStart: number,
+  matchLength: number,
+  strand: 'forward' | 'reverse'
+): Pick<CutSiteInfo, 'cut_site' | 'pam' | 'pam_found'> {
+  const refUp = toStr(reference).toUpperCase();
+  const matchEnd = matchStart + matchLength;
+  if (strand === 'forward') {
+    const adjacentPam = refUp.slice(matchEnd, matchEnd + 3);
+    if (/^[ACGT]GG$/.test(adjacentPam)) {
+      return { cut_site: matchEnd - 3, pam: adjacentPam, pam_found: true };
+    }
+    const includedPam = refUp.slice(matchEnd - 3, matchEnd);
+    if (matchLength >= 23 && /^[ACGT]GG$/.test(includedPam)) {
+      return { cut_site: matchEnd - 6, pam: includedPam, pam_found: true };
+    }
+    return { cut_site: matchEnd - 3, pam: 'NOT_FOUND', pam_found: false };
+  }
+
+  const adjacentPam = refUp.slice(matchStart - 3, matchStart);
+  if (/^CC[ACGT]$/.test(adjacentPam)) {
+    return { cut_site: matchStart + 3, pam: adjacentPam, pam_found: true };
+  }
+  const includedPam = refUp.slice(matchStart, matchStart + 3);
+  if (matchLength >= 23 && /^CC[ACGT]$/.test(includedPam)) {
+    return { cut_site: matchStart + 6, pam: includedPam, pam_found: true };
+  }
+  return { cut_site: matchStart + 3, pam: 'NOT_FOUND', pam_found: false };
+}
+
 export function findGrnaCutSite(reference: string, grna: string): CutSiteInfo {
   const refUp = toStr(reference).toUpperCase();
   const grnaUp = toStr(grna).toUpperCase();
@@ -84,12 +115,9 @@ export function findGrnaCutSite(reference: string, grna: string): CutSiteInfo {
   // Forward: gRNA + [NGG]
   for (let pos = 0; pos < refLen - grnaLen; pos++) {
     if (refUp.substring(pos, pos + grnaLen) === grnaUp) {
-      const ps = pos + grnaLen;
-      if (ps + 3 <= refLen) {
-        const pam = refUp.substring(ps, ps + 3);
-        if (pam[1] === 'G' && pam[2] === 'G') {
-          return { strand: 'forward', grna_start: pos, grna_end: pos + grnaLen, cut_site: pos + grnaLen - 3, pam, pam_found: true };
-        }
+      const cut = resolveMatchedCutSite(refUp, pos, grnaLen, 'forward');
+      if (cut.pam_found) {
+        return { strand: 'forward', grna_start: pos, grna_end: pos + grnaLen, ...cut };
       }
     }
   }
@@ -97,13 +125,28 @@ export function findGrnaCutSite(reference: string, grna: string): CutSiteInfo {
   // Reverse: [CCN] + gRNA_RC
   for (let pos = 0; pos < refLen - grnaRc.length; pos++) {
     if (refUp.substring(pos, pos + grnaRc.length) === grnaRc) {
-      const pe = pos;
-      const ps2 = pe - 3;
-      if (ps2 >= 0) {
-        const pam = refUp.substring(ps2, pe);
-        if (pam[0] === 'C' && pam[1] === 'C') {
-          return { strand: 'reverse', grna_start: pos, grna_end: pos + grnaRc.length, cut_site: pos + 3, pam, pam_found: true };
-        }
+      const cut = resolveMatchedCutSite(refUp, pos, grnaRc.length, 'reverse');
+      if (cut.pam_found) {
+        return { strand: 'reverse', grna_start: pos, grna_end: pos + grnaRc.length, ...cut };
+      }
+    }
+  }
+
+  // A 23+ bp input may already include its PAM. Accept either reference
+  // orientation and use the same rule as result annotations and viewers.
+  if (grnaLen >= 23) {
+    const direct = refUp.indexOf(grnaUp);
+    if (direct !== -1) {
+      for (const strand of ['forward', 'reverse'] as const) {
+        const cut = resolveMatchedCutSite(refUp, direct, grnaLen, strand);
+        if (cut.pam_found) return { strand, grna_start: direct, grna_end: direct + grnaLen, ...cut };
+      }
+    }
+    const reverse = refUp.indexOf(grnaRc);
+    if (reverse !== -1) {
+      for (const strand of ['reverse', 'forward'] as const) {
+        const cut = resolveMatchedCutSite(refUp, reverse, grnaLen, strand);
+        if (cut.pam_found) return { strand, grna_start: reverse, grna_end: reverse + grnaLen, ...cut };
       }
     }
   }
