@@ -114,6 +114,20 @@ export class LabArchiveService {
     );
   }
 
+  async downloadFile(labId: string, path: string): Promise<Blob> {
+    if (path.startsWith('/')) {
+      return firstValueFrom(this.http.get(path, { responseType: 'blob' }));
+    }
+
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(
+      this.http.get(`${this.apiUrl}/${labId}/fs/download?path=${encodeURIComponent(path)}`, {
+        headers,
+        responseType: 'blob'
+      })
+    );
+  }
+
   async uploadFile(labId: string, path: string, file: File): Promise<any> {
     const headers = await this.getAuthHeaders();
     const formData = new FormData();

@@ -48,7 +48,7 @@
           <!-- Attached Files (Click to open) -->
           <div class="record-card-files" *ngIf="record.files?.length" (click)="$event.stopPropagation()">
             <span class="card-file-label">Files: </span>
-            <a *ngFor="let file of (record.files || []).slice(0, 1)" [href]="getDownloadUrl(file.path)" target="_blank" class="card-file-item card-file-link">
+            <a *ngFor="let file of (record.files || []).slice(0, 1)" [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" (click)="downloadFile(file.path, file.filename, $event)" class="card-file-item card-file-link">
               <span class="file-icon-text">📄</span> <span class="file-name-text" [title]="file.filename">{{ getDisplayText(file.filename, 44) }}</span>
             </a>
             <span class="card-more-chip" *ngIf="(record.files?.length || 0) > 1">+{{ (record.files?.length || 0) - 1 }} more</span>
@@ -274,7 +274,7 @@
                 <div class="inline-chips-container flex-col">
                   <!-- Attached Files list directly as clickable text -->
                   <div *ngFor="let file of (sample.files || []).slice(0, 2); let fIdx = index" class="sample-file-text-row">
-                    <a [href]="getDownloadUrl(file.path)" target="_blank" class="inline-file-link" [title]="file.filename">
+                    <a [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" (click)="downloadFile(file.path, file.filename, $event)" class="inline-file-link" [title]="file.filename">
                       📄 {{ getDisplayText(file.filename, 22) }}
                     </a>
                     <button type="button" class="chip-delete-x" (click)="removeSampleFileFromRow(sample, fIdx)" [disabled]="isReadOnly">✕</button>
@@ -467,7 +467,7 @@
           <span class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</span>
           <span class="col-modified">{{ file.modified_at | date:'MMM d, yyyy' }}</span>
           <span class="col-actions">
-            <a *ngIf="!file.is_dir" [href]="getDownloadUrl(file.rel_path)" target="_blank" class="finder-action-icon-btn download-btn" title="Download file">
+            <a *ngIf="!file.is_dir" [href]="getDownloadUrl(file.rel_path)" [attr.download]="file.name" (click)="downloadFile(file.rel_path, file.name, $event)" class="finder-action-icon-btn download-btn" title="Download file">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -541,7 +541,7 @@
                     <span class="attached-file-name" [title]="file.filename">{{ file.filename }}</span>
                   </div>
                   <div class="attached-file-actions">
-                    <a [href]="getDownloadUrl(file.path)" target="_blank" class="file-action-link">Download</a>
+                    <a [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" (click)="downloadFile(file.path, file.filename, $event)" class="file-action-link">Download</a>
                   </div>
                 </div>
               </div>
@@ -807,7 +807,7 @@
             <div *ngFor="let file of editingRecordData.files" class="pending-file edit-file-row">
               <span class="pending-file-name" [title]="file.filename">📄 {{ file.filename }}</span>
               <div class="edit-file-actions">
-                <a [href]="getDownloadUrl(file.path)" target="_blank" class="app-btn app-btn-outline app-btn-sm record-form-file-btn">Download</a>
+                <a [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" (click)="downloadFile(file.path, file.filename, $event)" class="app-btn app-btn-outline app-btn-sm record-form-file-btn">Download</a>
                 <button class="app-btn app-btn-danger app-btn-sm record-form-file-btn" (click)="unlinkEditFile(file)">Unlink</button>
               </div>
             </div>
@@ -975,7 +975,7 @@
                   <td><span style="font-size:var(--text-sm); color:var(--color-text-secondary);">{{ r.description || r.summary || '(No description)' }}</span></td>
                   <td>
                     <div class="table-stack" *ngIf="r.files?.length">
-                      <a *ngFor="let file of r.files" [href]="getDownloadUrl(file.path)" target="_blank" class="table-filelink" [title]="file.filename" (click)="$event.stopPropagation()">
+                      <a *ngFor="let file of r.files" [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" class="table-filelink" [title]="file.filename" (click)="downloadFile(file.path, file.filename, $event)">
                         📄 {{ getDisplayText(file.filename, 20) }}
                       </a>
                     </div>

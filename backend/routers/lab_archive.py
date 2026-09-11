@@ -666,4 +666,9 @@ async def fs_download(
         raise HTTPException(status_code=400, detail="Invalid path")
     if not os.path.exists(safe_path) or os.path.isdir(safe_path):
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(safe_path)
+    return FileResponse(
+        safe_path,
+        filename=os.path.basename(safe_path),
+        media_type="application/octet-stream",
+        content_disposition_type="attachment",
+    )

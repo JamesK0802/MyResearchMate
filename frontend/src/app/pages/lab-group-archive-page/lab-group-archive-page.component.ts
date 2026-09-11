@@ -2093,6 +2093,20 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     return `/api/lab-archive/${this.labId}/fs/download?path=${encodeURIComponent(relPath)}&token=${encodeURIComponent(token)}`;
   }
 
+  async downloadFile(relPath: string, filename?: string, event?: Event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    try {
+      const blob = await this.archiveService.downloadFile(this.labId, relPath);
+      const fallbackName = relPath.split('/').filter(Boolean).pop() || 'download';
+      saveAs(blob, filename || fallbackName);
+    } catch (error) {
+      console.error('File download failed', error);
+      alert('Download failed: ' + ((error as any).error?.detail || (error as any).message || error));
+    }
+  }
+
   formatExternalLink(link: string): string {
     if (!link) return '';
     if (/^https?:\/\//i.test(link)) {
