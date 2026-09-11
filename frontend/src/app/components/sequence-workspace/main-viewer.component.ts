@@ -20,7 +20,7 @@ import { FastqViewerComponent } from './fastq-viewer.component';
             <span class="doc-badge fastq-badge" *ngIf="item.type === 'fastq'">FASTQ</span>
             <span class="doc-badge seq-badge" *ngIf="item.type === 'sequence'">SEQ</span>
             <span class="doc-meta-text" *ngIf="item.type === 'fastq'">{{ item.stats.readCount | number }} reads</span>
-            <span class="doc-preview-note" *ngIf="item.type === 'fastq' && item.isReadPreview">Viewing first {{ item.loadedReadCount | number }}</span>
+            <span class="doc-preview-note" *ngIf="item.type === 'fastq' && item.isReadPreview">Preview: {{ item.loadedReadCount | number }}</span>
             <span class="doc-meta-text" *ngIf="item.type === 'sequence'">{{ item.topology }} • {{ item.sequence.length }} bp</span>
           </div>
 
@@ -141,6 +141,15 @@ import { FastqViewerComponent } from './fastq-viewer.component';
       font-size: 0.72rem;
       font-weight: 700;
       white-space: nowrap;
+    }
+
+    @media (max-width: 700px) {
+      .compact-doc-header { padding: 6px 8px; }
+      .doc-title-group { width: 100%; gap: 6px; }
+      .doc-name { flex: 1; min-width: 44px; }
+      .doc-badge { font-size: 0.62rem; padding: 2px 5px; }
+      .doc-meta-text { font-size: 0.7rem; }
+      .doc-preview-note { font-size: 0.66rem; }
     }
 
     .viewer-tabs {

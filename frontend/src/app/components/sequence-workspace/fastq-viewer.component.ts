@@ -156,11 +156,13 @@ function buildMotifRegex(query: string): RegExp | null {
           <div class="msa-wrapper">
             <!-- Left Sticky Read IDs Panel -->
             <div class="msa-ids-column">
-              <div class="msa-id-header">READ ID</div>
+              <div class="msa-id-header"><span class="desktop-label">READ ID</span><span class="mobile-label">READ</span></div>
               <div class="msa-id-row reference-id-row">
+                <span class="mobile-reference-label">REF</span>
                 <span class="msa-id-tag ref-tag">REFERENCE ({{ alignedWindowSeq.length }} bp)</span>
               </div>
-              <div class="msa-id-row" *ngFor="let read of visibleAlignedReads">
+              <div class="msa-id-row" *ngFor="let read of visibleAlignedReads; let readIndex = index">
+                <span class="mobile-read-index">#{{ readIndex + 1 }}</span>
                 <span class="msa-id-tag" [title]="'@' + read.id">{{ '@' + read.id }}</span>
               </div>
             </div>
@@ -228,8 +230,9 @@ function buildMotifRegex(query: string): RegExp | null {
           <div class="raw-table-wrapper">
             <!-- Left Sticky Read IDs Column -->
             <div class="raw-ids-column">
-              <div class="raw-id-header">READ ID</div>
-              <div class="raw-id-row" *ngFor="let read of (isAlignedActive ? visibleUnalignedReads : visibleReads)">
+              <div class="raw-id-header"><span class="desktop-label">READ ID</span><span class="mobile-label">READ</span></div>
+              <div class="raw-id-row" *ngFor="let read of (isAlignedActive ? visibleUnalignedReads : visibleReads); let readIndex = index">
+                <span class="mobile-read-index">#{{ readIndex + 1 }}</span>
                 <span class="raw-id-tag" [title]="'@' + read.id">{{ '@' + read.id }}</span>
                 <span
                   class="alignment-failure-badge"
@@ -285,6 +288,7 @@ function buildMotifRegex(query: string): RegExp | null {
       flex: 1;
       display: flex;
       flex-direction: column;
+      min-width: 0;
     }
 
     /* Top Compact Workspace Bar */
@@ -452,6 +456,7 @@ function buildMotifRegex(query: string): RegExp | null {
     .alignment-results {
       display: flex;
       flex-direction: column;
+      min-width: 0;
     }
     .aligned-result-section { order: 1; }
     .unaligned-result-section { order: 2; }
@@ -469,6 +474,8 @@ function buildMotifRegex(query: string): RegExp | null {
       overflow: hidden;
       background: #ffffff;
       position: relative;
+      min-width: 0;
+      width: 100%;
     }
     .msa-ids-column {
       flex-shrink: 0;
@@ -514,6 +521,7 @@ function buildMotifRegex(query: string): RegExp | null {
     }
     .msa-seq-viewport {
       flex: 1;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       cursor: grab;
@@ -661,6 +669,8 @@ function buildMotifRegex(query: string): RegExp | null {
       border-radius: 6px;
       overflow: hidden;
       background: #ffffff;
+      min-width: 0;
+      width: 100%;
     }
     .raw-ids-column {
       flex-shrink: 0;
@@ -723,6 +733,7 @@ function buildMotifRegex(query: string): RegExp | null {
     }
     .raw-seq-viewport {
       flex: 1;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       background: #ffffff;
@@ -775,6 +786,55 @@ function buildMotifRegex(query: string): RegExp | null {
     }
     .load-more button:hover { background: #2563eb; }
     .empty-state { text-align: center; padding: 24px; color: #64748b; }
+    .mobile-label,
+    .mobile-read-index,
+    .mobile-reference-label { display: none; }
+
+    @media (max-width: 700px) {
+      .fastq-viewer { padding: 0; gap: 6px; }
+      .reads-panel { padding: 8px 0; border-left: 0; border-right: 0; border-radius: 0; }
+      .workspace-top-bar { align-items: stretch; gap: 8px; padding: 0 8px 8px; }
+      .top-bar-left { width: 100%; flex-wrap: wrap; gap: 6px; }
+      .workspace-title { font-size: 0.86rem; }
+      .unaligned-summary-tag,
+      .aligned-summary-tag,
+      .filter-count-tag { font-size: 0.7rem; padding: 2px 7px; }
+      .top-bar-right { width: 100%; min-width: 0; gap: 6px; }
+      .search-box { flex: 1; min-width: 0; gap: 4px; }
+      .search-box input { width: 0; min-width: 0; flex: 1; padding: 7px 8px; }
+      .search-box button { padding: 7px 9px; }
+      .btn-align-toggle { flex: 0 0 auto; padding: 7px 9px; font-size: 0.72rem; }
+      .align-config-panel { margin: 0 8px 8px; padding: 9px; }
+      .align-mode-tabs,
+      .form-row { flex-direction: column; }
+      .mode-tab-btn { width: 100%; }
+      .alignment-results { width: 100%; }
+      .msa-section,
+      .unaligned-section { margin-left: 0; margin-right: 0; }
+      .msa-wrapper,
+      .raw-table-wrapper { border-radius: 0; border-left: 0; border-right: 0; }
+      .msa-ids-column,
+      .raw-ids-column { width: 92px; }
+      .msa-id-header,
+      .raw-id-header,
+      .msa-id-row,
+      .raw-id-row { padding-left: 7px; padding-right: 7px; }
+      .desktop-label,
+      .msa-id-tag,
+      .raw-id-tag { display: none; }
+      .mobile-label,
+      .mobile-read-index,
+      .mobile-reference-label { display: inline; }
+      .mobile-read-index { color: #475569; font: 700 0.7rem/1 system-ui, sans-serif; }
+      .mobile-reference-label { color: #2563eb; font: 800 0.68rem/1 system-ui, sans-serif; }
+      .raw-len-badge { margin-left: auto; padding: 1px 4px; font-size: 0.62rem; }
+      .alignment-failure-badge { display: none; }
+      .raw-seq-header,
+      .msa-seq-header { padding-left: 8px; font-size: 0.68rem; }
+      .raw-seq-row,
+      .msa-seq-row { padding-left: 8px; padding-right: 8px; }
+      .load-more { padding: 0 8px; }
+    }
   `]
 })
 export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
