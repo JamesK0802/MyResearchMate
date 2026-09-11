@@ -38,14 +38,19 @@ describe('orderNamuNodesForNotebook', () => {
 });
 
 describe('resolveMobileNotebookSwipe', () => {
-  it('keeps the current page before the halfway point', () => {
-    expect(resolveMobileNotebookSwipe(-159, 320, true, true)).toBe(0);
-    expect(resolveMobileNotebookSwipe(159, 320, true, true)).toBe(0);
+  it('keeps the current page after a small slow drag', () => {
+    expect(resolveMobileNotebookSwipe(-50, 320, true, true, 500)).toBe(0);
+    expect(resolveMobileNotebookSwipe(50, 320, true, true, 500)).toBe(0);
   });
 
-  it('turns at the halfway point in either direction', () => {
-    expect(resolveMobileNotebookSwipe(-160, 320, true, true)).toBe(1);
-    expect(resolveMobileNotebookSwipe(160, 320, true, true)).toBe(-1);
+  it('turns after roughly one fifth of the page in either direction', () => {
+    expect(resolveMobileNotebookSwipe(-72, 320, true, true, 500)).toBe(1);
+    expect(resolveMobileNotebookSwipe(72, 320, true, true, 500)).toBe(-1);
+  });
+
+  it('accepts a short fast flick without requiring the distance threshold', () => {
+    expect(resolveMobileNotebookSwipe(-44, 320, true, true, 100)).toBe(1);
+    expect(resolveMobileNotebookSwipe(44, 320, true, true, 100)).toBe(-1);
   });
 
   it('stays put when there is no page in the dragged direction', () => {

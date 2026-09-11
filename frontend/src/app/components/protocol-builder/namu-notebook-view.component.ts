@@ -81,9 +81,14 @@ export function resolveMobileNotebookSwipe(
   deltaX: number,
   pageWidth: number,
   canGoPrevious: boolean,
-  canGoNext: boolean
+  canGoNext: boolean,
+  durationMs = Number.POSITIVE_INFINITY
 ): -1 | 0 | 1 {
-  if (pageWidth <= 0 || Math.abs(deltaX) < pageWidth * 0.5) return 0;
+  if (pageWidth <= 0) return 0;
+  const distance = Math.abs(deltaX);
+  const distanceThreshold = Math.min(96, Math.max(54, pageWidth * 0.22));
+  const isFastFlick = durationMs > 0 && durationMs <= 350 && distance >= 32 && distance / durationMs >= 0.35;
+  if (distance < distanceThreshold && !isFastFlick) return 0;
   if (deltaX > 0 && canGoPrevious) return -1;
   if (deltaX < 0 && canGoNext) return 1;
   return 0;
@@ -400,7 +405,7 @@ export function resolveMobileNotebookSwipe(
       .mobile-current-page { position:relative; z-index:2; will-change:transform; }
       .mobile-adjacent-page { position:absolute; z-index:1; inset:0 auto auto 0; will-change:transform; }
       .mobile-page-stage.settling .mobile-notebook-page { transition:transform 280ms cubic-bezier(.22,.72,.18,1); }
-      .mobile-page-stage.dragging { cursor:grabbing; }
+      .mobile-page-stage.dragging { cursor:grabbing; user-select:none; }
       .mobile-notebook-page .page-heading,
       .mobile-notebook-page .page-steps,
       .mobile-notebook-page .page-notes { flex-shrink:0; }
@@ -496,6 +501,7 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   private mobileDragPointerId: number | null = null;
   private mobileDragStartX = 0;
   private mobileDragStartY = 0;
+  private mobileDragStartTime = 0;
   private mobileDragIntent: 'pending' | 'horizontal' | 'vertical' = 'pending';
   private mobileDragTimer = 0;
 
@@ -595,6 +601,7 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
     this.mobileDragPointerId = event.pointerId;
     this.mobileDragStartX = event.clientX;
     this.mobileDragStartY = event.clientY;
+    this.mobileDragStartTime = event.timeStamp;
     this.mobileDragIntent = 'pending';
     this.mobileDragActive = true;
     this.mobileDragX = 0;
@@ -633,7 +640,8 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
       this.mobileDragX,
       width,
       this.mobilePageIndex > 0,
-      this.mobilePageIndex + 1 < this.cachedPages.length
+      this.mobilePageIndex + 1 < this.cachedPages.length,
+      Math.max(1, event.timeStamp - this.mobileDragStartTime)
     );
     this.settleMobilePageDrag(pageDelta, width);
   }
@@ -666,6 +674,7 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   private resetMobilePageDrag() {
     window.clearTimeout(this.mobileDragTimer);
     this.mobileDragPointerId = null;
+    this.mobileDragStartTime = 0;
     this.mobileDragX = 0;
     this.mobileDragDirection = 0;
     this.mobileDragActive = false;
