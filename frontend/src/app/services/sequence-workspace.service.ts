@@ -476,18 +476,22 @@ export class SequenceWorkspaceService {
   }
 
   private async loadRemoteFastqPreview(item: import('../models/sequence.model').FastqDocument) {
-    item.readPreviewLoading = true;
-    this.itemsSubject.next([...this.itemsSubject.value]);
+    const loadingItem = { ...item, reads: [...item.reads], readPreviewLoading: true };
+    this.replaceWorkspaceItem(loadingItem);
     try {
-      await this.loadMoreRemoteFastqReads(item);
-      item.readPreviewLoaded = true;
+      await this.loadMoreRemoteFastqReads(loadingItem);
+      loadingItem.readPreviewLoaded = true;
     } catch (error) {
       console.error('Failed to load the FASTQ read preview', error);
       alert('The first FASTQ reads could not be loaded. Please try again.');
     } finally {
-      item.readPreviewLoading = false;
-      this.itemsSubject.next([...this.itemsSubject.value]);
+      loadingItem.readPreviewLoading = false;
+      this.replaceWorkspaceItem({ ...loadingItem, reads: [...loadingItem.reads] });
     }
+  }
+
+  private replaceWorkspaceItem(item: ProjectItem) {
+    this.itemsSubject.next(this.itemsSubject.value.map(existing => existing.id === item.id ? item : existing));
   }
 
   async loadMoreRemoteFastqReads(item: import('../models/sequence.model').FastqDocument, limit = 100): Promise<number> {

@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FastqAlignmentState, FastqDocument } from '../../models/sequence.model';
@@ -79,7 +79,10 @@ function buildMotifRegex(query: string): RegExp | null {
               Aligned: <strong>{{ alignedStats.alignedCount | number }}</strong> / {{ alignedStats.total | number }} ({{ alignedStats.percentage | number:'1.1-1' }}%)
             </span>
             <span class="unaligned-summary-tag" *ngIf="!isAlignedActive">
-              Total Reads: <strong>{{ processedReads.length | number }}</strong>
+              <ng-container *ngIf="document.isReadPreview; else completeReadCount">
+                Loaded: <strong>{{ processedReads.length | number }}</strong> / {{ document.stats.readCount | number }}
+              </ng-container>
+              <ng-template #completeReadCount>Total Reads: <strong>{{ processedReads.length | number }}</strong></ng-template>
             </span>
             <span class="filter-count-tag" *ngIf="searchQuery.trim()">
               Filtered: <strong>{{ filteredReads.length | number }}</strong> matches
@@ -257,11 +260,11 @@ function buildMotifRegex(query: string): RegExp | null {
         </div>
         </div>
         
-        <div class="load-more" *ngIf="hasMore">
-          <button (click)="loadMore()" [disabled]="isLoadingMore">
-            {{ isLoadingMore ? 'Loading reads…' : 'Show next 10' }} ·
-            {{ visibleReads.length | number }} of {{ ((!searchQuery.trim() && document.isReadPreview) ? document.stats.readCount : filteredReads.length) | number }}
-          </button>
+        <div #loadSentinel class="load-sentinel" *ngIf="hasMore" aria-live="polite">
+          <ng-container *ngIf="isLoadingMore">
+            <span class="read-loading-spinner"></span>
+            <span>Loading more reads…</span>
+          </ng-container>
         </div>
 
         <div class="read-loading-state" *ngIf="document.readPreviewLoading">
@@ -795,11 +798,7 @@ function buildMotifRegex(query: string): RegExp | null {
       box-shadow: 0 0 3px rgba(234, 179, 8, 0.5);
     }
 
-    .load-more { text-align: center; margin-top: 12px; }
-    .load-more button {
-      padding: 6px 14px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600;
-    }
-    .load-more button:hover { background: #2563eb; }
+    .load-sentinel { min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: .76rem; font-weight: 700; }
     .empty-state { text-align: center; padding: 24px; color: #64748b; }
     .read-loading-state { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 28px; color: #475569; font-size: .82rem; font-weight: 700; }
     .read-loading-spinner { width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #16a34a; border-radius: 50%; animation: read-spin .7s linear infinite; }
@@ -852,7 +851,7 @@ function buildMotifRegex(query: string): RegExp | null {
       .msa-seq-header { padding-left: 8px; font-size: 0.68rem; }
       .raw-seq-row,
       .msa-seq-row { padding-left: 8px; padding-right: 8px; }
-      .load-more { padding: 0 8px; }
+      .load-sentinel { padding: 0 8px; }
       .mobile-read-info { position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 1200; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; padding: 15px 46px 15px 16px; border: 1px solid #93c5fd; border-radius: 12px; background: #fff; box-shadow: 0 14px 38px rgba(15,23,42,.24); }
       .mobile-read-info strong { grid-column: 1 / -1; overflow-wrap: anywhere; color: #0f172a; font: 700 .78rem/1.35 ui-monospace, monospace; }
       .mobile-read-info > span:last-child { color: #475569; font-size: .76rem; font-weight: 750; }
@@ -861,9 +860,13 @@ function buildMotifRegex(query: string): RegExp | null {
     }
   `]
 })
-export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
+export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   @Input() document!: FastqDocument;
   @ViewChild('msaViewport') msaViewportRef!: ElementRef;
+  @ViewChild('loadSentinel') set loadSentinel(ref: ElementRef<HTMLElement> | undefined) {
+    this.loadSentinelRef = ref;
+    this.observeLoadSentinel();
+  }
 
   processedReads: ProcessedRead[] = [];
   filteredReads: ProcessedRead[] = [];
@@ -885,12 +888,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
     const height = el.scrollHeight;
 
     if (height - position < threshold) {
-      this.isLoadingMore = true;
-      try {
-        await this.loadMore();
-      } finally {
-        this.isLoadingMore = false;
-      }
+      await this.requestMoreReads();
     }
   }
 
@@ -916,6 +914,8 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
 
   private currentDocId: string | null = null;
   selectedReadInfo: ProcessedRead | null = null;
+  private loadSentinelRef?: ElementRef<HTMLElement>;
+  private loadObserver?: IntersectionObserver;
 
   constructor(private sequenceWorkspaceService: SequenceWorkspaceService) {}
 
@@ -962,6 +962,42 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit {
 
   ngAfterViewInit() {
     this.checkPendingAutoAlign();
+    this.observeLoadSentinel();
+  }
+
+  ngOnDestroy() {
+    this.loadObserver?.disconnect();
+  }
+
+  private observeLoadSentinel() {
+    this.loadObserver?.disconnect();
+    const sentinel = this.loadSentinelRef?.nativeElement;
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return;
+    this.loadObserver = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void this.requestMoreReads();
+    }, { rootMargin: '180px 0px' });
+    this.loadObserver.observe(sentinel);
+  }
+
+  private async requestMoreReads() {
+    if (this.isLoadingMore || this.document.readPreviewLoading || !this.hasMore) return;
+    this.isLoadingMore = true;
+    try {
+      await this.loadMore();
+    } finally {
+      this.isLoadingMore = false;
+      setTimeout(() => this.loadMoreIfSentinelVisible(), 0);
+    }
+  }
+
+  private loadMoreIfSentinelVisible() {
+    const sentinel = this.loadSentinelRef?.nativeElement;
+    if (!sentinel || !this.hasMore || this.isLoadingMore) return;
+    const rect = sentinel.getBoundingClientRect();
+    const rootRect = sentinel.closest('.fastq-viewer')?.getBoundingClientRect();
+    const viewportTop = rootRect?.top ?? 0;
+    const viewportBottom = rootRect?.bottom ?? window.innerHeight;
+    if (rect.top <= viewportBottom + 180 && rect.bottom >= viewportTop - 180) void this.requestMoreReads();
   }
 
   get alignedReadsList(): ProcessedRead[] {
