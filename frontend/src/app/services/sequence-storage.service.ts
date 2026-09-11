@@ -34,6 +34,24 @@ export class SequenceStorageService {
     return new HttpHeaders({ Authorization: `Bearer ${session?.access_token || ''}` });
   }
 
+  private async uploadChunk(url: string, chunk: Blob, headers: HttpHeaders): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await firstValueFrom(this.http.put(url, chunk, {
+          headers: headers.set('Content-Type', 'application/octet-stream'),
+        }));
+        return;
+      } catch (error: any) {
+        lastError = error;
+        const retryable = !error?.status || [408, 429, 502, 503, 504].includes(error.status);
+        if (!retryable || attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+    throw lastError;
+  }
+
   async getUsage(): Promise<SequenceStorageUsage> {
     return firstValueFrom(this.http.get<SequenceStorageUsage>(`${this.apiUrl}/usage`, { headers: await this.headers() }));
   }
@@ -54,9 +72,7 @@ export class SequenceStorageService {
     try {
       while (offset < file.size) {
         const chunk = file.slice(offset, Math.min(file.size, offset + session.chunk_size));
-        await firstValueFrom(this.http.put(`${this.apiUrl}/uploads/${session.upload_id}?offset=${offset}`, chunk, {
-          headers: headers.set('Content-Type', 'application/octet-stream'),
-        }));
+        await this.uploadChunk(`${this.apiUrl}/uploads/${session.upload_id}?offset=${offset}`, chunk, headers);
         offset += chunk.size;
         onProgress?.(file.size ? offset / file.size : 1);
       }

@@ -172,6 +172,14 @@ async def append_upload_chunk(
         raise HTTPException(status_code=400, detail=f"Upload chunks must be 1 to {UPLOAD_CHUNK_SIZE} bytes")
 
     current_size = part_path.stat().st_size if part_path.is_file() else -1
+    # Mobile networks and reverse proxies can lose the response after the server
+    # has already appended a chunk, then transparently retry the same PUT. Treat
+    # an identical immediately-previous chunk as success so uploads are resumable.
+    if current_size == offset + len(chunk) and part_path.is_file():
+        with part_path.open("rb") as existing:
+            existing.seek(offset)
+            if existing.read(len(chunk)) == chunk:
+                return {"received_bytes": current_size, "size_bytes": int(state.get("size_bytes", -1))}
     if current_size != offset:
         raise HTTPException(status_code=409, detail=f"Upload offset mismatch; expected {current_size}")
     expected_size = int(state.get("size_bytes", -1))
