@@ -76,6 +76,19 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
   return [...orderSubset(reachable), ...orderSubset(remaining)];
 }
 
+/** Resolve a completed mobile drag. Positive movement opens the previous page. */
+export function resolveMobileNotebookSwipe(
+  deltaX: number,
+  pageWidth: number,
+  canGoPrevious: boolean,
+  canGoNext: boolean
+): -1 | 0 | 1 {
+  if (pageWidth <= 0 || Math.abs(deltaX) < pageWidth * 0.5) return 0;
+  if (deltaX > 0 && canGoPrevious) return -1;
+  if (deltaX < 0 && canGoNext) return 1;
+  return 0;
+}
+
 @Component({
   selector: 'app-namu-notebook-view',
   standalone: true,
@@ -104,9 +117,25 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
       <p class="notebook-pdf-error" *ngIf="pdfError">{{ pdfError }}</p>
 
       <div class="mobile-screen-notebook" *ngIf="tree.nodes.length && isMobileView">
-        <article class="notebook-page mobile-notebook-page" *ngIf="mobilePage as notebookPage">
-          <ng-container *ngTemplateOutlet="pageTemplate; context: { $implicit: notebookPage, editable: false }"></ng-container>
-        </article>
+        <div #mobilePageStage class="mobile-page-stage"
+          [class.dragging]="mobileDragActive"
+          [class.settling]="mobileDragSettling"
+          (pointerdown)="startMobilePageDrag($event)"
+          (pointermove)="moveMobilePageDrag($event)"
+          (pointerup)="finishMobilePageDrag($event)"
+          (pointercancel)="cancelMobilePageDrag($event)">
+          <article class="notebook-page mobile-notebook-page mobile-current-page"
+            *ngIf="mobilePage as notebookPage"
+            [style.transform]="mobileCurrentPageTransform"
+            [style.transform-origin]="mobilePageTransformOrigin">
+            <ng-container *ngTemplateOutlet="pageTemplate; context: { $implicit: notebookPage, editable: false }"></ng-container>
+          </article>
+          <article class="notebook-page mobile-notebook-page mobile-adjacent-page"
+            *ngIf="mobileAdjacentPage as notebookPage"
+            [style.transform]="mobileAdjacentPageTransform">
+            <ng-container *ngTemplateOutlet="pageTemplate; context: { $implicit: notebookPage, editable: false }"></ng-container>
+          </article>
+        </div>
         <div class="notebook-pagination">
           <button type="button" (click)="previousMobilePage()" [disabled]="mobilePageIndex === 0">Previous</button>
           <span>{{ mobilePageIndex + 1 }} of {{ cachedPages.length }}</span>
@@ -366,7 +395,12 @@ export function orderNamuNodesForNotebook(tree: NamuTree): NamuNode[] {
       .notebook-actions { min-width:0; }
       .notebook-tree-select { max-width:150px; }
       .mobile-screen-notebook { display:block; width:100%; }
+      .mobile-page-stage { position:relative; width:100%; overflow:hidden; border-radius:8px; touch-action:pan-y; perspective:1100px; }
       .mobile-notebook-page { --rule:26px; width:100%; height:auto; min-height:calc(100dvh - 190px); aspect-ratio:auto; padding:0 24px 22px; border-radius:8px; overflow:visible; filter:drop-shadow(0 8px 14px rgba(45,40,32,.14)); }
+      .mobile-current-page { position:relative; z-index:2; will-change:transform; }
+      .mobile-adjacent-page { position:absolute; z-index:1; inset:0 auto auto 0; will-change:transform; }
+      .mobile-page-stage.settling .mobile-notebook-page { transition:transform 280ms cubic-bezier(.22,.72,.18,1); }
+      .mobile-page-stage.dragging { cursor:grabbing; }
       .mobile-notebook-page .page-heading,
       .mobile-notebook-page .page-steps,
       .mobile-notebook-page .page-notes { flex-shrink:0; }
@@ -450,10 +484,20 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   private pdfBlobUrl = '';
   pdfFileName = 'protocol-notebook.pdf';
   @ViewChild('pdfNotebook') private pdfNotebook?: ElementRef<HTMLElement>;
+  @ViewChild('mobilePageStage') private mobilePageStage?: ElementRef<HTMLElement>;
   @ViewChildren('stepTextarea') private stepTextareas!: QueryList<ElementRef<HTMLTextAreaElement>>;
 
   cachedPages: NotebookPage[] = [];
   private currentTreeId = '';
+  mobileDragX = 0;
+  mobileDragDirection: -1 | 0 | 1 = 0;
+  mobileDragActive = false;
+  mobileDragSettling = false;
+  private mobileDragPointerId: number | null = null;
+  private mobileDragStartX = 0;
+  private mobileDragStartY = 0;
+  private mobileDragIntent: 'pending' | 'horizontal' | 'vertical' = 'pending';
+  private mobileDragTimer = 0;
 
   constructor(
     private namuStorageService: NamuStorageService,
@@ -490,6 +534,7 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   @HostListener('window:resize')
   onWindowResize() {
     this.isMobileView = window.innerWidth <= 900;
+    this.resetMobilePageDrag();
     this.scheduleStepHeightSync();
   }
 
@@ -499,6 +544,19 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
 
   get spreadPages(): NotebookPage[] { return this.cachedPages.slice(this.spreadStart, this.spreadStart + 2); }
   get mobilePage(): NotebookPage | undefined { return this.cachedPages[this.mobilePageIndex]; }
+  get mobileAdjacentPage(): NotebookPage | undefined {
+    return this.mobileDragDirection ? this.cachedPages[this.mobilePageIndex + this.mobileDragDirection] : undefined;
+  }
+  get mobileCurrentPageTransform(): string {
+    const width = this.mobilePageStage?.nativeElement.clientWidth || 1;
+    const rotation = Math.max(-7, Math.min(7, (this.mobileDragX / width) * -7));
+    return `translate3d(${this.mobileDragX}px, 0, 0) rotateY(${rotation}deg)`;
+  }
+  get mobileAdjacentPageTransform(): string {
+    const offset = this.mobileDragDirection * 100;
+    return `translate3d(calc(${offset}% + ${this.mobileDragX}px), 0, 0)`;
+  }
+  get mobilePageTransformOrigin(): string { return this.mobileDragDirection === -1 ? 'left center' : 'right center'; }
   get overviewSpreads(): Array<[NotebookPage, NotebookPage | undefined]> {
     const pages = this.cachedPages.slice(this.overviewStart, this.overviewStart + 8);
     const spreads: Array<[NotebookPage, NotebookPage | undefined]> = [];
@@ -529,6 +587,91 @@ export class NamuNotebookViewComponent implements OnChanges, AfterViewInit {
   nextOverview() { if (this.overviewStart + 8 < this.cachedPages.length) this.overviewStart += 8; }
   previousMobilePage() { if (this.mobilePageIndex > 0) { this.mobilePageIndex--; this.turnPage(); } }
   nextMobilePage() { if (this.mobilePageIndex + 1 < this.cachedPages.length) { this.mobilePageIndex++; this.turnPage(); } }
+
+  startMobilePageDrag(event: PointerEvent) {
+    if (!event.isPrimary || this.mobileDragSettling) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, textarea, select, [contenteditable="true"]')) return;
+    this.mobileDragPointerId = event.pointerId;
+    this.mobileDragStartX = event.clientX;
+    this.mobileDragStartY = event.clientY;
+    this.mobileDragIntent = 'pending';
+    this.mobileDragActive = true;
+    this.mobileDragX = 0;
+    this.mobileDragDirection = 0;
+  }
+
+  moveMobilePageDrag(event: PointerEvent) {
+    if (!this.mobileDragActive || event.pointerId !== this.mobileDragPointerId) return;
+    const deltaX = event.clientX - this.mobileDragStartX;
+    const deltaY = event.clientY - this.mobileDragStartY;
+    if (this.mobileDragIntent === 'pending' && (Math.abs(deltaX) > 7 || Math.abs(deltaY) > 7)) {
+      this.mobileDragIntent = Math.abs(deltaX) > Math.abs(deltaY) * 1.15 ? 'horizontal' : 'vertical';
+      if (this.mobileDragIntent === 'horizontal') this.mobilePageStage?.nativeElement.setPointerCapture(event.pointerId);
+    }
+    if (this.mobileDragIntent === 'vertical') {
+      this.resetMobilePageDrag();
+      return;
+    }
+    if (this.mobileDragIntent !== 'horizontal') return;
+    event.preventDefault();
+    const requestedDirection: -1 | 1 = deltaX > 0 ? -1 : 1;
+    const hasAdjacent = requestedDirection === -1 ? this.mobilePageIndex > 0 : this.mobilePageIndex + 1 < this.cachedPages.length;
+    this.mobileDragDirection = hasAdjacent ? requestedDirection : 0;
+    this.mobileDragX = hasAdjacent ? deltaX : deltaX * 0.18;
+  }
+
+  finishMobilePageDrag(event: PointerEvent) {
+    if (!this.mobileDragActive || event.pointerId !== this.mobileDragPointerId) return;
+    this.releaseMobilePointer(event.pointerId);
+    if (this.mobileDragIntent !== 'horizontal') {
+      this.resetMobilePageDrag();
+      return;
+    }
+    const width = this.mobilePageStage?.nativeElement.clientWidth || 0;
+    const pageDelta = resolveMobileNotebookSwipe(
+      this.mobileDragX,
+      width,
+      this.mobilePageIndex > 0,
+      this.mobilePageIndex + 1 < this.cachedPages.length
+    );
+    this.settleMobilePageDrag(pageDelta, width);
+  }
+
+  cancelMobilePageDrag(event: PointerEvent) {
+    if (event.pointerId !== this.mobileDragPointerId) return;
+    this.releaseMobilePointer(event.pointerId);
+    if (this.mobileDragIntent === 'horizontal') this.settleMobilePageDrag(0, this.mobilePageStage?.nativeElement.clientWidth || 0);
+    else this.resetMobilePageDrag();
+  }
+
+  private settleMobilePageDrag(pageDelta: -1 | 0 | 1, width: number) {
+    this.mobileDragActive = false;
+    this.mobileDragSettling = true;
+    this.mobileDragX = pageDelta === 0 ? 0 : -pageDelta * width;
+    window.clearTimeout(this.mobileDragTimer);
+    this.mobileDragTimer = window.setTimeout(() => {
+      if (pageDelta !== 0) this.mobilePageIndex += pageDelta;
+      this.resetMobilePageDrag();
+      this.cdr.detectChanges();
+    }, 280);
+  }
+
+  private releaseMobilePointer(pointerId: number) {
+    const stage = this.mobilePageStage?.nativeElement;
+    if (stage?.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId);
+    this.mobileDragPointerId = null;
+  }
+
+  private resetMobilePageDrag() {
+    window.clearTimeout(this.mobileDragTimer);
+    this.mobileDragPointerId = null;
+    this.mobileDragX = 0;
+    this.mobileDragDirection = 0;
+    this.mobileDragActive = false;
+    this.mobileDragSettling = false;
+    this.mobileDragIntent = 'pending';
+  }
 
   saveNode(node: NamuNode) {
     this.namuStorageService.updateNode(this.tree.id, node);

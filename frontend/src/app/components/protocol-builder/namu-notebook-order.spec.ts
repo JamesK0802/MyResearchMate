@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NamuNode, NamuTree } from '../../models/namu.model';
-import { orderNamuNodesForNotebook } from './namu-notebook-view.component';
+import { orderNamuNodesForNotebook, resolveMobileNotebookSwipe } from './namu-notebook-view.component';
 
 const node = (id: string, nextNodes: string[], x: number, y = 0): NamuNode => ({
   id, title: id, steps: ['step'], nextNodes, x, y, status: 'planned', leaves: [],
@@ -34,5 +34,22 @@ describe('orderNamuNodesForNotebook', () => {
     const b = node('b', ['a'], 400);
     expect(orderNamuNodesForNotebook(tree([b, a, root])).map(item => item.id))
       .toEqual(['root', 'a', 'b']);
+  });
+});
+
+describe('resolveMobileNotebookSwipe', () => {
+  it('keeps the current page before the halfway point', () => {
+    expect(resolveMobileNotebookSwipe(-159, 320, true, true)).toBe(0);
+    expect(resolveMobileNotebookSwipe(159, 320, true, true)).toBe(0);
+  });
+
+  it('turns at the halfway point in either direction', () => {
+    expect(resolveMobileNotebookSwipe(-160, 320, true, true)).toBe(1);
+    expect(resolveMobileNotebookSwipe(160, 320, true, true)).toBe(-1);
+  });
+
+  it('stays put when there is no page in the dragged direction', () => {
+    expect(resolveMobileNotebookSwipe(200, 320, false, true)).toBe(0);
+    expect(resolveMobileNotebookSwipe(-200, 320, true, false)).toBe(0);
   });
 });

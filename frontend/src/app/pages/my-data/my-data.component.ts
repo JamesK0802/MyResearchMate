@@ -482,7 +482,9 @@ export class MyDataComponent implements OnInit {
       const tree = res as ProtocolTreeRecord;
       if (!tree.document_json?.trees?.length) { alert('This protocol tree has no document data.'); return; }
       this.protocolStorage.loadSavedDocument(tree.document_json, tree.title, tree.id);
-      this.router.navigate(['/tools/protocol-builder']);
+      this.router.navigate(['/tools/protocol-builder'], {
+        state: { openProtocolInNotebook: typeof window !== 'undefined' && window.innerWidth <= 900 }
+      });
       return;
     }
     if (this.resource === 'pcr') {

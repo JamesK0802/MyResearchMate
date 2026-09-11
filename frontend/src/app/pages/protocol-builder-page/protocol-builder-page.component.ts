@@ -302,6 +302,9 @@ export class NamuPageComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    if (typeof window !== 'undefined' && window.innerWidth <= 900 && window.history.state?.openProtocolInNotebook) {
+      this.viewMode = 'notebook';
+    }
     this.sub.add(this.namuStorageService.doc$.subscribe(d => {
       this.zone.run(() => {
         this.doc = d;
