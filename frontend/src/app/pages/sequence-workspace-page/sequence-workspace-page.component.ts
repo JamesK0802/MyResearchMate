@@ -7,6 +7,9 @@ import { ItemInspectorComponent } from '../../components/sequence-workspace/item
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { AuthService } from '../../services/auth.service';
 import { StorageUsageComponent } from '../../components/storage-usage.component';
+import { ProjectItem } from '../../models/sequence.model';
+
+type MobileWorkspacePanel = 'files' | 'viewer' | 'details';
 
 @Component({
   selector: 'app-sequence-workspace-page',
@@ -26,9 +29,11 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
         <span *ngIf="!(auth.session$ | async) || auth.isDemo" class="storage-usage muted">Sign in to save files to your account</span>
       </header>
       <nav class="mobile-workspace-tabs" aria-label="Sequence workspace panels">
-        <button type="button" [class.active]="mobilePanel === 'files'" (click)="mobilePanel = 'files'">Files</button>
-        <button type="button" [class.active]="mobilePanel === 'viewer'" (click)="mobilePanel = 'viewer'">Viewer</button>
-        <button type="button" [class.active]="mobilePanel === 'details'" (click)="mobilePanel = 'details'">Details</button>
+        <button type="button" [class.active]="mobilePanel === 'files'" (click)="setMobilePanel('files')">Files</button>
+        <button type="button" [class.active]="mobilePanel === 'viewer'" [disabled]="!selectedItem"
+          [attr.aria-disabled]="!selectedItem" (click)="setMobilePanel('viewer')">Viewer</button>
+        <button type="button" [class.active]="mobilePanel === 'details'" [disabled]="!canOpenDetails"
+          [attr.aria-disabled]="!canOpenDetails" (click)="setMobilePanel('details')">Details</button>
       </nav>
       <div class="workspace-container">
       <!-- Collapsible Explorer Left Sidebar -->
@@ -125,6 +130,8 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
       .mobile-workspace-tabs { display: grid; grid-template-columns: repeat(3, 1fr); flex: 0 0 39px; border-bottom: 1px solid var(--color-border); background: #fff; }
       .mobile-workspace-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #64748b; font: 700 .74rem var(--font-sans); }
       .mobile-workspace-tabs button.active { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+      .mobile-workspace-tabs button:disabled { color: #cbd5e1; cursor: not-allowed; }
+      .mobile-workspace-tabs button:disabled.active { border-bottom-color: transparent; }
       .workspace-container { display: block; overflow: hidden; }
       .panel { width: 100%; height: 100%; min-height: 0; border: 0; }
       .mobile-panel-hidden { display: none; }
@@ -134,16 +141,32 @@ import { StorageUsageComponent } from '../../components/storage-usage.component'
 })
 export class SequenceWorkspacePageComponent implements OnDestroy {
   isSidebarCollapsed = false;
-  mobilePanel: 'files' | 'viewer' | 'details' = 'files';
+  mobilePanel: MobileWorkspacePanel = 'files';
+  selectedItem: ProjectItem | null = null;
   private readonly selectionSubscription: Subscription;
 
   constructor(public workspace: SequenceWorkspaceService, public auth: AuthService) {
-    this.selectionSubscription = this.workspace.selectedItemId$.subscribe(id => {
-      if (id && window.innerWidth <= 700) this.mobilePanel = 'viewer';
+    this.selectionSubscription = this.workspace.selectedItem$.subscribe(item => {
+      this.selectedItem = item;
+      if (!item) {
+        this.mobilePanel = 'files';
+      } else if (window.innerWidth <= 700) {
+        this.mobilePanel = 'viewer';
+      } else if (item.type === 'fastq' && this.mobilePanel === 'details') {
+        this.mobilePanel = 'viewer';
+      }
     });
   }
 
   ngOnDestroy(): void { this.selectionSubscription.unsubscribe(); }
+
+  get canOpenDetails(): boolean { return !!this.selectedItem && this.selectedItem.type !== 'fastq'; }
+
+  setMobilePanel(panel: MobileWorkspacePanel): void {
+    if (panel === 'viewer' && !this.selectedItem) return;
+    if (panel === 'details' && !this.canOpenDetails) return;
+    this.mobilePanel = panel;
+  }
 
   formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
