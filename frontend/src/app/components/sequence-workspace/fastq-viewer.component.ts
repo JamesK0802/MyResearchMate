@@ -198,9 +198,6 @@ export function createAlignmentCacheId(): string {
               (mousemove)="onDragScroll($event, msaViewport)">
               
               <div class="msa-seq-rows-container monospaced">
-                <!-- Single vertical cut-site guide line down canvas -->
-                <div class="cut-site-vertical-guide" [style.left.px]="cutSiteGuideLeftPx"></div>
-
                 <!-- Top Sequence Header matched to READ ID header -->
                 <div class="msa-seq-header">
                   <span class="msa-seq-header-title">ALIGNMENT CANVAS (Cut Site Centered ✂)</span>
@@ -593,18 +590,6 @@ export function createAlignmentCacheId(): string {
     }
     .msa-seq-header-title { color: #475569; }
 
-    /* Single vertical red cut site line extending down canvas */
-    .cut-site-vertical-guide {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: #ef4444;
-      z-index: 4;
-      pointer-events: none;
-      box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
-    }
-
     .msa-seq-row {
       height: 32px;
       display: flex;
@@ -901,7 +886,6 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   hasMore = false;
   maxPreCutLen = 0;
   refLeadPadding = '';
-  cutSiteGuideLeftPx = 0;
   isLoadingMore = false;
 
   async onViewerScroll(event: Event) {
@@ -1210,13 +1194,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
           const results = reads.slice(saveOffset, saveOffset + saveBatchSize).map(read => this.processRead(read));
           const cachedResults = results.map(result => this.toCachedAlignment(result));
           const sourceReads = reads.slice(saveOffset, saveOffset + saveBatchSize);
-          await this.sequenceWorkspaceService.saveRemoteAlignmentPage(
-            this.document,
-            cacheId,
-            offset + saveOffset,
-            sourceReads,
-            cachedResults
-          );
+          await this.saveAlignmentPageWithResume(cacheId, offset + saveOffset, sourceReads, cachedResults);
           if (offset + saveOffset < this.document.reads.length) {
             cachedResults.forEach((result, index) => {
               const loadedRead = this.document.reads[offset + saveOffset + index];
@@ -1296,6 +1274,51 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     }
     if (response?.status) return `Server request failed (HTTP ${response.status}).`;
     return response?.message || 'Please try again.';
+  }
+
+  private async saveAlignmentPageWithResume(
+    cacheId: string,
+    offset: number,
+    reads: FastqRead[],
+    results: FastqCachedAlignment[]
+  ): Promise<void> {
+    let retry = 0;
+    while (true) {
+      try {
+        await this.sequenceWorkspaceService.saveRemoteAlignmentPage(this.document, cacheId, offset, reads, results);
+        return;
+      } catch (error) {
+        if (!this.isTransientAlignmentError(error) || retry >= 12) throw error;
+        retry += 1;
+        this.alignmentStatus = `Connection interrupted. Resuming saved alignment at read ${offset.toLocaleString()} (retry ${retry}/12)…`;
+        await this.waitForAlignmentConnection(retry);
+      }
+    }
+  }
+
+  private isTransientAlignmentError(error: unknown): boolean {
+    const response = error as any;
+    const status = Number(response?.status || 0);
+    const message = String(response?.message || error || '');
+    return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500
+      || /network|fetch|terminated|connection|unknown error/i.test(message);
+  }
+
+  private async waitForAlignmentConnection(attempt: number): Promise<void> {
+    if (typeof document !== 'undefined' && document.hidden) {
+      await new Promise<void>(resolve => {
+        const resume = () => {
+          if (document.hidden) return;
+          document.removeEventListener('visibilitychange', resume);
+          resolve();
+        };
+        document.addEventListener('visibilitychange', resume);
+      });
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await new Promise<void>(resolve => globalThis.addEventListener('online', () => resolve(), { once: true }));
+    }
+    await new Promise(resolve => setTimeout(resolve, Math.min(5000, 750 * attempt)));
   }
 
   private processRead(read: FastqRead): ProcessedRead {
@@ -1403,12 +1426,6 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       r.leadPadding = ' '.repeat(padCount);
     }
 
-    // Exact pixel offset calculation for vertical cut-site red line
-    const charWidth = 7.8;
-    const paddingLeftPx = 10;
-    const cutSiteColChar = maxPreFlankLen + (this.alignedCutSiteInWindow >= 0 ? this.alignedCutSiteInWindow : Math.floor(targetWin.length / 2));
-    this.cutSiteGuideLeftPx = (cutSiteColChar * charWidth) + paddingLeftPx;
-
     const total = list.length;
     this.alignedStats = {
       total,
@@ -1436,7 +1453,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     setTimeout(() => {
       if (!this.msaViewportRef) return;
       const el = this.msaViewportRef.nativeElement as HTMLElement;
-      const targetScrollLeft = Math.max(0, this.cutSiteGuideLeftPx - (el.clientWidth / 2));
+      const cutSiteColumn = this.maxPreCutLen
+        + (this.alignedCutSiteInWindow >= 0 ? this.alignedCutSiteInWindow : Math.floor(this.alignedWindowSeq.length / 2));
+      const cutSiteLeft = (cutSiteColumn * 7.8) + 10;
+      const targetScrollLeft = Math.max(0, cutSiteLeft - (el.clientWidth / 2));
       el.scrollLeft = targetScrollLeft;
     }, 60);
   }

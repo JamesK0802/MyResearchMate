@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FastqDocument } from '../../models/sequence.model';
+import { cutIndexInWindow, findGrnaCutSite } from '../../workers/core/classifier';
 import { createAlignmentCacheId, FastqViewerComponent } from './fastq-viewer.component';
 
 const document = (): FastqDocument => ({
@@ -47,6 +48,22 @@ describe('FastqViewerComponent alignment persistence', () => {
     (restored as any).restoreAlignmentState(component.document.alignmentState);
     expect(restored.isAlignedActive).toBe(true);
     expect(restored.alignedWindowSeq).toBe('AACCGGTT');
+  });
+
+  it('uses the main analysis cut-site rule for reference and guide input', async () => {
+    const spacer = 'GACTGACTGACTGACTGACT';
+    const reference = `AACCGGTTAACC${spacer}TGGTTCCAAGGTTCCAAGG`;
+    const component = new FastqViewerComponent({ saveItem: vi.fn().mockResolvedValue(undefined) } as any);
+    component.document = document();
+    component.alignMode = 'ref_target';
+    component.inputRefSeq = reference;
+    component.inputGrnaSeq = spacer;
+    component.inputWinSize = 30;
+
+    await component.runAlign();
+
+    const mainToolCut = findGrnaCutSite(reference, spacer).cut_site;
+    expect(component.alignedCutSiteInWindow).toBe(cutIndexInWindow(reference, mainToolCut, 30));
   });
 
   it('persists resetting the alignment', async () => {
@@ -161,5 +178,28 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(streamRemoteFastqReads).toHaveBeenCalledOnce();
     expect(component.document.alignmentState).toMatchObject({ processedReadCount: 2 });
     expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
+  });
+
+  it('resumes an alignment page save after a mobile connection interruption', async () => {
+    const interrupted = Object.assign(new Error('Unknown Error'), { status: 0 });
+    const saveRemoteAlignmentPage = vi.fn()
+      .mockRejectedValueOnce(interrupted)
+      .mockResolvedValue(undefined);
+    const component = new FastqViewerComponent({
+      saveItem: vi.fn().mockResolvedValue(undefined),
+      saveRemoteAlignmentPage,
+      deleteRemoteAlignment: vi.fn().mockResolvedValue(undefined),
+      streamRemoteFastqReads: vi.fn(async (_document, onBatch) => onBatch(document().reads)),
+      loadRemoteAlignmentResults: vi.fn().mockResolvedValue(1)
+    } as any);
+    component.document = document();
+    component.document.remoteFileId = 'remote-file';
+    component.inputWindowSeq = 'AACCGGTT';
+    vi.spyOn(component as any, 'waitForAlignmentConnection').mockResolvedValue(undefined);
+
+    await component.runAlign();
+
+    expect(saveRemoteAlignmentPage).toHaveBeenCalledTimes(2);
+    expect(component.document.alignmentState).toMatchObject({ processedReadCount: 1 });
   });
 });
