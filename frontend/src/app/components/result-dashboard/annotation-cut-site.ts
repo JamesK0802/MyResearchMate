@@ -1,3 +1,5 @@
+import { resolveMatchedCutSite } from '../../workers/core/classifier';
+
 export interface AnnotationTarget {
   ref_sequence?: string;
   sgrna_seq?: string;
@@ -43,4 +45,3 @@ export function resolveAnnotationCutSite(target: AnnotationTarget | null | undef
     ? resolved
     : fallback;
 }
-import { resolveMatchedCutSite } from '../../workers/core/classifier';

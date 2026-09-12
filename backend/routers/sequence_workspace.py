@@ -19,6 +19,7 @@ from database.models import SequenceWorkspaceFile
 from storage.file_store import personal_tool_dir, read_json, relative_data_path, resolve_data_path, write_json
 from storage.quota import personal_usage, personal_quota
 from utils.fastq_paging import iter_fastq_reads, read_fastq_page
+from utils.alignment_paging import read_ordered_alignment_page
 
 
 router = APIRouter(prefix="/sequence-workspace", tags=["sequence-workspace"])
@@ -111,6 +112,7 @@ class SequenceUploadInit(BaseModel):
 class AlignmentPagePayload(BaseModel):
     alignment_id: uuid.UUID
     offset: int = Field(ge=0)
+    reads: list[dict[str, Any]] = Field(max_length=1000)
     results: list[dict[str, Any]] = Field(max_length=1000)
 
 
@@ -451,11 +453,45 @@ async def save_alignment_page(
     current_user: dict = Depends(get_current_user),
 ):
     row = get_owned_file(file_id, db, current_user)
+    if len(payload.reads) != len(payload.results):
+        raise HTTPException(status_code=422, detail="Alignment reads and results must have the same length")
     cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(payload.alignment_id)
     for page_start in range(0, len(payload.results), 100):
         page_path = cache_dir / f"{payload.offset + page_start}.json"
         write_json(page_path, {"results": payload.results[page_start:page_start + 100]})
+    grouped = {"aligned": [], "unaligned": []}
+    for read, result in zip(payload.reads, payload.results):
+        status = "aligned" if result.get("isAligned") else "unaligned"
+        grouped[status].append({
+            "id": str(read.get("id", "")),
+            "seq": str(read.get("seq", "")),
+            "qualString": "",
+            "alignment": result,
+        })
+    for status, entries in grouped.items():
+        if entries:
+            group_path = cache_dir / "groups" / status / f"{payload.offset:012d}-{len(entries):06d}.json"
+            write_json(group_path, {"reads": entries})
     return {"ok": True, "count": len(payload.results)}
+
+
+@router.get("/files/{file_id}/alignments/{alignment_id}/reads")
+async def read_ordered_alignment_results(
+    file_id: uuid.UUID,
+    alignment_id: uuid.UUID,
+    order: str = Query(default="aligned"),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=250),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = get_owned_file(file_id, db, current_user)
+    if order not in ("aligned", "unaligned"):
+        raise HTTPException(status_code=422, detail="Order must be aligned or unaligned")
+    cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(alignment_id)
+    reads, total = read_ordered_alignment_page(cache_dir, order, offset, limit)
+    next_offset = offset + len(reads)
+    return {"reads": reads, "offset": offset, "next_offset": next_offset, "has_more": next_offset < total, "total": total}
 
 
 @router.delete("/files/{file_id}/alignments/{alignment_id}")

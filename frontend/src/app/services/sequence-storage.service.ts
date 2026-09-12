@@ -171,12 +171,32 @@ export class SequenceStorageService {
     if (batch.length) await onBatch(batch);
   }
 
-  async saveAlignmentPage(fileId: string, alignmentId: string, offset: number, results: FastqCachedAlignment[]): Promise<void> {
+  async saveAlignmentPage(
+    fileId: string,
+    alignmentId: string,
+    offset: number,
+    reads: Array<{ id: string; seq: string }>,
+    results: FastqCachedAlignment[]
+  ): Promise<void> {
     await firstValueFrom(this.http.put(`${this.apiUrl}/files/${fileId}/alignment-pages`, {
       alignment_id: alignmentId,
       offset,
+      reads,
       results,
     }, { headers: await this.headers() }));
+  }
+
+  async getAlignedFastqReads(
+    fileId: string,
+    alignmentId: string,
+    order: 'aligned' | 'unaligned',
+    offset: number,
+    limit = 100
+  ): Promise<FastqReadPage> {
+    return firstValueFrom(this.http.get<FastqReadPage>(`${this.apiUrl}/files/${fileId}/alignments/${alignmentId}/reads`, {
+      headers: await this.headers(),
+      params: { order, offset, limit },
+    }));
   }
 
   async deleteAlignment(fileId: string, alignmentId: string): Promise<void> {

@@ -169,6 +169,8 @@ export class SequenceWorkspaceService {
     delete (clone as any).contentLoaded;
     if (clone.type === 'fastq') {
       clone.reads = [];
+      delete clone.alignmentResultOffset;
+      delete clone.alignmentResultOrder;
     }
     return clone;
   }
@@ -257,6 +259,10 @@ export class SequenceWorkspaceService {
       item.originalFileName = file.original_name;
       item.contentLoaded = item.type !== 'fastq';
       if (item.type === 'fastq') {
+        if (item.alignmentState?.processedReadCount !== undefined
+          && item.alignmentState.processedReadCount < item.stats.readCount) {
+          delete item.alignmentState;
+        }
         item.reads = [];
         item.readPreviewLoaded = false;
         item.readPreviewLoading = false;
@@ -498,6 +504,9 @@ export class SequenceWorkspaceService {
     if (!item.remoteFileId || !item.remoteReadsHasMore || this.loadingReadPages.has(item.id)) return 0;
     this.loadingReadPages.add(item.id);
     try {
+      if (item.alignmentState?.cacheId && item.alignmentState.processedReadCount === item.stats.readCount) {
+        return await this.loadRemoteAlignmentResults(item, item.alignmentState.readOrder, false, limit);
+      }
       const page = await this.cloudStorage.getFastqReads(item.remoteFileId, item.reads.length, limit, item.alignmentState?.cacheId);
       const reads = this.mapRemoteFastqReads(page.reads);
       item.reads.push(...reads);
@@ -509,12 +518,6 @@ export class SequenceWorkspaceService {
     } finally {
       this.loadingReadPages.delete(item.id);
     }
-  }
-
-  async fetchRemoteFastqReads(item: FastqDocument, offset: number, limit = 100): Promise<FastqRead[]> {
-    if (!item.remoteFileId) return item.reads.slice(offset, offset + limit);
-    const page = await this.cloudStorage.getFastqReads(item.remoteFileId, offset, limit, item.alignmentState?.cacheId);
-    return this.mapRemoteFastqReads(page.reads);
   }
 
   async streamRemoteFastqReads(item: FastqDocument, onBatch: (reads: FastqRead[]) => Promise<void>): Promise<void> {
@@ -534,9 +537,38 @@ export class SequenceWorkspaceService {
     }));
   }
 
-  async saveRemoteAlignmentPage(item: FastqDocument, cacheId: string, offset: number, results: FastqCachedAlignment[]) {
+  async saveRemoteAlignmentPage(item: FastqDocument, cacheId: string, offset: number, reads: FastqRead[], results: FastqCachedAlignment[]) {
     if (!item.remoteFileId) return;
-    await this.cloudStorage.saveAlignmentPage(item.remoteFileId, cacheId, offset, results);
+    await this.cloudStorage.saveAlignmentPage(item.remoteFileId, cacheId, offset, reads.map(read => ({ id: read.id, seq: read.seq })), results);
+  }
+
+  async loadRemoteAlignmentResults(
+    item: FastqDocument,
+    order: 'aligned' | 'unaligned',
+    reset = false,
+    limit = 100
+  ): Promise<number> {
+    const cacheId = item.alignmentState?.cacheId;
+    if (!item.remoteFileId || !cacheId) return 0;
+    if (reset || item.alignmentResultOrder !== order) {
+      item.reads = [];
+      item.alignmentResultOffset = 0;
+      item.alignmentResultOrder = order;
+    }
+    const page = await this.cloudStorage.getAlignedFastqReads(
+      item.remoteFileId,
+      cacheId,
+      order,
+      item.alignmentResultOffset || 0,
+      limit
+    );
+    const reads = this.mapRemoteFastqReads(page.reads);
+    item.reads.push(...reads);
+    item.alignmentResultOffset = page.next_offset;
+    item.remoteReadsHasMore = page.has_more;
+    item.loadedReadCount = item.reads.length;
+    item.isReadPreview = page.has_more;
+    return reads.length;
   }
 
   async deleteRemoteAlignment(item: FastqDocument, cacheId?: string) {

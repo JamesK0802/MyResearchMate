@@ -104,15 +104,17 @@ describe('FastqViewerComponent alignment persistence', () => {
     const saveItem = vi.fn().mockResolvedValue(undefined);
     const saveRemoteAlignmentPage = vi.fn().mockResolvedValue(undefined);
     const deleteRemoteAlignment = vi.fn().mockResolvedValue(undefined);
+    const loadRemoteAlignmentResults = vi.fn().mockResolvedValue(1);
+    const remoteReads = document().reads;
     const component = new FastqViewerComponent({
       saveItem,
       saveRemoteAlignmentPage,
       deleteRemoteAlignment,
-      fetchRemoteFastqReads: vi.fn()
+      streamRemoteFastqReads: vi.fn(async (_document, onBatch) => onBatch(remoteReads)),
+      loadRemoteAlignmentResults
     } as any);
     component.document = document();
     component.document.remoteFileId = 'remote-file';
-    component.alignmentScope = 'preview';
     component.inputWindowSeq = 'AACCGGTT';
 
     await component.runAlign();
@@ -120,6 +122,10 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
     expect(component.document.alignmentState?.cacheId).toBeTruthy();
     expect(component.document.reads[0].alignment).toBeDefined();
+    expect(loadRemoteAlignmentResults).toHaveBeenCalledWith(component.document, 'aligned', true);
+
+    await component.setAlignmentReadOrder('unaligned');
+    expect(loadRemoteAlignmentResults).toHaveBeenLastCalledWith(component.document, 'unaligned', true);
 
     const reopened = new FastqViewerComponent({ saveItem } as any);
     reopened.document = component.document;
@@ -130,7 +136,7 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(reopened.processedReads).toHaveLength(1);
   });
 
-  it('streams every remote read when the all-reads scope is selected', async () => {
+  it('streams every remote read for every alignment', async () => {
     const saveRemoteAlignmentPage = vi.fn().mockResolvedValue(undefined);
     const allReads = [
       document().reads[0],
@@ -141,18 +147,18 @@ describe('FastqViewerComponent alignment persistence', () => {
       saveItem: vi.fn().mockResolvedValue(undefined),
       saveRemoteAlignmentPage,
       deleteRemoteAlignment: vi.fn().mockResolvedValue(undefined),
-      streamRemoteFastqReads
+      streamRemoteFastqReads,
+      loadRemoteAlignmentResults: vi.fn().mockResolvedValue(2)
     } as any);
     component.document = document();
     component.document.remoteFileId = 'remote-file';
     component.document.stats.readCount = 2;
-    component.alignmentScope = 'all';
     component.inputWindowSeq = 'AACCGGTT';
 
     await component.runAlign();
 
     expect(streamRemoteFastqReads).toHaveBeenCalledOnce();
-    expect(component.document.alignmentState).toMatchObject({ scope: 'all', processedReadCount: 2 });
+    expect(component.document.alignmentState).toMatchObject({ processedReadCount: 2 });
     expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
   });
 });
