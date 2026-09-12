@@ -426,6 +426,8 @@ async def read_file_reads(
 @router.get("/files/{file_id}/reads-stream")
 async def stream_file_reads(
     file_id: uuid.UUID,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25000, ge=1, le=50000),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -435,8 +437,16 @@ async def stream_file_reads(
         raise HTTPException(status_code=404, detail="Stored sequence file is missing")
 
     def stream_records():
-        for read in iter_fastq_reads(file_path):
+        emitted = 0
+        for record_index, read in enumerate(iter_fastq_reads(file_path)):
+            if record_index < offset:
+                if record_index and record_index % 5000 == 0:
+                    yield "\n"
+                continue
             yield json.dumps(read, ensure_ascii=False, separators=(",", ":")) + "\n"
+            emitted += 1
+            if emitted >= limit:
+                break
 
     return StreamingResponse(
         stream_records(),

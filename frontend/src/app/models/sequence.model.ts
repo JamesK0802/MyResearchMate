@@ -125,6 +125,7 @@ export interface FastqAlignmentState {
   alignedWindowSeq: string;
   alignedCutSiteInWindow: number;
   readOrder: 'aligned' | 'unaligned';
+  cacheVersion?: number;
   cacheId?: string;
   processedReadCount?: number;
   alignedCount?: number;
@@ -146,6 +147,7 @@ export interface FastqDocument {
   remoteReadsHasMore?: boolean;
   alignmentResultOffset?: number;
   alignmentResultOrder?: 'aligned' | 'unaligned';
+  alignmentRebuildRequired?: boolean;
   createdTimestamp: number;
   updatedTimestamp: number;
   fileHandle?: any;

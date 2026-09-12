@@ -171,6 +171,7 @@ export class SequenceWorkspaceService {
       clone.reads = [];
       delete clone.alignmentResultOffset;
       delete clone.alignmentResultOrder;
+      delete clone.alignmentRebuildRequired;
     }
     return clone;
   }
@@ -259,9 +260,12 @@ export class SequenceWorkspaceService {
       item.originalFileName = file.original_name;
       item.contentLoaded = item.type !== 'fastq';
       if (item.type === 'fastq') {
-        if (item.alignmentState?.processedReadCount !== undefined
-          && item.alignmentState.processedReadCount < item.stats.readCount) {
-          delete item.alignmentState;
+        if (item.alignmentState?.active && (
+          item.alignmentState.cacheVersion !== 2
+          || item.alignmentState.processedReadCount !== item.stats.readCount
+        )) {
+          item.alignmentState.active = false;
+          item.alignmentRebuildRequired = true;
         }
         item.reads = [];
         item.readPreviewLoaded = false;
@@ -489,7 +493,19 @@ export class SequenceWorkspaceService {
       loadingItem.readPreviewLoaded = true;
     } catch (error) {
       console.error('Failed to load the FASTQ read preview', error);
-      alert('The first FASTQ reads could not be loaded. Please try again.');
+      if (loadingItem.alignmentState?.active) {
+        loadingItem.alignmentState.active = false;
+        loadingItem.alignmentRebuildRequired = true;
+        loadingItem.reads = [];
+        loadingItem.remoteReadsHasMore = loadingItem.stats.readCount > 0;
+        try {
+          await this.loadMoreRemoteFastqReads(loadingItem);
+        } catch (rawError) {
+          console.error('Failed to recover the raw FASTQ preview', rawError);
+        }
+      } else {
+        alert('The first FASTQ reads could not be loaded. Please try again.');
+      }
     } finally {
       loadingItem.readPreviewLoading = false;
       this.replaceWorkspaceItem({ ...loadingItem, reads: [...loadingItem.reads] });
@@ -504,7 +520,8 @@ export class SequenceWorkspaceService {
     if (!item.remoteFileId || !item.remoteReadsHasMore || this.loadingReadPages.has(item.id)) return 0;
     this.loadingReadPages.add(item.id);
     try {
-      if (item.alignmentState?.cacheId && item.alignmentState.processedReadCount === item.stats.readCount) {
+      if (item.alignmentState?.active && item.alignmentState.cacheVersion === 2
+        && item.alignmentState.cacheId && item.alignmentState.processedReadCount === item.stats.readCount) {
         return await this.loadRemoteAlignmentResults(item, item.alignmentState.readOrder, false, limit);
       }
       const page = await this.cloudStorage.getFastqReads(item.remoteFileId, item.reads.length, limit, item.alignmentState?.cacheId);
@@ -520,14 +537,48 @@ export class SequenceWorkspaceService {
     }
   }
 
-  async streamRemoteFastqReads(item: FastqDocument, onBatch: (reads: FastqRead[]) => Promise<void>): Promise<void> {
+  async streamRemoteFastqReads(
+    item: FastqDocument,
+    onBatch: (reads: FastqRead[]) => Promise<void>,
+    onReconnect?: (attempt: number, offset: number) => void
+  ): Promise<void> {
     if (!item.remoteFileId) {
       await onBatch(item.reads);
       return;
     }
-    await this.cloudStorage.streamFastqReads(item.remoteFileId, async reads => {
-      await onBatch(this.mapRemoteFastqReads(reads));
-    });
+    let completedOffset = 0;
+    let lastError: unknown;
+    const segmentSize = 25000;
+    while (true) {
+      let segmentCompleted = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const delivered = await this.cloudStorage.streamFastqReads(item.remoteFileId, async reads => {
+            await onBatch(this.mapRemoteFastqReads(reads));
+            completedOffset += reads.length;
+          }, 1000, completedOffset, segmentSize);
+          if (delivered < segmentSize && completedOffset < item.stats.readCount) {
+            lastError = new Error(`Read stream ended early at ${completedOffset} of ${item.stats.readCount}.`);
+            if (attempt === 4) throw lastError;
+            onReconnect?.(attempt + 1, completedOffset);
+            await new Promise(resolve => setTimeout(resolve, 750 * (attempt + 1)));
+            continue;
+          }
+          segmentCompleted = true;
+          if (completedOffset >= item.stats.readCount || delivered < segmentSize) return;
+          break;
+        } catch (error: any) {
+          lastError = error;
+          const message = String(error?.message || error || '');
+          const retryable = error instanceof TypeError || /network|fetch|terminated|connection/i.test(message);
+          if (!retryable || attempt === 4) throw error;
+          onReconnect?.(attempt + 1, completedOffset);
+          await new Promise(resolve => setTimeout(resolve, 750 * (attempt + 1)));
+        }
+      }
+      if (!segmentCompleted) break;
+    }
+    throw lastError;
   }
 
   private mapRemoteFastqReads(reads: Array<{ id: string; seq: string; qualString: string; alignment?: FastqCachedAlignment }>): FastqRead[] {
@@ -562,6 +613,9 @@ export class SequenceWorkspaceService {
       item.alignmentResultOffset || 0,
       limit
     );
+    if ((item.alignmentResultOffset || 0) === 0 && (item.alignmentState?.processedReadCount || 0) > 0 && page.total === 0) {
+      throw new Error('The saved alignment index is missing and must be rebuilt.');
+    }
     const reads = this.mapRemoteFastqReads(page.reads);
     item.reads.push(...reads);
     item.alignmentResultOffset = page.next_offset;

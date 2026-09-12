@@ -121,6 +121,7 @@ describe('FastqViewerComponent alignment persistence', () => {
 
     expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
     expect(component.document.alignmentState?.cacheId).toBeTruthy();
+    expect(component.document.alignmentState?.cacheVersion).toBe(2);
     expect(component.document.reads[0].alignment).toBeDefined();
     expect(loadRemoteAlignmentResults).toHaveBeenCalledWith(component.document, 'aligned', true);
 

@@ -120,6 +120,10 @@ export function createAlignmentCacheId(): string {
           </div>
         </div>
 
+        <div class="alignment-rebuild-notice" *ngIf="document.alignmentRebuildRequired">
+          This saved alignment uses an older cache format. Run Alignment once to rebuild the complete ordered result.
+        </div>
+
         <!-- Align Config Panel -->
         <div class="align-config-panel" *ngIf="showAlignPanel">
           <div class="align-mode-tabs">
@@ -445,6 +449,7 @@ export function createAlignmentCacheId(): string {
       flex-direction: column;
       gap: 10px;
     }
+    .alignment-rebuild-notice { margin: 0 0 10px; padding: 9px 12px; border: 1px solid #fbbf24; border-radius: 6px; background: #fffbeb; color: #92400e; font-size: .78rem; font-weight: 700; }
     .align-mode-tabs {
       display: flex;
       gap: 8px;
@@ -974,6 +979,14 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       }
       return;
     }
+    if (this.document.alignmentRebuildRequired && savedAlignment) {
+      this.alignMode = savedAlignment.mode;
+      this.inputWindowSeq = savedAlignment.inputWindowSeq;
+      this.inputRefSeq = savedAlignment.inputRefSeq;
+      this.inputGrnaSeq = savedAlignment.inputGrnaSeq;
+      this.inputWinSize = savedAlignment.inputWinSize;
+      this.showAlignPanel = true;
+    }
 
     const pending = this.sequenceWorkspaceService.getPendingAutoAlign() || (this.document as any)?.autoAlign;
     if (pending) {
@@ -1225,13 +1238,20 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
         const selected = reads.length > remaining ? reads.slice(0, remaining) : reads;
         await processAndSaveBatch(selected, streamOffset);
         streamOffset += selected.length;
+      }, (attempt, offset) => {
+        this.alignmentStatus = `Connection interrupted. Resuming from read ${offset.toLocaleString()} (retry ${attempt}/5)…`;
       });
+      if (processedCount !== totalToAlign) {
+        throw new Error(`The read stream ended early at ${processedCount.toLocaleString()} of ${totalToAlign.toLocaleString()} reads.`);
+      }
       await this.persistAlignmentState({
+        cacheVersion: 2,
         cacheId,
         processedReadCount: processedCount,
         alignedCount,
         unalignedCount: processedCount - alignedCount
       });
+      this.document.alignmentRebuildRequired = false;
       await this.sequenceWorkspaceService.loadRemoteAlignmentResults(this.document, this.alignmentReadOrder, true);
       this.reprocessAlignment();
       if (previousCacheId && previousCacheId !== cacheId && previousCacheId !== 'local') {
@@ -1240,17 +1260,24 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     } catch (error) {
       console.error('Failed to align and save FASTQ reads', error);
       await this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, cacheId).catch(() => undefined);
-      if (previousAlignmentState) {
+      const previousCacheIsUsable = previousAlignmentState?.active
+        && previousAlignmentState.cacheVersion === 2
+        && previousAlignmentState.processedReadCount === this.document.stats.readCount;
+      if (previousCacheIsUsable) {
         this.document.alignmentState = previousAlignmentState;
         this.restoreAlignmentState(previousAlignmentState);
       } else {
+        if (previousAlignmentState) {
+          this.document.alignmentState = { ...previousAlignmentState, active: false };
+          this.document.alignmentRebuildRequired = true;
+        }
         this.isAlignedActive = false;
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
         this.initProcessedReads();
       }
       const detail = this.alignmentErrorMessage(error);
-      alert(previousAlignmentState
+      alert(previousCacheIsUsable
         ? `Alignment could not be completed or saved. The previous saved alignment was kept.\n\n${detail}`
         : `Alignment could not be completed or saved.\n\n${detail}`);
     } finally {

@@ -24,6 +24,7 @@ export interface FastqReadPage {
   offset: number;
   next_offset: number;
   has_more: boolean;
+  total?: number;
 }
 
 interface SequenceUploadSession {
@@ -125,10 +126,12 @@ export class SequenceStorageService {
   async streamFastqReads(
     fileId: string,
     onBatch: (reads: FastqReadPage['reads']) => Promise<void>,
-    batchSize = 5000
-  ): Promise<void> {
+    batchSize = 1000,
+    startOffset = 0,
+    maxReads = 25000
+  ): Promise<number> {
     const headers = await this.headers();
-    const response = await fetch(`${this.apiUrl}/files/${fileId}/reads-stream`, {
+    const response = await fetch(`${this.apiUrl}/files/${fileId}/reads-stream?offset=${startOffset}&limit=${maxReads}`, {
       headers: { Authorization: headers.get('Authorization') || '' },
       cache: 'no-store',
     });
@@ -145,6 +148,7 @@ export class SequenceStorageService {
     const decoder = new TextDecoder();
     let pending = '';
     let batch: FastqReadPage['reads'] = [];
+    let delivered = 0;
     const consumeLines = async (text: string, flush = false) => {
       pending += text;
       const lines = pending.split('\n');
@@ -157,6 +161,7 @@ export class SequenceStorageService {
           const ready = batch;
           batch = [];
           await onBatch(ready);
+          delivered += ready.length;
         }
       }
       if (flush && tail.trim()) batch.push(JSON.parse(tail));
@@ -168,7 +173,11 @@ export class SequenceStorageService {
       await consumeLines(decoder.decode(value, { stream: true }));
     }
     await consumeLines(decoder.decode(), true);
-    if (batch.length) await onBatch(batch);
+    if (batch.length) {
+      await onBatch(batch);
+      delivered += batch.length;
+    }
+    return delivered;
   }
 
   async saveAlignmentPage(
