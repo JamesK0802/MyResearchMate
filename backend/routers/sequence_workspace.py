@@ -19,7 +19,7 @@ from database.models import SequenceWorkspaceFile
 from storage.file_store import personal_tool_dir, read_json, relative_data_path, resolve_data_path, write_json
 from storage.quota import personal_usage, personal_quota
 from utils.fastq_paging import iter_fastq_reads, read_fastq_page
-from utils.alignment_paging import read_ordered_alignment_page
+from utils.alignment_paging import read_alignment_results, read_ordered_alignment_page
 
 
 router = APIRouter(prefix="/sequence-workspace", tags=["sequence-workspace"])
@@ -112,8 +112,8 @@ class SequenceUploadInit(BaseModel):
 class AlignmentPagePayload(BaseModel):
     alignment_id: uuid.UUID
     offset: int = Field(ge=0)
-    reads: list[dict[str, Any]] = Field(max_length=1000)
-    results: list[dict[str, Any]] = Field(max_length=1000)
+    reads: list[dict[str, Any]] = Field(max_length=5000)
+    results: list[dict[str, Any]] = Field(max_length=5000)
 
 
 @router.get("/usage")
@@ -409,9 +409,8 @@ async def read_file_reads(
     except (OSError, EOFError, UnicodeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="Stored FASTQ file could not be read") from exc
     if alignment_id:
-        page_path = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(alignment_id) / f"{offset}.json"
-        page = read_json(relative_data_path(page_path), {})
-        results = page.get("results", []) if isinstance(page, dict) else []
+        cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(alignment_id)
+        results = read_alignment_results(cache_dir, offset, len(reads))
         for read, result in zip(reads, results):
             if isinstance(result, dict):
                 read["alignment"] = result
@@ -427,7 +426,7 @@ async def read_file_reads(
 async def stream_file_reads(
     file_id: uuid.UUID,
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=25000, ge=1, le=50000),
+    limit: int = Query(default=500000, ge=1, le=500000),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -466,9 +465,9 @@ async def save_alignment_page(
     if len(payload.reads) != len(payload.results):
         raise HTTPException(status_code=422, detail="Alignment reads and results must have the same length")
     cache_dir = personal_tool_dir(current_user, "sequence-viewer") / "alignments" / str(row.id) / str(payload.alignment_id)
-    for page_start in range(0, len(payload.results), 100):
-        page_path = cache_dir / f"{payload.offset + page_start}.json"
-        write_json(page_path, {"results": payload.results[page_start:page_start + 100]})
+    # One result page per client batch. read_alignment_results can slice both
+    # these consolidated pages and the legacy 100-read page format.
+    write_json(cache_dir / f"{payload.offset}.json", {"results": payload.results})
     grouped = {"aligned": [], "unaligned": []}
     for read, result in zip(payload.reads, payload.results):
         status = "aligned" if result.get("isAligned") else "unaligned"
@@ -479,9 +478,10 @@ async def save_alignment_page(
             "alignment": result,
         })
     for status, entries in grouped.items():
-        if entries:
-            group_path = cache_dir / "groups" / status / f"{payload.offset:012d}-{len(entries):06d}.json"
-            write_json(group_path, {"reads": entries})
+        for group_start in range(0, len(entries), 500):
+            chunk = entries[group_start:group_start + 500]
+            group_path = cache_dir / "groups" / status / f"{payload.offset:012d}-{group_start:06d}-{len(chunk):06d}.json"
+            write_json(group_path, {"reads": chunk})
     return {"ok": True, "count": len(payload.results)}
 
 

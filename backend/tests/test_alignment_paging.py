@@ -3,10 +3,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from utils.alignment_paging import read_ordered_alignment_page
+from utils.alignment_paging import read_alignment_results, read_ordered_alignment_page
 
 
 class AlignmentPagingTests(unittest.TestCase):
+    def test_slices_consolidated_result_pages_and_legacy_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache_dir = Path(directory)
+            (cache_dir / "0.json").write_text(
+                json.dumps({"results": [{"index": index} for index in range(5)]}), encoding="utf-8"
+            )
+            (cache_dir / "5.json").write_text(
+                json.dumps({"results": [{"index": index} for index in range(5, 8)]}), encoding="utf-8"
+            )
+
+            results = read_alignment_results(cache_dir, 3, 4)
+
+            self.assertEqual([result["index"] for result in results], [3, 4, 5, 6])
+
     def test_returns_all_aligned_reads_before_unaligned_reads(self):
         with tempfile.TemporaryDirectory() as directory:
             cache_dir = Path(directory)

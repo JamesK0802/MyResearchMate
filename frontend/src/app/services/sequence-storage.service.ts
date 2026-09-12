@@ -126,9 +126,9 @@ export class SequenceStorageService {
   async streamFastqReads(
     fileId: string,
     onBatch: (reads: FastqReadPage['reads']) => Promise<void>,
-    batchSize = 1000,
+    batchSize = 5000,
     startOffset = 0,
-    maxReads = 25000
+    maxReads = 500000
   ): Promise<number> {
     const headers = await this.headers();
     const response = await fetch(`${this.apiUrl}/files/${fileId}/reads-stream?offset=${startOffset}&limit=${maxReads}`, {

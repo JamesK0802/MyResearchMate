@@ -2,6 +2,39 @@ import json
 from pathlib import Path
 
 
+def alignment_result_files(cache_dir: Path) -> list[tuple[int, Path]]:
+    files = []
+    for path in cache_dir.glob("*.json"):
+        try:
+            files.append((int(path.stem), path))
+        except ValueError:
+            continue
+    return sorted(files)
+
+
+def read_alignment_results(cache_dir: Path, offset: int, limit: int) -> list[dict]:
+    """Read a raw-order result page from consolidated or legacy cache files."""
+    results: list[dict] = []
+    requested_end = offset + limit
+    for page_offset, path in alignment_result_files(cache_dir):
+        if page_offset >= requested_end:
+            break
+        try:
+            page = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        page_results = page.get("results", []) if isinstance(page, dict) else []
+        page_end = page_offset + len(page_results)
+        if page_end <= offset:
+            continue
+        start = max(0, offset - page_offset)
+        end = min(len(page_results), requested_end - page_offset)
+        results.extend(page_results[start:end])
+        if len(results) >= limit:
+            break
+    return results[:limit]
+
+
 def alignment_group_files(cache_dir: Path, status: str) -> list[tuple[Path, int]]:
     files = []
     for path in (cache_dir / "groups" / status).glob("*.json"):

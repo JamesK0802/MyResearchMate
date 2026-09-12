@@ -548,7 +548,10 @@ export class SequenceWorkspaceService {
     }
     let completedOffset = 0;
     let lastError: unknown;
-    const segmentSize = 25000;
+    // Keep the normal path to one sequential FASTQ scan. If the connection is
+    // interrupted, completedOffset still lets the next request resume from the
+    // last page that was fully aligned and saved.
+    const segmentSize = 500000;
     while (true) {
       let segmentCompleted = false;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -556,7 +559,7 @@ export class SequenceWorkspaceService {
           const delivered = await this.cloudStorage.streamFastqReads(item.remoteFileId, async reads => {
             await onBatch(this.mapRemoteFastqReads(reads));
             completedOffset += reads.length;
-          }, 1000, completedOffset, segmentSize);
+          }, 5000, completedOffset, segmentSize);
           if (delivered < segmentSize && completedOffset < item.stats.readCount) {
             lastError = new Error(`Read stream ended early at ${completedOffset} of ${item.stats.readCount}.`);
             if (attempt === 4) throw lastError;

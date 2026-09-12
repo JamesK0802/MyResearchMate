@@ -1182,7 +1182,9 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       ? globalThis.crypto.randomUUID()
       : createAlignmentCacheId();
     const totalToAlign = this.document.stats.readCount;
-    const saveBatchSize = 500;
+    // Match the streamed read batch so a large alignment needs tens of
+    // idempotent saves instead of hundreds of sequential HTTP requests.
+    const saveBatchSize = 5000;
     let processedCount = 0;
     let alignedCount = 0;
     this.isAligning = true;
