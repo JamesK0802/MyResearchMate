@@ -51,16 +51,8 @@
             <a routerLink="/data/pcr-protocols" routerLinkActive="active" class="dropdown-item">Solution Protocol</a>
             <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
             <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
-          </div>
-        </div>
-
-        <!-- Lab Note Dropdown (logged in only) -->
-        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-          <span class="nav-tab" style="cursor: pointer;">Lab Note ▾</span>
-          <div class="dropdown-content">
-            <a routerLink="/lab/notes" routerLinkActive="active" class="dropdown-item">General Notes</a>
-            <a routerLink="/lab/experiments" routerLinkActive="active" class="dropdown-item">My Experiments</a>
-            <a routerLink="/lab/archive" routerLinkActive="active" class="dropdown-item">Experiment Archive</a>
+            <a routerLink="/data/memos" routerLinkActive="active" class="dropdown-item">Memo</a>
+            <a routerLink="/data/experiment-logs" routerLinkActive="active" class="dropdown-item">Experiment Logs</a>
           </div>
         </div>
 
@@ -164,18 +156,8 @@
           <a routerLink="/data/plot-projects" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
           <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
           <a routerLink="/tools/sequence-viewer" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
-        </div>
-      </div>
-
-      <!-- Lab Note entries (logged in) -->
-      <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('diary')" [attr.aria-expanded]="isMobileSectionOpen('diary')">
-          <span>Lab Diary</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('diary')">⌄</span>
-        </button>
-        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('diary')">
-          <a routerLink="/lab/notes" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">General Notes</a>
-          <a routerLink="/lab/experiments" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">My Experiments</a>
-          <a routerLink="/lab/archive" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Archive</a>
+          <a routerLink="/data/memos" class="drawer-link" (click)="isMobileMenuOpen = false">Memo</a>
+          <a routerLink="/data/experiment-logs" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Logs</a>
         </div>
       </div>
 

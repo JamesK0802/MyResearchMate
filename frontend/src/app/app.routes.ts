@@ -65,6 +65,16 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/plot-projects-page/plot-projects-page.component').then(m => m.PlotProjectsPageComponent),
     canActivate: [authGuard]
   },
+  {
+    path: 'data/memos',
+    loadComponent: () => import('./pages/lab-notes-page/lab-notes-page.component').then(m => m.LabNotesPageComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'data/experiment-logs',
+    loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent),
+    canActivate: [authGuard]
+  },
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
   { path: 'labs/my', loadComponent: () => import('./pages/my-labs/my-labs.component').then(m => m.MyLabsComponent), canActivate: [authGuard] },
@@ -108,25 +118,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/profile-page/profile-page.component').then(m => m.ProfilePageComponent),
     canActivate: [authGuard]
   },
-  {
-    path: 'lab',
-    canActivate: [authGuard],
-    children: [
-      { path: '', redirectTo: 'experiments', pathMatch: 'full' },
-      {
-        path: 'notes',
-        loadComponent: () => import('./pages/lab-notes-page/lab-notes-page.component').then(m => m.LabNotesPageComponent)
-      },
-      {
-        path: 'experiments',
-        loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent)
-      },
-      {
-        path: 'archive',
-        loadComponent: () => import('./pages/lab-archive-page/lab-archive-page.component').then(m => m.LabArchivePageComponent)
-      }
-    ]
-  },
+  { path: 'lab', redirectTo: 'data/experiment-logs', pathMatch: 'full' },
+  { path: 'lab/notes', redirectTo: 'data/memos', pathMatch: 'full' },
+  { path: 'lab/experiments', redirectTo: 'data/experiment-logs', pathMatch: 'full' },
+  { path: 'lab/archive', redirectTo: 'data/experiment-logs', pathMatch: 'full' },
   {
     path: 'booking',
     loadComponent: () => import('./pages/facility-booking-page/facility-booking-page.component').then(m => m.FacilityBookingPageComponent),

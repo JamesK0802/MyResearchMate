@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { LabNotebookService } from '../../services/lab-notebook.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
+import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 
 @Component({
   selector: 'app-lab-notes-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
   templateUrl: './lab-notes-page.component.html',
   styleUrl: './lab-notes-page.component.css'
 })

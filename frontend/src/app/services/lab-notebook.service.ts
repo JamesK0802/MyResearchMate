@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class LabNotebookService {
   private apiUrl = '/api/lab-notebook';
-  private readonly demoExperiments = Array.from({ length: 3 }, (_, experimentIndex) => ({
+  private demoExperiments: any[] = Array.from({ length: 3 }, (_, experimentIndex) => ({
     id: `demo-exp-${experimentIndex + 1}`,
     title: `Demo Experiment ${experimentIndex + 1}`,
     description: `This is Demo Experiment ${experimentIndex + 1}. It demonstrates a five-step experimental workflow without changing any real data.`,
@@ -20,7 +20,7 @@ export class LabNotebookService {
       comments: stepIndex < 2 ? [`This is a demo note for step ${stepIndex + 1}.`] : []
     }))
   }));
-  private readonly demoArchiveExperiments = [5, 4, 3, 2].map((success_score, index) => ({
+  private demoArchiveExperiments: any[] = [5, 4, 3, 2].map((success_score, index) => ({
     id: `demo-archive-${index + 1}`,
     title: `Demo Completed Experiment ${index + 1}`,
     description: `This is a completed demo workflow with a ${success_score}/5 demonstration rating.`,
@@ -36,7 +36,7 @@ export class LabNotebookService {
     }))
   }));
   private demoNotes = [
-    { id: 'demo-note-1', title: 'Welcome to General Notes', body: '<h2>Keep your research context together</h2><p>Use General Notes for observations, meeting records, checklists, and quick research updates.</p><img src="/demo-labmate-landing.png" alt="My Lab Mate landing page preview" style="display:block;margin:20px auto;max-width:100%;border:1px solid #dbe5df;border-radius:12px;box-shadow:0 4px 12px rgba(15,23,42,.12);cursor:pointer" /><h3>Images can be added to every note</h3><p>Paste a screenshot, or drag and drop an image file directly into the editor. Click an attached image to resize it or choose how text wraps around it.</p><ul><li>Record a result beside its screenshot</li><li>Add gel images, plant photos, or instrument captures</li><li>Keep each note editable and searchable</li></ul>', tags: ['welcome', 'attachments'], updated_at: '2026-08-08T09:30:00Z' },
+    { id: 'demo-note-1', title: 'Welcome to Memo', body: '<h2>Keep your research context together</h2><p>Use Memo for observations, meeting records, checklists, and quick research updates.</p><img src="/demo-labmate-landing.png" alt="My Lab Mate landing page preview" style="display:block;margin:20px auto;max-width:100%;border:1px solid #dbe5df;border-radius:12px;box-shadow:0 4px 12px rgba(15,23,42,.12);cursor:pointer" /><h3>Images can be added to every memo</h3><p>Paste a screenshot, or drag and drop an image file directly into the editor. Click an attached image to resize it or choose how text wraps around it.</p><ul><li>Record a result beside its screenshot</li><li>Add gel images, plant photos, or instrument captures</li><li>Keep each memo editable and searchable</li></ul>', tags: ['welcome', 'attachments'], updated_at: '2026-08-08T09:30:00Z' },
     { id: 'demo-note-2', title: 'Demo Note 2 — Sample observations', body: '<h2>This is a demo note</h2><p>Sample 2-1 and Sample 2-2 are included to show how observations can be stored. No real experimental data is used here.</p>', tags: ['demo', 'sample'], updated_at: '2026-08-05T14:20:00Z' },
     { id: 'demo-note-3', title: 'Demo Note 3 — Protocol reminder', body: '<h2>This is a demo protocol note</h2><p>Step 1: this is a demo step. Step 2: add your own workflow details after signing in with a regular account.</p>', tags: ['demo', 'protocol'], updated_at: '2026-08-04T11:00:00Z' },
   ];
@@ -127,24 +127,40 @@ export class LabNotebookService {
   }
 
   async getExperiment(id: string) {
+    if (this.auth.isDemo) {
+      const experiment = [...this.demoExperiments, ...this.demoArchiveExperiments].find(item => item.id === id);
+      if (!experiment) throw new Error('Demo experiment not found');
+      return experiment;
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.get<any>(`${this.apiUrl}/experiments/${id}`, { headers }));
   }
 
   async createExperiment(data: any) {
+    if (this.auth.isDemo) {
+      const experiment = { ...data, id: `demo-exp-${Date.now()}`, status: 'active', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      this.demoExperiments.unshift(experiment);
+      return experiment;
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.post<any>(`${this.apiUrl}/experiments`, data, { headers }));
   }
 
   async updateExperiment(id: string, data: any) {
+    if (this.auth.isDemo) {
+      const experiment = this.demoExperiments.find(item => item.id === id);
+      if (!experiment) throw new Error('Demo experiment not found');
+      Object.assign(experiment, data, { updated_at: new Date().toISOString() });
+      return experiment;
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.put<any>(`${this.apiUrl}/experiments/${id}`, data, { headers }));
   }
 
   async deleteExperiment(id: string) {
     if (this.auth.isDemo) {
-      const index = this.demoArchiveExperiments.findIndex(exp => exp.id === id);
-      if (index >= 0) this.demoArchiveExperiments.splice(index, 1);
+      this.demoExperiments = this.demoExperiments.filter(exp => exp.id !== id);
+      this.demoArchiveExperiments = this.demoArchiveExperiments.filter(exp => exp.id !== id);
       return { status: 'success' };
     }
     const headers = await this.getAuthHeaders();
@@ -152,6 +168,14 @@ export class LabNotebookService {
   }
 
   async archiveExperiment(id: string, successScore: number) {
+    if (this.auth.isDemo) {
+      const index = this.demoExperiments.findIndex(item => item.id === id);
+      if (index < 0) throw new Error('Demo experiment not found');
+      const [experiment] = this.demoExperiments.splice(index, 1);
+      const archived = { ...experiment, success_score: successScore, archived_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      this.demoArchiveExperiments.unshift(archived);
+      return archived;
+    }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.post<any>(`${this.apiUrl}/experiments/${id}/archive`, { success_score: successScore }, { headers }));
   }

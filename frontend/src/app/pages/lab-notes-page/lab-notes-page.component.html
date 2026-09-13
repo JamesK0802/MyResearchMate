@@ -1,9 +1,11 @@
 <div class="notes-page app-page">
+  <app-my-data-header title="Memo"></app-my-data-header>
+  <p class="memo-intro">Quick observations, meeting notes, images, and research context saved with your other My Data records.</p>
   <div class="notes-layout" [class.sidebar-hidden]="sidebarCollapsed" [class.mobile-editor-active]="selectedNote">
     
     <!-- Sidebar -->
     <div class="notes-sidebar">
-      <button class="app-btn app-btn-primary add-btn" (click)="createNewNote()">+ New Note</button>
+      <button class="app-btn app-btn-primary add-btn" (click)="createNewNote()">+ New Memo</button>
       
       <div class="note-list">
         <div *ngFor="let n of notes" 
@@ -21,7 +23,7 @@
     <div class="editor-container section-card">
       <!-- Mobile back button (Visible only in single column editor mode) -->
       <button class="mobile-back-to-list-btn" (click)="selectNote(null)">
-        ‹ Notes
+        ‹ Memos
       </button>
 
       <!-- Floating sidebar toggle button -->
@@ -37,7 +39,7 @@
           <input class="title-input" 
                  [(ngModel)]="noteForm.title" 
                  (input)="onContentChange()" 
-                 placeholder="Title of your entry..." />
+                 placeholder="Memo title..." />
           <div class="editor-actions">
             <input #imagePicker class="image-picker-input" type="file" accept="image/*" (change)="onImageSelected($event)" />
             <button type="button" class="app-btn app-btn-outline add-image-btn" (click)="imagePicker.click()">Add Image</button>
@@ -57,7 +59,7 @@
                (paste)="onPaste($event)"
                (drop)="onDrop($event)"
                (dragover)="onDragOver($event)"
-               placeholder="Start writing your general lab notes here...">
+               placeholder="Start writing your memo here...">
           </div>
 
           <!-- Interactive Drag-to-Resize Guide Overlay -->
@@ -108,8 +110,8 @@
       </ng-container>
 
       <div *ngIf="!selectedNote" class="empty-editor">
-        <div class="empty-icon">📖</div>
-        <p>Choose an entry from the ledger or create a new journal entry to begin editing.</p>
+        <div class="empty-icon">📝</div>
+        <p>Choose a memo or create a new one to begin editing.</p>
       </div>
     </div>
 

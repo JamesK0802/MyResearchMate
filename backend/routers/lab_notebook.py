@@ -4,7 +4,7 @@ import uuid
 import shutil
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from auth.dependencies import get_current_user
 import yaml
@@ -31,26 +31,33 @@ router = APIRouter(prefix="/lab-notebook", tags=["lab-notebook"])
 class NoteCreate(BaseModel):
     title: str
     body: str
-    tags: List[str] = []
+    tags: List[str] = Field(default_factory=list)
 
 class PresetCreate(BaseModel):
     title: str
     description: str = ""
-    steps: List[Dict[str, Any]] = []
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ExperimentCreate(BaseModel):
     title: str
     description: str = ""
-    samples: List[str] = []
-    tags: List[str] = []
-    work_type: str = "" # Preset ID or name
+    samples: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    work_type: str = "" # Legacy preset ID or name
+    protocol_tree_id: Optional[str] = None
+    protocol_title: str = ""
+    protocol_root_id: Optional[str] = None
+    protocol_root_name: str = ""
+    protocol_snapshot_updated_at: Optional[str] = None
+    run_notes: str = ""
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ExperimentStepUpdate(BaseModel):
     title: str
     description: str = ""
     status: str = "pending" # pending, active, completed
-    comments: List[str] = []
-    images: List[str] = []
+    comments: List[str] = Field(default_factory=list)
+    images: List[str] = Field(default_factory=list)
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -61,6 +68,12 @@ class ExperimentUpdate(BaseModel):
     samples: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     steps: Optional[List[Dict[str, Any]]] = None
+    protocol_tree_id: Optional[str] = None
+    protocol_title: Optional[str] = None
+    protocol_root_id: Optional[str] = None
+    protocol_root_name: Optional[str] = None
+    protocol_snapshot_updated_at: Optional[str] = None
+    run_notes: Optional[str] = None
 
 class ArchiveRequest(BaseModel):
     success_score: int
@@ -74,8 +87,8 @@ class PresetTransferRequest(BaseModel):
 
 class WorkflowShareUpdate(BaseModel):
     workflow_type: str  # "active" or "archive"
-    lab_ids: List[str] = []
-    user_ids: List[str] = []
+    lab_ids: List[str] = Field(default_factory=list)
+    user_ids: List[str] = Field(default_factory=list)
 
 
 import re
@@ -625,9 +638,10 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
     exp_id = generate_id()
     now = now_iso()
     
-    # Load preset steps if applicable
-    steps = []
-    if exp.work_type:
+    # New Experiment Logs provide an immutable step snapshot from Tree Protocol.
+    # Legacy preset-based creation remains supported for older clients.
+    steps = [dict(step) for step in exp.steps]
+    if not steps and exp.work_type:
         preset_file, _ = find_user_file(PRESETS_DIR, current_user, f"{exp.work_type}.json")
         if preset_file and preset_file.exists():
             preset_data = json.loads(preset_file.read_text())
@@ -645,7 +659,19 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
                     "updated_at": now
                 })
     
-    # If no steps, add a default one
+    for index, step in enumerate(steps):
+        step.setdefault("id", generate_id())
+        step.setdefault("title", f"Step {index + 1}")
+        step.setdefault("description", "")
+        step.setdefault("status", "active" if index == 0 else "pending")
+        step.setdefault("comments", [])
+        step.setdefault("logs", [])
+        step.setdefault("images", [])
+        step.setdefault("started_at", now if index == 0 else None)
+        step.setdefault("completed_at", None)
+        step.setdefault("updated_at", now)
+
+    # If no steps, add a default one for legacy clients.
     if not steps:
         steps.append({
             "id": generate_id(),
@@ -653,6 +679,7 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
             "description": "",
             "status": "pending",
             "comments": [],
+            "logs": [],
             "images": [],
             "started_at": None,
             "completed_at": None,
@@ -666,6 +693,12 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
         "samples": exp.samples,
         "tags": exp.tags,
         "work_type": exp.work_type,
+        "protocol_tree_id": exp.protocol_tree_id,
+        "protocol_title": exp.protocol_title,
+        "protocol_root_id": exp.protocol_root_id,
+        "protocol_root_name": exp.protocol_root_name,
+        "protocol_snapshot_updated_at": exp.protocol_snapshot_updated_at,
+        "run_notes": exp.run_notes,
         "steps": steps,
         "created_at": now,
         "updated_at": now
@@ -743,6 +776,12 @@ async def update_experiment(
     if exp_update.description is not None: data["description"] = exp_update.description
     if exp_update.samples is not None: data["samples"] = exp_update.samples
     if exp_update.tags is not None: data["tags"] = exp_update.tags
+    if exp_update.protocol_tree_id is not None: data["protocol_tree_id"] = exp_update.protocol_tree_id
+    if exp_update.protocol_title is not None: data["protocol_title"] = exp_update.protocol_title
+    if exp_update.protocol_root_id is not None: data["protocol_root_id"] = exp_update.protocol_root_id
+    if exp_update.protocol_root_name is not None: data["protocol_root_name"] = exp_update.protocol_root_name
+    if exp_update.protocol_snapshot_updated_at is not None: data["protocol_snapshot_updated_at"] = exp_update.protocol_snapshot_updated_at
+    if exp_update.run_notes is not None: data["run_notes"] = exp_update.run_notes
     if exp_update.steps is not None: 
         # Ensure all steps have IDs and required fields
         for step in exp_update.steps:

@@ -1,739 +1,321 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { LabNotebookService } from '../../services/lab-notebook.service';
-import { LabService } from '../../services/lab.service';
-import { AuthService } from '../../services/auth.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
+import { LabNotebookService } from '../../services/lab-notebook.service';
+import { ProtocolTreeRecord, ProtocolTreeService } from '../../services/protocol-tree.service';
+import { NamuNode, NamuTree } from '../../models/namu.model';
+import { MyDataHeaderComponent } from '../../components/my-data-header.component';
+import { AuthService } from '../../services/auth.service';
+
+type ExperimentTab = 'current' | 'completed';
+type StepStatus = 'pending' | 'active' | 'completed';
+
+interface ExperimentStep {
+  id: string;
+  protocol_node_id?: string;
+  title: string;
+  description?: string;
+  status: StepStatus;
+  comments?: string[];
+  logs?: Array<{ id: string; text: string; created_at: string; kind?: string }>;
+  images?: string[];
+  started_at?: string | null;
+  completed_at?: string | null;
+  updated_at?: string | null;
+}
 
 @Component({
   selector: 'app-lab-experiments-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
   templateUrl: './lab-experiments-page.component.html',
   styleUrl: './lab-experiments-page.component.css'
 })
 export class LabExperimentsPageComponent implements OnInit, OnDestroy {
-  activeExperiments: any[] = [];
-  presets: any[] = [];
-  
-  // Multi-user & Lab context
-  allUsers: any[] = [];
-  myLabs: any[] = [];
-  
-  // Individual preset sharing
-  showSharePresetModal = false;
-  sharingPreset: any = null;
-  presetSearchQuery = '';
-  filteredUsers: any[] = [];
-  incomingTransfers: any[] = [];
-
-  // Active workflow lab sharing
-  showShareModal = false;
-  sharingExp: any = null;
-  sharedLabIds: string[] = [];
-  sharedUserIds: string[] = [];
-  researcherSearchQuery = '';
-  filteredResearchers: any[] = [];
-  savingShares = false;
-
-  // View mode & Shared active workflows
-  viewMode: 'my' | 'shared' = 'my';
-  sharedExperiments: any[] = [];
-
-  // Forms state
-  showCreateExpForm = false;
-  showCreatePresetForm = false;
-
-  expForm = {
-    title: '',
-    description: '',
-    samples: '',
-    work_type: ''
-  };
-
-  presetForm = {
-    title: '',
-    description: '',
-    steps: [] as any[]
-  };
-
+  activeTab: ExperimentTab = 'current';
+  currentExperiments: any[] = [];
+  completedExperiments: any[] = [];
+  protocols: ProtocolTreeRecord[] = [];
+  loading = true;
+  loadingProtocols = false;
+  creating = false;
+  saving = false;
+  searchQuery = '';
+  sortMode: 'updated-desc' | 'updated-asc' | 'name-asc' = 'updated-desc';
+  showCreatePanel = false;
   selectedExperiment: any = null;
-
-  uploadingImageForStep: string | null = null;
-
-  // Custom Archive Success Rate picker state
-  archivingExp: any = null;
-  showRatingSelector = false;
-  selectedRatingScore = 0;
-  hoverRatingScore = 0;
-
-  // Lightbox preview url
+  completionExperiment: any = null;
+  completionScore = 4;
   previewImageUrl: string | null = null;
-
-  // Sync state
-  syncStates: { [expId: string]: 'saved' | 'saving' | 'error' } = {};
+  uploadingStepId: string | null = null;
+  syncStates: Record<string, 'saved' | 'saving' | 'error'> = {};
+  noteDrafts: Record<string, string> = {};
+  createForm = this.emptyCreateForm();
   private saveSubject = new Subject<any>();
-  private saveSub!: Subscription;
-
-  // Drag & Drop tracking
-  draggedIndex: number | null = null;
-  draggedExpId: string | null = null;
-  
-  editingPresetId: string | null = null;
-  workflowScrollPositions: Record<string, number> = {};
-  workflowScrollMaxes: Record<string, number> = {};
+  private saveSubscription?: Subscription;
+  private completingExperimentIds = new Set<string>();
 
   constructor(
-    private labService: LabNotebookService,
-    private coreLabService: LabService,
-    private auth: AuthService,
+    private notebook: LabNotebookService,
+    private protocolService: ProtocolTreeService,
+    public auth: AuthService,
     private cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit() {
-    await this.loadData();
-
-    // Debounced background saving
-    this.saveSub = this.saveSubject.pipe(
-      debounceTime(500)
-    ).subscribe((exp) => {
-      this.autoSaveExperiment(exp);
-    });
+    this.saveSubscription = this.saveSubject.pipe(debounceTime(550)).subscribe(exp => void this.saveExperiment(exp));
+    await Promise.all([this.loadExperiments(), this.loadProtocols()]);
   }
 
-  ngOnDestroy() {
-    if (this.saveSub) {
-      this.saveSub.unsubscribe();
-    }
+  ngOnDestroy() { this.saveSubscription?.unsubscribe(); }
+
+  private emptyCreateForm() {
+    return { title: '', description: '', samples: '', protocolId: '', rootId: '' };
   }
 
-  async loadData() {
-    if (this.auth.isDemo) {
-      this.activeExperiments = await this.labService.getActiveExperiments();
-      this.presets = [];
-      this.myLabs = await this.coreLabService.getMyLabs();
-      for (const exp of this.activeExperiments) {
-        this.syncStates[exp.id] = 'saved';
-        exp.samples_raw = (exp.samples || []).join(', ');
-      }
+  async loadExperiments() {
+    this.loading = true;
+    try {
+      const [current, completed, shared] = await Promise.all([
+        this.notebook.getActiveExperiments(), this.notebook.getArchiveExperiments(),
+        this.auth.isDemo ? Promise.resolve([]) : this.notebook.getSharedWorkflows().catch(() => [])
+      ]);
+      const ownIds = new Set([...current, ...completed].map((item: any) => item.id));
+      const sharedCurrent = shared.filter((item: any) => item.workflow_type === 'active' && !ownIds.has(item.id)).map((item: any) => ({ ...item, _shared: true }));
+      const sharedCompleted = shared.filter((item: any) => item.workflow_type === 'archive' && !ownIds.has(item.id)).map((item: any) => ({ ...item, _shared: true }));
+      this.currentExperiments = [...current, ...sharedCurrent].map(item => this.normalizeExperiment(item));
+      this.completedExperiments = [...completed, ...sharedCompleted].map(item => this.normalizeExperiment(item));
+      for (const item of [...this.currentExperiments, ...this.completedExperiments]) this.syncStates[item.id] = 'saved';
+    } catch (error) {
+      console.error('Could not load experiment logs', error);
+      this.currentExperiments = [];
+      this.completedExperiments = [];
+    } finally {
+      this.loading = false;
       this.cdr.detectChanges();
-      this.refreshWorkflowScrollbars();
-      return;
     }
-    try {
-      this.activeExperiments = await this.labService.getActiveExperiments().catch(e => {
-        console.error('Failed to load active experiments:', e);
-        return [];
-      });
-    } catch (e) {
-      this.activeExperiments = [];
-    }
-
-    try {
-      this.presets = await this.labService.getPresets().catch(e => {
-        console.error('Failed to load presets:', e);
-        return [];
-      });
-    } catch (e) {
-      this.presets = [];
-    }
-
-    try {
-      this.myLabs = await this.coreLabService.getMyLabs().catch(e => {
-        console.error('Failed to load my labs:', e);
-        return [];
-      });
-    } catch (e) {
-      this.myLabs = [];
-    }
-
-    try {
-      this.allUsers = await this.coreLabService.getAllUsers().catch(e => {
-        console.error('Failed to load all users:', e);
-        return [];
-      });
-    } catch (e) {
-      this.allUsers = [];
-    }
-
-    try {
-      const allShared = await this.labService.getSharedWorkflows().catch(e => {
-        console.error('Failed to load shared workflows:', e);
-        return [];
-      });
-      this.sharedExperiments = allShared.filter(e => e.workflow_type === 'active');
-    } catch (e) {
-      this.sharedExperiments = [];
-    }
-
-    try {
-      this.incomingTransfers = await this.labService.getIncomingPresetTransfers().catch(e => {
-        console.error('Failed to load incoming transfers:', e);
-        return [];
-      });
-    } catch (e) {
-      this.incomingTransfers = [];
-    }
-
-    // Initialize sync states and samples_raw
-    if (this.activeExperiments) {
-      for (const exp of this.activeExperiments) {
-        if (!this.syncStates[exp.id]) {
-          this.syncStates[exp.id] = 'saved';
-        }
-        exp.samples_raw = (exp.samples || []).join(', ');
-      }
-    }
-
-    if (this.sharedExperiments) {
-      for (const exp of this.sharedExperiments) {
-        if (!this.syncStates[exp.id]) {
-          this.syncStates[exp.id] = 'saved';
-        }
-        exp.samples_raw = (exp.samples || []).join(', ');
-      }
-    }
-
-    this.cdr.detectChanges();
-    this.refreshWorkflowScrollbars();
   }
 
-  private refreshWorkflowScrollbars() {
-    setTimeout(() => {
-      document.querySelectorAll<HTMLElement>('.workflow-scroll-area[data-experiment-id]').forEach(area => {
-        const id = area.dataset['experimentId'];
-        if (!id) return;
-        this.workflowScrollMaxes[id] = Math.max(0, area.scrollWidth - area.clientWidth);
-        this.workflowScrollPositions[id] = area.scrollLeft;
-      });
+  async loadProtocols() {
+    this.loadingProtocols = true;
+    try {
+      this.protocols = this.auth.isDemo ? [this.demoProtocol()] : await this.protocolService.getTrees('all');
+    } catch (error) {
+      console.error('Could not load Tree Protocol records', error);
+      this.protocols = [];
+    } finally {
+      this.loadingProtocols = false;
       this.cdr.detectChanges();
-    });
+    }
   }
 
-  syncWorkflowScrollbar(experimentId: string, area: HTMLElement) {
-    this.workflowScrollMaxes[experimentId] = Math.max(0, area.scrollWidth - area.clientWidth);
-    this.workflowScrollPositions[experimentId] = area.scrollLeft;
-  }
-
-  scrollWorkflow(experimentId: string, area: HTMLElement, event: Event) {
-    const position = Number((event.target as HTMLInputElement).value);
-    area.scrollLeft = position;
-    this.workflowScrollPositions[experimentId] = position;
-  }
-
-  getSharedNames(exp: any): string[] {
-    if (!exp) return [];
-    const labs = (exp.shared_labs && exp.shared_labs.length) ? exp.shared_labs : (exp.shared_with_labs || []);
-    const users = (exp.shared_users && exp.shared_users.length) ? exp.shared_users : (exp.shared_with_users || []);
-    return [...labs, ...users];
-  }
-
-  toggleCreateExp() {
-    this.showCreateExpForm = !this.showCreateExpForm;
-    this.showCreatePresetForm = false;
-  }
-
-  toggleCreatePreset() {
-    this.showCreatePresetForm = !this.showCreatePresetForm;
-    this.showCreateExpForm = false;
-    this.editingPresetId = null;
-    this.presetForm = {
-      title: '',
-      description: '',
-      steps: [{ title: '', description: '' }]
+  private demoProtocol(): ProtocolTreeRecord {
+    const now = new Date().toISOString();
+    return {
+      id: 'demo-protocol', owner_user_id: 'demo', title: 'Demo transformation protocol', created_at: now, updated_at: now,
+      document_json: {
+        version: '1.0', title: 'Demo transformation protocol', activeTreeId: 'demo-root',
+        trees: [{ id: 'demo-root', name: 'Transformation workflow', description: 'A short example protocol run.', rootNodeId: 'demo-1', createdAt: Date.now(), updatedAt: Date.now(), nodes: [
+          { id: 'demo-1', title: 'Prepare samples', description: 'Label and prepare samples.', steps: ['Confirm sample IDs', 'Prepare reagents'], nextNodes: ['demo-2'], status: 'planned', leaves: [] },
+          { id: 'demo-2', title: 'Run procedure', description: 'Perform the main protocol.', steps: ['Record deviations as they occur'], nextNodes: ['demo-3'], status: 'planned', leaves: [] },
+          { id: 'demo-3', title: 'Review outcome', description: 'Capture results and observations.', steps: ['Attach evidence', 'Write a conclusion'], nextNodes: [], status: 'planned', leaves: [] }
+        ] }]
+      }
     };
   }
 
-  editPreset(preset: any) {
-    this.editingPresetId = preset.id;
-    this.showCreatePresetForm = true;
-    this.showCreateExpForm = false;
-    this.presetForm = {
-      title: preset.title,
-      description: preset.description || '',
-      steps: preset.steps ? JSON.parse(JSON.stringify(preset.steps)) : []
-    };
-    this.cdr.detectChanges();
+  private normalizeExperiment(exp: any) {
+    exp.steps = (exp.steps || []).map((step: any, index: number) => ({
+      id: step.id || crypto.randomUUID(), title: step.title || `Step ${index + 1}`,
+      description: step.description || '', status: step.status || (index === 0 ? 'active' : 'pending'),
+      comments: step.comments || [], logs: step.logs || [], images: step.images || [],
+      started_at: step.started_at || null, completed_at: step.completed_at || null, protocol_node_id: step.protocol_node_id
+    }));
+    exp.run_notes = exp.run_notes || '';
+    exp.samples = exp.samples || [];
+    return exp;
   }
 
-  addPresetStep() {
-    this.presetForm.steps.push({ title: '', description: '' });
+  get selectedProtocol(): ProtocolTreeRecord | undefined {
+    return this.protocols.find(protocol => protocol.id === this.createForm.protocolId);
   }
 
-  removePresetStep(index: number) {
-    this.presetForm.steps.splice(index, 1);
+  get availableRoots(): NamuTree[] { return this.selectedProtocol?.document_json?.trees || []; }
+
+  onProtocolSelected() {
+    const roots = this.availableRoots;
+    this.createForm.rootId = roots.length === 1 ? roots[0].id : '';
+    if (!this.createForm.title && this.selectedProtocol) this.createForm.title = `${this.selectedProtocol.title} run`;
   }
 
-  async savePreset() {
-    if (!this.presetForm.title) return alert('Title required');
-    try {
-      if (this.editingPresetId) {
-        await this.labService.updatePreset(this.editingPresetId, this.presetForm);
-      } else {
-        await this.labService.createPreset(this.presetForm);
-      }
-      this.editingPresetId = null;
-      this.showCreatePresetForm = false;
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  async deletePreset(id: string) {
-    if (!confirm("Delete this preset template?")) return;
-    try {
-      await this.labService.deletePreset(id);
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-    }
-  }
+  openCreatePanel() { this.createForm = this.emptyCreateForm(); this.showCreatePanel = true; }
+  closeCreatePanel() { if (!this.creating) this.showCreatePanel = false; }
 
   async createExperiment() {
-    if (!this.expForm.title) return alert('Title required');
-    const data = {
-      title: this.expForm.title,
-      description: this.expForm.description,
-      samples: this.expForm.samples.split(',').map(s => s.trim()).filter(s => s),
-      tags: [],
-      work_type: this.expForm.work_type
+    const protocol = this.selectedProtocol;
+    const root = this.availableRoots.find(tree => tree.id === this.createForm.rootId);
+    if (!this.createForm.title.trim()) return alert('Add an experiment title.');
+    if (!protocol || !root) return alert('Choose a Tree Protocol and one protocol root.');
+    const steps = this.buildProtocolSteps(root);
+    if (!steps.length) return alert('The selected protocol root has no usable steps.');
+    this.creating = true;
+    try {
+      await this.notebook.createExperiment({
+        title: this.createForm.title.trim(), description: this.createForm.description.trim(),
+        samples: this.createForm.samples.split(',').map(value => value.trim()).filter(Boolean), tags: [], work_type: '',
+        protocol_tree_id: protocol.id, protocol_title: protocol.title, protocol_root_id: root.id,
+        protocol_root_name: root.name, protocol_snapshot_updated_at: protocol.updated_at, run_notes: '', steps
+      });
+      this.showCreatePanel = false;
+      this.activeTab = 'current';
+      await this.loadExperiments();
+    } catch (error) {
+      console.error(error);
+      alert('Could not create the experiment log.');
+    } finally { this.creating = false; }
+  }
+
+  private buildProtocolSteps(tree: NamuTree): ExperimentStep[] {
+    const nodes = new Map(tree.nodes.map(node => [node.id, node]));
+    const visited = new Set<string>();
+    const ordered: NamuNode[] = [];
+    const visit = (id: string) => {
+      if (visited.has(id)) return;
+      const node = nodes.get(id);
+      if (!node) return;
+      visited.add(id); ordered.push(node); (node.nextNodes || []).forEach(visit);
     };
-    try {
-      const newExp = await this.labService.createExperiment(data);
-      this.syncStates[newExp.id] = 'saved';
-      this.showCreateExpForm = false;
-      this.expForm = { title: '', description: '', samples: '', work_type: '' };
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-    }
+    visit(tree.rootNodeId);
+    return ordered.map((node, index) => ({
+      id: crypto.randomUUID(), protocol_node_id: node.id, title: node.title || `Step ${index + 1}`,
+      description: [node.description, ...(node.steps || []).map(step => `• ${step}`)].filter(Boolean).join('\n'),
+      status: index === 0 ? 'active' : 'pending', comments: [], logs: [], images: [],
+      started_at: index === 0 ? new Date().toISOString() : null, completed_at: null, updated_at: new Date().toISOString()
+    }));
   }
 
-  async deleteExperiment(id: string) {
-    if (!confirm('Delete experiment?')) return;
-    try {
-      await this.labService.deleteExperiment(id);
-      delete this.syncStates[id];
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-    }
+  get displayExperiments(): any[] {
+    const source = this.activeTab === 'current' ? this.currentExperiments : this.completedExperiments;
+    const query = this.searchQuery.trim().toLowerCase();
+    const filtered = !query ? [...source] : source.filter(exp => [exp.title, exp.description, exp.protocol_title, exp.protocol_root_name, ...(exp.samples || [])].join(' ').toLowerCase().includes(query));
+    return filtered.sort((a, b) => {
+      if (this.sortMode === 'name-asc') return (a.title || '').localeCompare(b.title || '');
+      const left = new Date(a.updated_at || a.archived_at || a.created_at || 0).getTime();
+      const right = new Date(b.updated_at || b.archived_at || b.created_at || 0).getTime();
+      return this.sortMode === 'updated-asc' ? left - right : right - left;
+    });
   }
 
-  // --- Step sequence interaction ---
-  getPresetName(id: string) {
-    const p = this.presets.find(x => x.id === id);
-    return p ? p.title : id;
-  }
+  setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
+  openExperiment(exp: any) { this.selectedExperiment = exp; this.noteDrafts = {}; }
+  closeExperiment() { this.selectedExperiment = null; }
 
-  // Auto save trigger
   onExperimentChange(exp: any) {
+    if (this.activeTab === 'completed') return;
     this.syncStates[exp.id] = 'saving';
     this.saveSubject.next(exp);
   }
 
-  onSamplesChange(exp: any) {
-    exp.samples = (exp.samples_raw || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
-    this.onExperimentChange(exp);
-  }
-
-  removeSampleTag(exp: any, index: number) {
-    if (exp.samples) {
-      exp.samples.splice(index, 1);
-      this.onExperimentChange(exp);
-    }
-  }
-
-  addSampleTag(exp: any, inputEl: HTMLInputElement) {
-    const val = inputEl.value.trim();
-    if (val) {
-      if (!exp.samples) {
-        exp.samples = [];
-      }
-      if (!exp.samples.includes(val)) {
-        exp.samples.push(val);
-        this.onExperimentChange(exp);
-      }
-      inputEl.value = '';
-    }
-  }
-
-  async autoSaveExperiment(exp: any) {
-    const data = {
-      title: exp.title,
-      description: exp.description,
-      samples: exp.samples,
-      tags: [],
-      steps: exp.steps
-    };
+  private async saveExperiment(exp: any, force = false): Promise<boolean> {
+    if (!force && this.completingExperimentIds.has(exp.id)) return true;
     try {
-      await this.labService.updateExperiment(exp.id, data);
+      await this.notebook.updateExperiment(exp.id, {
+        title: exp.title, description: exp.description || '', samples: exp.samples || [], tags: exp.tags || [],
+        protocol_tree_id: exp.protocol_tree_id, protocol_title: exp.protocol_title || '', protocol_root_id: exp.protocol_root_id,
+        protocol_root_name: exp.protocol_root_name || '', protocol_snapshot_updated_at: exp.protocol_snapshot_updated_at,
+        run_notes: exp.run_notes || '', steps: exp.steps || []
+      });
+      exp.updated_at = new Date().toISOString();
       this.syncStates[exp.id] = 'saved';
       this.cdr.detectChanges();
-    } catch (e) {
+      return true;
+    } catch (error) {
+      console.error(error);
       this.syncStates[exp.id] = 'error';
       this.cdr.detectChanges();
+      return false;
     }
   }
 
-  async insertStepAt(exp: any, index: number) {
-    const newStep = {
-      id: crypto.randomUUID(),
-      title: 'New Step',
-      description: '',
-      status: 'pending',
-      comments: [],
-      images: [],
-      started_at: null,
-      completed_at: null,
-      updated_at: new Date().toISOString()
-    };
-    exp.steps.splice(index, 0, newStep);
-    this.onExperimentChange(exp);
-    this.cdr.detectChanges();
-  }
-
-  async removeStep(exp: any, stepId: string) {
-    if (!confirm('Remove this step?')) return;
-    exp.steps = exp.steps.filter((s: any) => s.id !== stepId);
-    this.onExperimentChange(exp);
-    this.cdr.detectChanges();
-  }
-
-  // HTML5 Drag and drop reordering
-  onDragStart(exp: any, index: number) {
-    this.draggedIndex = index;
-    this.draggedExpId = exp.id;
-  }
-
-  async onDrop(exp: any, index: number) {
-    if (this.draggedExpId !== exp.id || this.draggedIndex === null) return;
-    const draggedStep = exp.steps.splice(this.draggedIndex, 1)[0];
-    exp.steps.splice(index, 0, draggedStep);
-    this.draggedIndex = null;
-    this.draggedExpId = null;
-    this.onExperimentChange(exp);
-    this.cdr.detectChanges();
-  }
-
-  async completeStep(exp: any, step: any) {
-    step.status = 'completed';
-    step.completed_at = new Date().toISOString();
-    
-    // Auto-set next pending to active
-    let foundNext = false;
-    for (const s of exp.steps) {
-      if (s.id !== step.id && s.status === 'pending') {
-        s.status = 'active';
-        s.started_at = new Date().toISOString();
-        foundNext = true;
-        break;
-      }
-    }
-    
-    this.onExperimentChange(exp);
-    
-    if (!foundNext) {
-      const uncompleted = exp.steps.some((s: any) => s.status !== 'completed');
-      if (!uncompleted) {
-        this.openArchiveDialog(exp);
-      }
-    }
-  }
-
-  async undoCompleteStep(exp: any, step: any) {
-    step.status = 'active';
-    step.completed_at = null;
-    this.onExperimentChange(exp);
-  }
-
-  async completeAllSteps(exp: any) {
-    if (!exp.steps || exp.steps.length === 0) return;
-    for (const s of exp.steps) {
-      s.status = 'completed';
-      if (!s.completed_at) {
-        s.completed_at = new Date().toISOString();
-      }
+  setStepStatus(exp: any, step: ExperimentStep, status: StepStatus) {
+    const now = new Date().toISOString();
+    step.status = status; step.updated_at = now;
+    if (status === 'active' && !step.started_at) step.started_at = now;
+    step.completed_at = status === 'completed' ? now : null;
+    step.logs = step.logs || [];
+    step.logs.push({ id: crypto.randomUUID(), text: status === 'completed' ? 'Step completed' : status === 'active' ? 'Step started' : 'Step reopened', created_at: now, kind: 'status' });
+    if (status === 'completed') {
+      const next = exp.steps.find((candidate: ExperimentStep) => candidate.status === 'pending');
+      if (next) { next.status = 'active'; next.started_at = now; }
     }
     this.onExperimentChange(exp);
-    this.openArchiveDialog(exp);
   }
 
-  // Custom Archiving Flow
-  openArchiveDialog(exp: any) {
-    this.archivingExp = exp;
-    this.showRatingSelector = false;
-    this.selectedRatingScore = 0;
-    this.hoverRatingScore = 0;
-    this.cdr.detectChanges();
-  }
-
-  cancelArchiving() {
-    this.archivingExp = null;
-    this.showRatingSelector = false;
-    this.selectedRatingScore = 0;
-    this.hoverRatingScore = 0;
-    this.cdr.detectChanges();
-  }
-
-  proceedToRating() {
-    this.showRatingSelector = true;
-    this.cdr.detectChanges();
-  }
-
-  async deleteArchivingExp() {
-    if (!confirm('Delete experiment permanently?')) return;
-    const expId = this.archivingExp.id;
-    this.cancelArchiving();
-    await this.deleteExperiment(expId);
-  }
-
-  selectRatingScore(score: number) {
-    this.selectedRatingScore = score;
-    this.cdr.detectChanges();
-  }
-
-  async submitArchive() {
-    if (this.selectedRatingScore === 0) return;
-    const expId = this.archivingExp.id;
-    const score = this.selectedRatingScore;
-    this.cancelArchiving();
-    try {
-      await this.labService.archiveExperiment(expId, score);
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-      alert('Failed to archive');
-    }
-  }
-
-  // Lightbox preview control
-  openImagePreview(url: string) {
-    this.previewImageUrl = url;
-    this.cdr.detectChanges();
-  }
-
-  closeImagePreview() {
-    this.previewImageUrl = null;
-    this.cdr.detectChanges();
-  }
-
-  async addComment(exp: any, step: any, commentInput: any) {
-    const text = commentInput.value.trim();
+  addStepNote(exp: any, step: ExperimentStep) {
+    const text = (this.noteDrafts[step.id] || '').trim();
     if (!text) return;
-    if (!step.comments) step.comments = [];
-    step.comments.push(text);
-    commentInput.value = '';
+    step.logs = step.logs || [];
+    step.logs.push({ id: crypto.randomUUID(), text, created_at: new Date().toISOString(), kind: 'note' });
+    this.noteDrafts[step.id] = '';
     this.onExperimentChange(exp);
   }
 
-  async uploadStepImage(event: any, exp: any, step: any) {
-    const file = event.target.files[0];
+  async uploadStepImage(event: Event, exp: any, step: ExperimentStep) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0]; input.value = '';
     if (!file) return;
-    
-    this.uploadingImageForStep = step.id;
-    this.cdr.detectChanges();
+    this.uploadingStepId = step.id;
     try {
-      const res = await this.labService.uploadAsset(file);
-      if (!step.images) step.images = [];
-      step.images.push(res.url);
+      const uploaded = await this.notebook.uploadAsset(file);
+      step.images = step.images || []; step.images.push(uploaded.url);
+      step.logs = step.logs || [];
+      step.logs.push({ id: crypto.randomUUID(), text: `Attached ${file.name}`, created_at: new Date().toISOString(), kind: 'attachment' });
       this.onExperimentChange(exp);
-    } catch (e) {
-      console.error(e);
-      alert('Upload failed');
+    } catch (error) {
+      console.error(error); alert('Could not attach this image.');
+    } finally { this.uploadingStepId = null; }
+  }
+
+  openCompletion(exp: any) { this.completionExperiment = exp; this.completionScore = 4; }
+
+  async completeExperiment() {
+    if (!this.completionExperiment) return;
+    const experiment = this.completionExperiment;
+    this.saving = true;
+    this.completingExperimentIds.add(experiment.id);
+    try {
+      const saved = await this.saveExperiment(experiment, true);
+      if (!saved) throw new Error('The latest experiment changes could not be saved.');
+      await this.notebook.archiveExperiment(experiment.id, this.completionScore);
+      this.completionExperiment = null; this.selectedExperiment = null; this.activeTab = 'completed';
+      await this.loadExperiments();
+    } catch (error) {
+      console.error(error); alert('Could not complete this experiment.');
     } finally {
-      this.uploadingImageForStep = null;
-      this.cdr.detectChanges();
+      this.completingExperimentIds.delete(experiment.id);
+      this.saving = false;
     }
   }
 
-  getCompletedStepsCount(exp: any): number {
-    if (!exp.steps) return 0;
-    return exp.steps.filter((s: any) => s.status === 'completed').length;
-  }
-  
-  getProgressPercentage(exp: any): number {
-    if (!exp.steps || exp.steps.length === 0) return 0;
-    const completed = this.getCompletedStepsCount(exp);
-    return Math.round((completed / exp.steps.length) * 100);
-  }
-
-  openExperimentDetails(exp: any) {
-    this.selectedExperiment = exp;
-  }
-
-  closeExperimentDetails() {
-    this.selectedExperiment = null;
-  }
-
-  isExperimentReadOnly(exp: any): boolean {
-    return false; // Active experiments are always co-editable!
-  }
-
-  expandedComments: { [commentId: string]: boolean } = {};
-
-  toggleCommentExpand(commentId: string, event: Event) {
-    if (event) {
-      event.stopPropagation();
-    }
-    this.expandedComments[commentId] = !this.expandedComments[commentId];
-  }
-
-  getRecentComments(exp: any): { id: string, author?: string, text: string }[] {
-    const comments: { id: string, author?: string, text: string }[] = [];
-    if (exp && exp.comments && exp.comments.length) {
-      for (const c of exp.comments) {
-        comments.push({
-          id: c.id,
-          author: c.user_name || 'Discussion',
-          text: c.comment || c.text || ''
-        });
-      }
-    }
-    return comments;
-  }
-
-  filterPresetUsers() {
-    const q = this.presetSearchQuery.trim().toLowerCase();
-    if (!q) {
-      this.filteredUsers = this.allUsers;
-    } else {
-      this.filteredUsers = this.allUsers.filter(u => 
-        u.name?.toLowerCase().includes(q) || 
-        u.email?.toLowerCase().includes(q)
-      );
-    }
-  }
-
-  openSharePresetModal(preset: any) {
-    this.sharingPreset = preset;
-    this.showSharePresetModal = true;
-    this.presetSearchQuery = '';
-    this.filterPresetUsers();
-    this.cdr.detectChanges();
-  }
-
-  closeSharePresetModal() {
-    this.showSharePresetModal = false;
-    this.sharingPreset = null;
-  }
-
-  async sendPresetTemplate(userId: number) {
-    if (!this.sharingPreset) return;
+  async deleteExperiment(exp: any) {
+    if (exp._shared || !confirm(`Delete “${exp.title}” permanently?`)) return;
     try {
-      await this.labService.sendPreset(this.sharingPreset.id, userId);
-      alert('Template preset sent successfully!');
-      this.closeSharePresetModal();
-    } catch (e) {
-      console.error(e);
-      alert('Failed to send template preset.');
+      await this.notebook.deleteExperiment(exp.id);
+      if (this.selectedExperiment?.id === exp.id) this.selectedExperiment = null;
+      await this.loadExperiments();
+    } catch (error) {
+      console.error(error); alert('Could not delete this experiment log.');
     }
   }
 
-  async acceptTransfer(transferId: string) {
-    try {
-      await this.labService.acceptPresetTransfer(transferId);
-      alert('Template accepted and added to your collection!');
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-      alert('Failed to accept template.');
-    }
-  }
+  completedStepCount(exp: any): number { return (exp.steps || []).filter((step: ExperimentStep) => step.status === 'completed').length; }
+  progress(exp: any): number { return exp.steps?.length ? Math.round((this.completedStepCount(exp) / exp.steps.length) * 100) : 0; }
+  nextStep(exp: any): ExperimentStep | undefined { return (exp.steps || []).find((step: ExperimentStep) => step.status === 'active') || (exp.steps || []).find((step: ExperimentStep) => step.status === 'pending'); }
 
-  async rejectTransfer(transferId: string) {
-    if (!confirm('Reject this template transfer?')) return;
-    try {
-      await this.labService.rejectPresetTransfer(transferId);
-      await this.loadData();
-    } catch (e) {
-      console.error(e);
-      alert('Failed to reject template.');
-    }
+  formatDate(value: string | null | undefined): string {
+    if (!value) return 'Not recorded';
+    return new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   }
-
-  async openShareModal(exp: any, event: Event) {
-    event.stopPropagation();
-    this.sharingExp = exp;
-    this.showShareModal = true;
-    this.researcherSearchQuery = '';
-    try {
-      const res = await this.labService.getWorkflowShares(exp.id);
-      this.sharedLabIds = res.lab_ids || [];
-      this.sharedUserIds = res.user_ids || [];
-    } catch (e) {
-      console.error(e);
-      this.sharedLabIds = [];
-      this.sharedUserIds = [];
-    }
-    this.filterResearchers();
-    this.cdr.detectChanges();
-  }
-
-  closeShareModal() {
-    this.showShareModal = false;
-    this.sharingExp = null;
-  }
-
-  toggleLabShare(labId: string) {
-    const index = this.sharedLabIds.indexOf(labId);
-    if (index > -1) {
-      this.sharedLabIds.splice(index, 1);
-    } else {
-      this.sharedLabIds.push(labId);
-    }
-  }
-
-  isLabShared(labId: string): boolean {
-    return this.sharedLabIds.includes(labId);
-  }
-
-  filterResearchers() {
-    const q = this.researcherSearchQuery.trim().toLowerCase();
-    if (!q) {
-      this.filteredResearchers = this.allUsers;
-    } else {
-      this.filteredResearchers = this.allUsers.filter(u =>
-        u.name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q)
-      );
-    }
-  }
-
-  toggleUserShare(userId: any) {
-    const uIdStr = String(userId);
-    const index = this.sharedUserIds.indexOf(uIdStr);
-    if (index > -1) {
-      this.sharedUserIds.splice(index, 1);
-    } else {
-      this.sharedUserIds.push(uIdStr);
-    }
-  }
-
-  isUserShared(userId: any): boolean {
-    return this.sharedUserIds.includes(String(userId));
-  }
-
-  async saveWorkflowShares() {
-    if (!this.sharingExp) return;
-    this.savingShares = true;
-    try {
-      await this.labService.updateWorkflowShares(this.sharingExp.id, 'active', this.sharedLabIds, this.sharedUserIds);
-      this.closeShareModal();
-      await this.loadData();
-    } catch (e) {
-      console.error('Failed to save sharing', e);
-    } finally {
-      this.savingShares = false;
-    }
-  }
-
-  formatDate(d: string) {
-    if (!d) return '';
-    return new Date(d).toLocaleString();
-  }
-
 }

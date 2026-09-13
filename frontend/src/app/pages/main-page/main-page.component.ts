@@ -14,7 +14,7 @@ import { AuthService } from '../../services/auth.service';
         <p class="hero-label">Australian National University · RSB</p>
         <h1>Unified Research <span class="highlight">Platform</span></h1>
         <p class="hero-sub">
-          A practical workspace for pooled CRISPR sequencing analysis, lab notebooks,
+          A practical workspace for pooled CRISPR sequencing analysis, experiment records,
           facility booking, and team-based research records.
         </p>
         <div class="hero-cta">
@@ -102,9 +102,9 @@ import { AuthService } from '../../services/auth.service';
         <section class="grid-section">
           <p class="sec-label">LAB WORKFLOW</p>
           <div class="cards-grid">
-            <a routerLink="/lab/notes" class="tool-card">
+            <a routerLink="/data/memos" class="tool-card">
               <div class="card-body">
-                <h3>General Notes</h3>
+                <h3>Memo</h3>
                 <p>Keep free-form lab notes, observations, meeting records, and daily research updates in one place.</p>
                 <div class="tag-row">
                   <span>Notes</span>
@@ -112,23 +112,13 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
-            <a routerLink="/lab/experiments" class="tool-card">
+            <a routerLink="/data/experiment-logs" class="tool-card">
               <div class="card-body">
-                <h3>My Experiments</h3>
-                <p>Track active experiments step by step, attach files, and archive completed work with a success rating.</p>
+                <h3>Experiment Logs</h3>
+                <p>Run a saved Tree Protocol, record deviations and observations, and keep a timestamped history of completed work.</p>
                 <div class="tag-row">
-                  <span>Experiment Steps</span>
-                  <span>Attachments</span>
-                </div>
-              </div>
-            </a>
-            <a routerLink="/lab/archive" class="tool-card">
-              <div class="card-body">
-                <h3>Experiment Archive</h3>
-                <p>Review completed experiments with filters, ratings, comments, linked labs, and preserved workflow context.</p>
-                <div class="tag-row">
-                  <span>Completed Work</span>
-                  <span>Searchable</span>
+                  <span>Protocol Runs</span>
+                  <span>Notes & Evidence</span>
                 </div>
               </div>
             </a>
