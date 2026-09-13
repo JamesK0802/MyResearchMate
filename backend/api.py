@@ -38,6 +38,19 @@ if multiprocessing.current_process().name == 'MainProcess':
     except Exception as e:
         print(f"[STORAGE] Layout/schema migration failed: {e}")
 
+    # Keep Booking's editable layout migration isolated so an unrelated legacy
+    # migration cannot prevent these required columns from being installed.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS facility_id UUID REFERENCES facility_areas(id) ON DELETE SET NULL"))
+            conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_x INTEGER DEFAULT 1"))
+            conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_y INTEGER DEFAULT 1"))
+            conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_width INTEGER DEFAULT 1"))
+            conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_height INTEGER DEFAULT 1"))
+            conn.commit()
+    except Exception as e:
+        print(f"[BOOKING] Facility layout schema migration failed: {e}")
+
 app = FastAPI(title="My Lab Mate API")
 
 

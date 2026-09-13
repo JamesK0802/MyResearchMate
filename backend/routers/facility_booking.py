@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from auth.dependencies import get_current_user, require_admin
 from database.db import get_db
-from database.models import FacilitySpot, FacilityBooking
+from database.models import FacilityArea, FacilitySpot, FacilityBooking
 from pydantic import BaseModel, Field
 from datetime import date, datetime, timedelta
 import uuid
@@ -40,6 +40,26 @@ class AvailabilityCheck(BaseModel):
     spot_id: str
     start_date: str
     end_date: str
+
+class FacilityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    location: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=1000)
+    grid_columns: int = Field(default=4, ge=1, le=12)
+
+class FacilityUpdate(FacilityCreate):
+    display_order: int = Field(default=0, ge=0)
+
+class SpotCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    category: str = Field(default="General", max_length=120)
+    grid_x: int = Field(default=1, ge=1, le=12)
+    grid_y: int = Field(default=1, ge=1, le=100)
+    grid_width: int = Field(default=1, ge=1, le=12)
+    grid_height: int = Field(default=1, ge=1, le=12)
+
+class SpotUpdate(SpotCreate):
+    display_order: int = Field(default=0, ge=0)
 
 
 # ─── Seed Data (matches Excel layout exactly) ────────────────────────────────
@@ -77,11 +97,52 @@ SEED_BOOKINGS = [
     {"spot_name": "Speed Breeding Station_01", "user_name": "James", "species": "Wheat", "start_date": "2026-04-01", "end_date": "2026-06-30", "comment": "Speed breeding trial"},
 ]
 
+def serialize_facility(facility: FacilityArea, spot_count: int = 0) -> dict:
+    return {
+        "id": str(facility.id), "name": facility.name, "location": facility.location or "",
+        "description": facility.description or "", "grid_columns": facility.grid_columns or 4,
+        "display_order": facility.display_order or 0, "is_active": facility.is_active,
+        "spot_count": spot_count,
+    }
+
+def serialize_spot(spot: FacilitySpot) -> dict:
+    return {
+        "id": str(spot.id), "facility_id": str(spot.facility_id) if spot.facility_id else None,
+        "name": spot.name, "room": spot.room, "category": spot.category or "",
+        "display_order": spot.display_order, "map_group": spot.map_group or "", "is_active": spot.is_active,
+        "grid_x": spot.grid_x or 1, "grid_y": spot.grid_y or 1,
+        "grid_width": spot.grid_width or 1, "grid_height": spot.grid_height or 1,
+    }
+
+def ensure_facility_areas(db: Session):
+    """Migrate the original room-based spots into editable facility tabs."""
+    rooms = [row[0] for row in db.query(FacilitySpot.room).distinct().all() if row[0]]
+    changed = False
+    for order, room in enumerate(sorted(rooms), start=1):
+        facility = db.query(FacilityArea).filter(FacilityArea.name == room).first()
+        if not facility:
+            facility = FacilityArea(name=room, location="", description="", grid_columns=4, display_order=order, is_active=True)
+            db.add(facility)
+            db.flush()
+            changed = True
+        spots = db.query(FacilitySpot).filter(FacilitySpot.room == room).order_by(FacilitySpot.display_order).all()
+        for index, spot in enumerate(spots):
+            if not spot.facility_id:
+                spot.facility_id = facility.id
+                spot.grid_x = (index % facility.grid_columns) + 1
+                spot.grid_y = (index // facility.grid_columns) + 1
+                spot.grid_width = 1
+                spot.grid_height = 1
+                changed = True
+    if changed:
+        db.commit()
+
 
 def seed_facility_data(db: Session):
     """Seed facility spots and sample bookings if tables are empty."""
     existing = db.query(FacilitySpot).first()
     if existing:
+        ensure_facility_areas(db)
         return
 
     print("[SEED] Seeding facility spots...")
@@ -114,6 +175,7 @@ def seed_facility_data(db: Session):
         db.add(booking)
 
     db.commit()
+    ensure_facility_areas(db)
     print("[SEED] Facility data seeded successfully.")
 
 
@@ -148,14 +210,16 @@ def serialize_booking(b: FacilityBooking, spot: FacilitySpot = None) -> dict:
     }
 
 
-def find_available_alternatives(db: Session, spot_id, category: str, start: date, end: date):
-    """Find spots in the same category that are available for the given date range."""
-    # Get all spots in same category
+def find_available_alternatives(db: Session, spot_id, category: str, start: date, end: date, facility_id=None):
+    """Find available spots in the same facility and category."""
     same_category = db.query(FacilitySpot).filter(
         FacilitySpot.category == category,
         FacilitySpot.is_active == True,
         FacilitySpot.id != spot_id
-    ).order_by(FacilitySpot.display_order).all()
+    )
+    if facility_id:
+        same_category = same_category.filter(FacilitySpot.facility_id == facility_id)
+    same_category = same_category.order_by(FacilitySpot.display_order).all()
 
     available = []
     for s in same_category:
@@ -177,6 +241,7 @@ def find_available_alternatives(db: Session, spot_id, category: str, start: date
 @router.get("/spots")
 async def get_spots(
     room: Optional[str] = None,
+    facility_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -184,18 +249,75 @@ async def get_spots(
     query = db.query(FacilitySpot).filter(FacilitySpot.is_active == True)
     if room:
         query = query.filter(FacilitySpot.room == room)
+    if facility_id:
+        query = query.filter(FacilitySpot.facility_id == facility_id)
     spots = query.order_by(FacilitySpot.display_order).all()
-    return [
-        {"id": str(s.id), "name": s.name, "room": s.room, "category": s.category or "",
-         "display_order": s.display_order, "map_group": s.map_group or "", "is_active": s.is_active}
-        for s in spots
-    ]
+    return [serialize_spot(s) for s in spots]
+
+@router.get("/facilities")
+async def get_facilities(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    seed_facility_data(db)
+    facilities = db.query(FacilityArea).filter(FacilityArea.is_active == True).order_by(FacilityArea.display_order, FacilityArea.name).all()
+    return [serialize_facility(item, db.query(FacilitySpot).filter(FacilitySpot.facility_id == item.id, FacilitySpot.is_active == True).count()) for item in facilities]
+
+@router.post("/facilities")
+async def create_facility(payload: FacilityCreate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    if db.query(FacilityArea).filter(FacilityArea.name.ilike(payload.name.strip())).first():
+        raise HTTPException(status_code=409, detail="A facility with this name already exists")
+    next_order = (db.query(FacilityArea).count() or 0) + 1
+    facility = FacilityArea(name=payload.name.strip(), location=payload.location.strip(), description=payload.description.strip(), grid_columns=payload.grid_columns, display_order=next_order, is_active=True)
+    db.add(facility); db.commit(); db.refresh(facility)
+    return serialize_facility(facility)
+
+@router.put("/facilities/{facility_id}")
+async def update_facility(facility_id: str, payload: FacilityUpdate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    facility = db.query(FacilityArea).filter(FacilityArea.id == facility_id, FacilityArea.is_active == True).first()
+    if not facility: raise HTTPException(status_code=404, detail="Facility not found")
+    duplicate = db.query(FacilityArea).filter(FacilityArea.name.ilike(payload.name.strip()), FacilityArea.id != facility.id).first()
+    if duplicate: raise HTTPException(status_code=409, detail="A facility with this name already exists")
+    old_name = facility.name
+    facility.name = payload.name.strip(); facility.location = payload.location.strip(); facility.description = payload.description.strip()
+    facility.grid_columns = payload.grid_columns; facility.display_order = payload.display_order
+    if old_name != facility.name:
+        db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id).update({"room": facility.name})
+    db.commit(); db.refresh(facility)
+    return serialize_facility(facility, db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id, FacilitySpot.is_active == True).count())
+
+@router.post("/facilities/{facility_id}/spots")
+async def create_spot(facility_id: str, payload: SpotCreate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    facility = db.query(FacilityArea).filter(FacilityArea.id == facility_id, FacilityArea.is_active == True).first()
+    if not facility: raise HTTPException(status_code=404, detail="Facility not found")
+    if db.query(FacilitySpot).filter(FacilitySpot.name.ilike(payload.name.strip())).first():
+        raise HTTPException(status_code=409, detail="A booking spot with this name already exists")
+    next_order = (db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id).count() or 0) + 1
+    spot = FacilitySpot(facility_id=facility.id, name=payload.name.strip(), room=facility.name, category=payload.category.strip() or "General", display_order=next_order, map_group="custom", is_active=True, grid_x=payload.grid_x, grid_y=payload.grid_y, grid_width=min(payload.grid_width, facility.grid_columns), grid_height=payload.grid_height)
+    db.add(spot); db.commit(); db.refresh(spot)
+    return serialize_spot(spot)
+
+@router.put("/spots/{spot_id}")
+async def update_spot(spot_id: str, payload: SpotUpdate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    spot = db.query(FacilitySpot).filter(FacilitySpot.id == spot_id, FacilitySpot.is_active == True).first()
+    if not spot: raise HTTPException(status_code=404, detail="Booking spot not found")
+    duplicate = db.query(FacilitySpot).filter(FacilitySpot.name.ilike(payload.name.strip()), FacilitySpot.id != spot.id).first()
+    if duplicate: raise HTTPException(status_code=409, detail="A booking spot with this name already exists")
+    spot.name = payload.name.strip(); spot.category = payload.category.strip() or "General"; spot.display_order = payload.display_order
+    spot.grid_x = payload.grid_x; spot.grid_y = payload.grid_y; spot.grid_width = payload.grid_width; spot.grid_height = payload.grid_height
+    db.commit(); db.refresh(spot)
+    return serialize_spot(spot)
+
+@router.delete("/spots/{spot_id}")
+async def deactivate_spot(spot_id: str, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    spot = db.query(FacilitySpot).filter(FacilitySpot.id == spot_id, FacilitySpot.is_active == True).first()
+    if not spot: raise HTTPException(status_code=404, detail="Booking spot not found")
+    spot.is_active = False; db.commit()
+    return {"status": "success"}
 
 
 @router.get("/allocation")
 async def get_monthly_allocation(
     year: int = Query(...), month: int = Query(..., ge=1, le=12),
     room: Optional[str] = None,
+    facility_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -210,6 +332,8 @@ async def get_monthly_allocation(
     spots_query = db.query(FacilitySpot).filter(FacilitySpot.is_active == True)
     if room:
         spots_query = spots_query.filter(FacilitySpot.room == room)
+    if facility_id:
+        spots_query = spots_query.filter(FacilitySpot.facility_id == facility_id)
     spots = spots_query.order_by(FacilitySpot.display_order).all()
 
     bookings = db.query(FacilityBooking).filter(
@@ -230,8 +354,7 @@ async def get_monthly_allocation(
         spot_bookings = booking_map.get(sid, [])
         active = spot_bookings[0] if spot_bookings else None
         allocation.append({
-            "spot": {"id": sid, "name": s.name, "room": s.room, "category": s.category or "",
-                     "display_order": s.display_order, "map_group": s.map_group or "", "is_active": s.is_active},
+            "spot": serialize_spot(s),
             "booking": serialize_booking(active, s) if active else None,
             "booking_count": len(spot_bookings),
         })
@@ -252,6 +375,7 @@ async def get_monthly_allocation(
 async def get_yearly_summary(
     year: int = Query(...),
     room: Optional[str] = None,
+    facility_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -262,6 +386,8 @@ async def get_yearly_summary(
     spots_query = db.query(FacilitySpot).filter(FacilitySpot.is_active == True)
     if room:
         spots_query = spots_query.filter(FacilitySpot.room == room)
+    if facility_id:
+        spots_query = spots_query.filter(FacilitySpot.facility_id == facility_id)
     spots = spots_query.order_by(FacilitySpot.display_order).all()
 
     # Get bookings overlapping with the year
@@ -321,13 +447,15 @@ async def get_yearly_summary(
 
 @router.get("/bookings")
 async def get_bookings(
-    spot_id: Optional[str] = None, year: Optional[int] = None, month: Optional[int] = None,
+    spot_id: Optional[str] = None, facility_id: Optional[str] = None, year: Optional[int] = None, month: Optional[int] = None,
     db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     seed_facility_data(db)
     query = db.query(FacilityBooking, FacilitySpot).join(FacilitySpot, FacilityBooking.spot_id == FacilitySpot.id)
     if spot_id:
         query = query.filter(FacilityBooking.spot_id == spot_id)
+    if facility_id:
+        query = query.filter(FacilitySpot.facility_id == facility_id)
     if year and month:
         month_start = date(year, month, 1)
         last_day = date(year, 12, 31) if month == 12 else date(year, month + 1, 1) - timedelta(days=1)
@@ -361,7 +489,7 @@ async def check_availability(
         return {"available": True, "spot_name": spot.name, "alternatives": []}
 
     # Not available — find alternatives in same category
-    alternatives = find_available_alternatives(db, spot.id, spot.category, start, end)
+    alternatives = find_available_alternatives(db, spot.id, spot.category, start, end, spot.facility_id)
     return {
         "available": False,
         "spot_name": spot.name,
@@ -393,7 +521,7 @@ async def create_booking(
     overlap = check_booking_overlap(db, spot.id, start, end)
     if overlap:
         # Find alternatives
-        alternatives = find_available_alternatives(db, spot.id, spot.category, start, end)
+        alternatives = find_available_alternatives(db, spot.id, spot.category, start, end, spot.facility_id)
         alt_names = ", ".join([a["name"] for a in alternatives[:5]]) if alternatives else "None"
         raise HTTPException(
             status_code=409,

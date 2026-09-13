@@ -83,6 +83,7 @@
     <div class="spreadsheet-toolbar">
       <div class="toolbar-left">
         <button class="app-btn app-btn-outline app-btn-sm" (click)="addSampleRow()" [disabled]="isReadOnly">+ Add Sample</button>
+        <button class="app-btn app-btn-outline app-btn-sm storage-rules-button" (click)="openStorageRules()">⚙ Storage Rules <span *ngIf="storageRules.length">{{ storageRules.length }}</span></button>
         
         <!-- Desktop buttons: hidden on mobile -->
         <div class="toolbar-actions-desktop" style="display:flex; gap:8px; align-items:center;">
@@ -245,7 +246,7 @@
             
             <!-- Barcode (editable) -->
             <td class="col-barcode">
-              <input type="text" [(ngModel)]="sample.barcode" (ngModelChange)="onSamplesChange()" placeholder="e.g. BC001" class="grid-input" [disabled]="isReadOnly">
+              <input type="text" [(ngModel)]="sample.barcode" (ngModelChange)="onBarcodeChange(sample)" placeholder="e.g. BC001" class="grid-input" [disabled]="isReadOnly">
             </td>
             
             <!-- Sample Name (editable) -->
@@ -1010,4 +1011,69 @@
 
   <!-- Hidden PC Uploader Inputs -->
   <input type="file" id="pc-file-input" multiple style="display:none" (change)="onFilesSelectedForUpload($event)">
+</div>
+
+<!-- Storage Location rule builder -->
+<div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
+  <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
+    <header class="storage-rule-header">
+      <div><span class="rule-eyebrow">LAB ARCHIVE SETTINGS</span><h2>Storage Location Rules</h2><p>Build locations from each barcode. Rules run from top to bottom; the first matching rule wins.</p></div>
+      <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
+    </header>
+
+    <div class="storage-rule-preview-bar">
+      <label><span>Try a barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
+      <div><span>Calculated location</span><strong>{{ overallStoragePreview() }}</strong></div>
+    </div>
+
+    <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
+
+    <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
+      <span>Add a guided rule:</span>
+      <button type="button" (click)="addStorageRule('positions')">Prefix + positions</button>
+      <button type="button" (click)="addStorageRule('following-number')">Text + following number</button>
+      <button type="button" (click)="addStorageRule('blank')">Blank rule</button>
+    </div>
+
+    <div class="storage-rules-list">
+      <article *ngFor="let rule of storageRules; let ruleIndex = index" class="storage-rule-card" [class.rule-disabled]="!rule.enabled">
+        <div class="storage-rule-title">
+          <span class="rule-priority">{{ ruleIndex + 1 }}</span>
+          <input class="rule-name-input" [(ngModel)]="rule.name" [disabled]="!canManageStorageRules || isReadOnly" aria-label="Rule name">
+          <label class="rule-enabled"><input type="checkbox" [(ngModel)]="rule.enabled" [disabled]="!canManageStorageRules || isReadOnly"> Enabled</label>
+          <div class="rule-order-actions" *ngIf="canManageStorageRules && !isReadOnly"><button type="button" (click)="moveStorageRule(ruleIndex, -1)" [disabled]="ruleIndex === 0" title="Move up">↑</button><button type="button" (click)="moveStorageRule(ruleIndex, 1)" [disabled]="ruleIndex === storageRules.length - 1" title="Move down">↓</button><button type="button" class="rule-delete" (click)="removeStorageRule(ruleIndex)" title="Delete rule">Delete</button></div>
+        </div>
+
+        <div class="rule-condition-row"><strong>When barcode</strong>
+          <select [(ngModel)]="rule.match.type" [disabled]="!canManageStorageRules || isReadOnly">
+            <option value="starts_with">starts with</option><option value="contains">contains</option><option value="ends_with">ends with</option><option value="equals">exactly equals</option><option value="always">anything (fallback)</option>
+          </select>
+          <input *ngIf="rule.match.type !== 'always'" [(ngModel)]="rule.match.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. AD">
+        </div>
+
+        <div class="rule-output-heading"><strong>Build location from</strong><label>Join with <select [(ngModel)]="rule.separator" [disabled]="!canManageStorageRules || isReadOnly"><option value=" ">space</option><option value=" / "> / </option><option value=" - "> - </option><option value="">nothing</option><option value=", ">comma</option></select></label></div>
+        <div class="rule-parts">
+          <div *ngFor="let part of rule.parts; let partIndex = index" class="rule-part-row">
+            <span class="part-number">{{ partIndex + 1 }}</span>
+            <select [(ngModel)]="part.type" [disabled]="!canManageStorageRules || isReadOnly">
+              <option value="text">Fixed words</option><option value="characters">Barcode positions</option><option value="digits_after">Number after text</option><option value="remainder_after">Everything after text</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
+            </select>
+            <input *ngIf="part.type === 'text'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. Admin room">
+            <ng-container *ngIf="part.type === 'characters'"><label>from <input type="number" min="1" [(ngModel)]="part.start" [disabled]="!canManageStorageRules || isReadOnly"></label><label>to <input type="number" min="1" [(ngModel)]="part.end" [disabled]="!canManageStorageRules || isReadOnly"></label></ng-container>
+            <input *ngIf="part.type === 'digits_after' || part.type === 'remainder_after'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Text to find, e.g. BOX">
+            <label *ngIf="part.type === 'number_group'">group <input type="number" min="1" [(ngModel)]="part.group" [disabled]="!canManageStorageRules || isReadOnly"></label>
+            <select *ngIf="part.type !== 'text'" class="part-case" [(ngModel)]="part.transform" [disabled]="!canManageStorageRules || isReadOnly"><option value="as_is">Keep case</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option></select>
+            <button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="remove-part" (click)="removeStoragePart(rule, partIndex)" aria-label="Remove output part">×</button>
+          </div>
+          <button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="add-rule-part" (click)="addStoragePart(rule)">+ Add another part</button>
+        </div>
+        <div class="single-rule-preview"><span>For “{{ storageRuleExampleBarcode || 'empty barcode' }}”</span><strong>{{ storageRulePreview(rule) }}</strong></div>
+      </article>
+
+      <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>No automatic rules yet</strong><p>Existing imported locations stay untouched until the lab leader adds a rule.</p></div>
+    </div>
+
+    <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
+    <footer class="storage-rule-footer"><button type="button" class="app-btn app-btn-outline" (click)="closeStorageRules()">Close</button><button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="app-btn app-btn-primary" [disabled]="savingStorageRules" (click)="saveStorageRules()">{{ savingStorageRules ? 'Applying…' : 'Save & apply to samples' }}</button></footer>
+  </section>
 </div>

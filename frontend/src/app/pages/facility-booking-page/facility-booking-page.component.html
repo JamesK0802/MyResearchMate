@@ -5,6 +5,26 @@
     <p class="page-header__subtitle">Reserve lab equipment and research spaces at ANU RSB.</p>
   </header>
 
+  <section class="facility-switcher" aria-label="Facilities">
+    <div class="facility-tabs">
+      <button *ngFor="let facility of facilities" type="button" class="facility-tab"
+              [class.active]="facility.id === selectedFacilityId"
+              (click)="selectFacility(facility.id)">
+        <strong>{{ facility.name }}</strong>
+        <small *ngIf="facility.location">{{ facility.location }}</small>
+      </button>
+      <button *ngIf="canManageFacilities" type="button" class="facility-tab facility-tab-add" (click)="openNewFacility()">＋ New facility</button>
+    </div>
+    <div class="facility-summary" *ngIf="selectedFacility">
+      <div>
+        <strong>{{ selectedFacility.name }}</strong>
+        <span *ngIf="selectedFacility.location">{{ selectedFacility.location }}</span>
+        <p *ngIf="selectedFacility.description">{{ selectedFacility.description }}</p>
+      </div>
+      <button *ngIf="canManageFacilities" type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="openFacilitySettings()">⚙ Edit facility</button>
+    </div>
+  </section>
+
   <!-- ═══ TOP: NEW BOOKING FORM ═══ -->
   <button type="button" class="mobile-new-booking-toggle" [class.open]="mobileBookingFormOpen" (click)="mobileBookingFormOpen = !mobileBookingFormOpen">
     <span>{{ mobileBookingFormOpen ? 'Close booking form' : '+ New Booking' }}</span><span>{{ mobileBookingFormOpen ? '⌃' : '⌄' }}</span>
@@ -15,7 +35,7 @@
       <div class="app-form-group">
         <label class="app-label">Spot <span class="app-required">*</span></label>
         <select class="app-select" [(ngModel)]="form.spot_id">
-          <option *ngFor="let s of allSpots" [value]="s.id">{{ s.name }} ({{ s.room }})</option>
+          <option *ngFor="let s of facilitySpots" [value]="s.id">{{ s.name }}</option>
         </select>
       </div>
       <div class="app-form-group">
@@ -226,8 +246,23 @@
       </div>
     </div>
 
-    <!-- FLOOR PLAN -->
-    <div class="floor-plan">
+    <!-- Facility layouts are generated from manager-configured grid positions. -->
+    <div class="dynamic-floor-plan"
+         [style.grid-template-columns]="'repeat(' + (selectedFacility?.grid_columns || 4) + ', minmax(0, 1fr))'">
+      <button type="button" class="fp-cell dynamic-spot" *ngFor="let item of allocation"
+              [class.booked]="!!item.booking" [ngStyle]="spotGridStyle(item.spot)"
+              (click)="onMonthlySpotItemClick(item)">
+        <span class="cell-name">{{ item.spot.name }}</span>
+        <span class="cell-info" *ngIf="item.booking">{{ item.booking.user_name }}<br>{{ item.booking.species || '' }}</span>
+        <span class="cell-avail" *ngIf="!item.booking">Available</span>
+      </button>
+      <div class="facility-map-empty" *ngIf="allocation.length === 0">
+        No booking spots have been added to this facility yet.
+      </div>
+    </div>
+
+    <!-- Retained only as legacy reference; new facilities use the configurable map above. -->
+    <div class="floor-plan" *ngIf="false">
       <!-- Room 1: Acacia Room 18 -->
       <div class="room-container room-acacia">
         <div class="room-header">Acacia Room 18</div>
@@ -441,6 +476,73 @@
           </button>
           <button class="app-btn app-btn-ghost app-btn-sm" (click)="closeEditModal()">Cancel</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: FACILITY BUILDER ═══ -->
+  <div class="app-modal-overlay" *ngIf="showFacilityEditor" (click)="closeFacilityEditor()">
+    <div class="app-modal facility-editor-modal" (click)="$event.stopPropagation()">
+      <div class="app-modal-header">
+        <div>
+          <span class="app-badge app-badge-green">MANAGER</span>
+          <h2>{{ facilityEditorMode === 'create' ? 'Create facility' : 'Edit facility' }}</h2>
+          <p>Set the facility details, then arrange its bookable spots on a simple grid.</p>
+        </div>
+        <button class="app-modal-close" (click)="closeFacilityEditor()">✕</button>
+      </div>
+      <div class="app-modal-body facility-editor-body">
+        <div *ngIf="facilityError" class="app-alert app-alert-error">{{ facilityError }}</div>
+        <section class="facility-editor-section">
+          <h3>Facility details</h3>
+          <div class="facility-details-grid">
+            <div class="app-form-group"><label class="app-label">Name *</label><input class="app-input" [(ngModel)]="facilityForm.name" placeholder="e.g. Growth Room 3" /></div>
+            <div class="app-form-group"><label class="app-label">Location</label><input class="app-input" [(ngModel)]="facilityForm.location" placeholder="Building, level or room" /></div>
+            <div class="app-form-group facility-description"><label class="app-label">Description</label><input class="app-input" [(ngModel)]="facilityForm.description" placeholder="What this facility is used for" /></div>
+            <div class="app-form-group"><label class="app-label">Map columns</label><input class="app-input" type="number" min="1" max="12" [(ngModel)]="facilityForm.grid_columns" /></div>
+          </div>
+          <button class="app-btn app-btn-primary" (click)="saveFacilityDetails()" [disabled]="facilitySaving || !facilityForm.name.trim()">
+            {{ facilitySaving ? 'Saving…' : (facilityEditorMode === 'create' ? 'Create and add spots' : 'Save facility') }}
+          </button>
+        </section>
+
+        <section class="facility-editor-section" *ngIf="facilityEditorMode === 'edit'">
+          <div class="facility-section-heading">
+            <div><h3>Booking spots</h3><p>Position each spot by column and row. Width and height let larger areas span several cells.</p></div>
+          </div>
+          <div class="spot-editor-list">
+            <article class="spot-editor-card" *ngFor="let spot of spotDrafts">
+              <div class="spot-main-fields">
+                <input class="app-input" [(ngModel)]="spot.name" aria-label="Spot name" />
+                <input class="app-input" [(ngModel)]="spot.category" aria-label="Spot category" placeholder="Category" />
+              </div>
+              <div class="spot-position-fields">
+                <label>Column<input class="app-input" type="number" min="1" [(ngModel)]="spot.grid_x" /></label>
+                <label>Row<input class="app-input" type="number" min="1" [(ngModel)]="spot.grid_y" /></label>
+                <label>Width<input class="app-input" type="number" min="1" [(ngModel)]="spot.grid_width" /></label>
+                <label>Height<input class="app-input" type="number" min="1" [(ngModel)]="spot.grid_height" /></label>
+              </div>
+              <div class="spot-card-actions">
+                <button class="app-btn app-btn-secondary app-btn-sm" (click)="saveFacilitySpot(spot)" [disabled]="facilitySaving">Save</button>
+                <button class="app-btn app-btn-danger app-btn-sm" (click)="removeFacilitySpot(spot)" [disabled]="facilitySaving">Remove</button>
+              </div>
+            </article>
+          </div>
+          <article class="spot-editor-card spot-editor-new">
+            <strong>Add a booking spot</strong>
+            <div class="spot-main-fields">
+              <input class="app-input" [(ngModel)]="newSpotForm.name" placeholder="Spot name" />
+              <input class="app-input" [(ngModel)]="newSpotForm.category" placeholder="Category" />
+            </div>
+            <div class="spot-position-fields">
+              <label>Column<input class="app-input" type="number" min="1" [(ngModel)]="newSpotForm.grid_x" /></label>
+              <label>Row<input class="app-input" type="number" min="1" [(ngModel)]="newSpotForm.grid_y" /></label>
+              <label>Width<input class="app-input" type="number" min="1" [(ngModel)]="newSpotForm.grid_width" /></label>
+              <label>Height<input class="app-input" type="number" min="1" [(ngModel)]="newSpotForm.grid_height" /></label>
+            </div>
+            <button class="app-btn app-btn-primary app-btn-sm" (click)="addFacilitySpot()" [disabled]="facilitySaving || !newSpotForm.name.trim()">＋ Add spot</button>
+          </article>
+        </section>
       </div>
     </div>
   </div>

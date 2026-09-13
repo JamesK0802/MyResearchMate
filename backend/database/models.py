@@ -219,6 +219,19 @@ class PcrPresetLabShare(Base):
 
 from sqlalchemy import Date
 
+class FacilityArea(Base):
+    """A manager-configurable facility shown as its own Booking tab."""
+    __tablename__ = "facility_areas"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, unique=True, index=True, nullable=False)
+    location = Column(String, default="")
+    description = Column(Text, default="")
+    grid_columns = Column(Integer, default=4)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 class FacilitySpot(Base):
     """
     Represents a physical spot/location within a facility room.
@@ -226,12 +239,17 @@ class FacilitySpot(Base):
     """
     __tablename__ = "facility_spots"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    facility_id = Column(UUID(as_uuid=True), ForeignKey("facility_areas.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String, unique=True, index=True)          # e.g. "Acacia Room 18_01"
     room = Column(String, index=True)                       # e.g. "Acacia Room 18"
     category = Column(String, default="General")            # e.g. "Growth Chamber", "Storage"
     display_order = Column(Integer, default=0)               # Controls visual ordering
     map_group = Column(String, nullable=True)                # Grouping for visual layout
     is_active = Column(Boolean, default=True)                # Soft delete / deactivation
+    grid_x = Column(Integer, default=1)
+    grid_y = Column(Integer, default=1)
+    grid_width = Column(Integer, default=1)
+    grid_height = Column(Integer, default=1)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class FacilityBooking(Base):

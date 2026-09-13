@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FacilityBookingService, AllocationItem, AllocationResponse, FacilityBooking, FacilitySpot, AvailabilityResult, YearlySummaryResponse } from '../../services/facility-booking.service';
+import { FacilityBookingService, AllocationItem, FacilityArea, FacilityBooking, FacilitySpot, AvailabilityResult, YearlySummaryResponse } from '../../services/facility-booking.service';
 import { AuthService } from '../../services/auth.service';
 
 type TabType = 'table' | 'map' | 'yearly';
@@ -18,6 +18,15 @@ export class FacilityBookingPageComponent implements OnInit {
   activeTab: TabType = 'table';
   mobileBookingFormOpen = false;
   allSpots: FacilitySpot[] = [];
+  facilities: FacilityArea[] = [];
+  selectedFacilityId = '';
+  showFacilityEditor = false;
+  facilityEditorMode: 'create' | 'edit' = 'edit';
+  facilityForm = { name:'', location:'', description:'', grid_columns:4, display_order:0 };
+  spotDrafts: FacilitySpot[] = [];
+  newSpotForm = { name:'', category:'General', grid_x:1, grid_y:1, grid_width:1, grid_height:1 };
+  facilitySaving = false;
+  facilityError = '';
   
   // Booking Form State (Top Section) - Using Year-Month string format ("YYYY-MM")
   form = { spot_id: '', user_name: '', species: '', start_month: '', end_month: '', comment: '' };
@@ -86,6 +95,10 @@ export class FacilityBookingPageComponent implements OnInit {
     this.loadInitialData(); 
   }
 
+  get canManageFacilities(): boolean { return ['manager','owner','admin'].includes(this.auth.currentProfile?.role || ''); }
+  get selectedFacility(): FacilityArea | undefined { return this.facilities.find(f => f.id === this.selectedFacilityId); }
+  get facilitySpots(): FacilitySpot[] { return this.allSpots.filter(spot => spot.facility_id === this.selectedFacilityId); }
+
   initFormDates() {
     const today = new Date();
     const y = today.getFullYear();
@@ -98,11 +111,13 @@ export class FacilityBookingPageComponent implements OnInit {
   async loadInitialData() {
     this.loading = true;
     try {
+      this.facilities = await this.bookingService.getFacilities();
       this.allSpots = await this.bookingService.getSpots();
+      if (!this.selectedFacilityId || !this.facilities.some(f => f.id === this.selectedFacilityId)) this.selectedFacilityId = this.facilities[0]?.id || '';
       const roomsSet = new Set(this.allSpots.map(s => s.room));
       this.rooms = Array.from(roomsSet).sort();
       if (this.allSpots.length > 0) {
-        this.form.spot_id = this.allSpots[0].id;
+        this.form.spot_id = this.facilitySpots[0]?.id || this.allSpots[0].id;
       }
       // Populate user name if available
       const profile = this.auth.currentProfile;
@@ -123,25 +138,124 @@ export class FacilityBookingPageComponent implements OnInit {
     this.refreshActiveTab();
   }
 
+  selectFacility(facilityId: string) {
+    this.selectedFacilityId = facilityId;
+    this.form.spot_id = this.facilitySpots[0]?.id || '';
+    this.refreshActiveTab();
+  }
+
   async refreshActiveTab() {
     this.loading = true;
     this.error = '';
     this.cdr.detectChanges();
     try {
       if (this.activeTab === 'table') {
-        this.allBookings = await this.bookingService.getBookings();
+        this.allBookings = await this.bookingService.getBookings(undefined, undefined, undefined, this.selectedFacilityId || undefined);
       } else if (this.activeTab === 'map') {
-        const res = await this.bookingService.getAllocation(Number(this.selectedYear), Number(this.selectedMonth), this.selectedRoom || undefined);
+        const res = await this.bookingService.getAllocation(Number(this.selectedYear), Number(this.selectedMonth), undefined, this.selectedFacilityId || undefined);
         this.allocation = res.allocation;
         this.mapSummary = res.summary;
       } else if (this.activeTab === 'yearly') {
-        this.yearlySummary = await this.bookingService.getYearlySummary(Number(this.selectedYear), this.selectedRoom || undefined);
+        this.yearlySummary = await this.bookingService.getYearlySummary(Number(this.selectedYear), undefined, this.selectedFacilityId || undefined);
       }
     } catch (e: any) {
       this.error = e?.error?.detail || e?.message || 'Failed to load data.';
     } finally {
       this.loading = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  openNewFacility() {
+    if (!this.canManageFacilities) return;
+    this.facilityEditorMode = 'create';
+    this.facilityForm = { name:'', location:'', description:'', grid_columns:4, display_order:this.facilities.length + 1 };
+    this.spotDrafts = [];
+    this.facilityError = '';
+    this.showFacilityEditor = true;
+  }
+
+  openFacilitySettings() {
+    const facility = this.selectedFacility;
+    if (!facility || !this.canManageFacilities) return;
+    this.facilityEditorMode = 'edit';
+    this.facilityForm = { name:facility.name, location:facility.location || '', description:facility.description || '', grid_columns:facility.grid_columns || 4, display_order:facility.display_order || 0 };
+    this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+    this.facilityError = '';
+    this.showFacilityEditor = true;
+  }
+
+  closeFacilityEditor() { if (!this.facilitySaving) this.showFacilityEditor = false; }
+
+  async saveFacilityDetails() {
+    if (!this.canManageFacilities || !this.facilityForm.name.trim()) return;
+    this.facilitySaving = true; this.facilityError = '';
+    try {
+      if (this.facilityEditorMode === 'create') {
+        const created = await this.bookingService.createFacility(this.facilityForm);
+        this.selectedFacilityId = created.id;
+        this.facilityEditorMode = 'edit';
+      } else if (this.selectedFacilityId) {
+        await this.bookingService.updateFacility(this.selectedFacilityId, this.facilityForm);
+      }
+      await this.reloadFacilities();
+      this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+    } catch (error: any) { this.facilityError = error?.error?.detail || error?.message || 'Could not save facility.'; }
+    finally { this.facilitySaving = false; this.cdr.detectChanges(); }
+  }
+
+  async reloadFacilities() {
+    this.facilities = await this.bookingService.getFacilities();
+    this.allSpots = await this.bookingService.getSpots();
+    const selected = this.facilities.find(f => f.id === this.selectedFacilityId) || this.facilities[0];
+    this.selectedFacilityId = selected?.id || '';
+    this.form.spot_id = this.facilitySpots.some(s => s.id === this.form.spot_id) ? this.form.spot_id : (this.facilitySpots[0]?.id || '');
+    await this.refreshActiveTab();
+  }
+
+  async addFacilitySpot() {
+    if (!this.selectedFacilityId || !this.newSpotForm.name.trim()) return;
+    this.facilitySaving = true; this.facilityError = '';
+    try {
+      await this.bookingService.createSpot(this.selectedFacilityId, this.newSpotForm);
+      this.newSpotForm = { name:'', category:'General', grid_x:1, grid_y:1, grid_width:1, grid_height:1 };
+      await this.reloadFacilities();
+      this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+    } catch (error:any) { this.facilityError = error?.error?.detail || error?.message || 'Could not add booking spot.'; }
+    finally { this.facilitySaving=false; this.cdr.detectChanges(); }
+  }
+
+  async saveFacilitySpot(spot: FacilitySpot) {
+    this.facilitySaving=true; this.facilityError='';
+    try {
+      await this.bookingService.updateSpot(spot.id, { name:spot.name, category:spot.category, display_order:spot.display_order, grid_x:spot.grid_x, grid_y:spot.grid_y, grid_width:spot.grid_width, grid_height:spot.grid_height });
+      await this.reloadFacilities();
+      this.spotDrafts = this.facilitySpots.map(item => ({ ...item }));
+    } catch(error:any) { this.facilityError=error?.error?.detail || error?.message || 'Could not save booking spot.'; }
+    finally { this.facilitySaving=false; this.cdr.detectChanges(); }
+  }
+
+  async removeFacilitySpot(spot: FacilitySpot) {
+    if (!confirm(`Remove “${spot.name}” from future bookings? Existing booking history will be kept.`)) return;
+    this.facilitySaving=true;
+    try { await this.bookingService.deactivateSpot(spot.id); await this.reloadFacilities(); this.spotDrafts=this.facilitySpots.map(item=>({...item})); }
+    catch(error:any) { this.facilityError=error?.error?.detail || error?.message || 'Could not remove booking spot.'; }
+    finally { this.facilitySaving=false; this.cdr.detectChanges(); }
+  }
+
+  spotGridStyle(spot: FacilitySpot): Record<string,string> {
+    const columns = this.selectedFacility?.grid_columns || 4;
+    const start = Math.min(Math.max(1, spot.grid_x || 1), columns);
+    const width = Math.min(Math.max(1, spot.grid_width || 1), columns - start + 1);
+    return { 'grid-column': `${start} / span ${width}`, 'grid-row': `${Math.max(1,spot.grid_y || 1)} / span ${Math.max(1,spot.grid_height || 1)}` };
+  }
+
+  onMonthlySpotItemClick(item: AllocationItem) {
+    if (item.booking) this.openEditModal(item.booking);
+    else {
+      this.mobileBookingFormOpen=true; this.form.spot_id=item.spot.id;
+      const month=String(this.selectedMonth).padStart(2,'0'); this.form.start_month=`${this.selectedYear}-${month}`; this.form.end_month=`${this.selectedYear}-${month}`;
+      window.scrollTo({top:0,behavior:'smooth'}); this.cdr.detectChanges();
     }
   }
 

@@ -968,3 +968,92 @@
   .app-modal-header h2 { font-size: 1rem; }
   .app-modal-footer .app-btn { padding: 6px 8px; font-size: .68rem; }
 }
+.facility-switcher {
+  margin-top: 18px;
+}
+
+.facility-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.facility-tab {
+  flex: 0 0 auto;
+  min-width: 150px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--color-text-secondary);
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.facility-tab strong,
+.facility-tab small { display: block; }
+.facility-tab small { margin-top: 3px; color: var(--color-text-tertiary); }
+.facility-tab.active { border-color: #15803d; background: #ecfdf3; color: #166534; box-shadow: inset 0 -3px 0 #15803d; }
+.facility-tab-add { border-style: dashed; color: #166534; text-align: center; }
+
+.facility-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.facility-summary strong, .facility-summary span { display: block; }
+.facility-summary span { margin-top: 2px; font-size: .82rem; color: var(--color-text-secondary); }
+.facility-summary p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: .82rem; }
+
+.dynamic-floor-plan {
+  display: grid;
+  grid-auto-rows: minmax(82px, auto);
+  gap: 10px;
+  min-height: 160px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+.dynamic-spot { width: 100%; border: 1px solid #bbf7d0; background: #f0fdf4; cursor: pointer; font: inherit; }
+.dynamic-spot.booked { border-color: #fecaca; background: #fff1f2; }
+.facility-map-empty { grid-column: 1 / -1; display: grid; place-items: center; color: var(--color-text-secondary); text-align: center; }
+
+.facility-editor-modal { width: min(900px, calc(100vw - 32px)); max-width: 900px; max-height: 92vh; }
+.facility-editor-body { display: grid; gap: 18px; overflow-y: auto; }
+.facility-editor-section { padding: 16px; border: 1px solid var(--color-border-light); border-radius: 14px; background: #fff; }
+.facility-editor-section h3 { margin: 0 0 12px; }
+.facility-details-grid { display: grid; grid-template-columns: 1fr 1fr 150px; gap: 12px; margin-bottom: 14px; }
+.facility-description { grid-column: 1 / 3; }
+.facility-section-heading p { margin: -6px 0 14px; color: var(--color-text-secondary); font-size: .84rem; }
+.spot-editor-list { display: grid; gap: 10px; }
+.spot-editor-card { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(280px, 1fr) auto; gap: 12px; align-items: end; padding: 12px; border: 1px solid var(--color-border-light); border-radius: 12px; background: #f8fafc; }
+.spot-main-fields { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.spot-position-fields { display: grid; grid-template-columns: repeat(4, minmax(54px, 1fr)); gap: 7px; }
+.spot-position-fields label { color: var(--color-text-secondary); font-size: .68rem; font-weight: 700; }
+.spot-position-fields .app-input { margin-top: 4px; padding-inline: 8px; }
+.spot-card-actions { display: flex; gap: 6px; }
+.spot-editor-new { margin-top: 12px; grid-template-columns: 130px minmax(220px, 1fr) minmax(280px, 1fr) auto; }
+
+@media (max-width: 720px) {
+  .facility-switcher { margin-top: 10px; }
+  .facility-tab { min-width: 126px; padding: 8px 10px; border-radius: 10px; font-size: .75rem; }
+  .facility-tab small { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facility-summary { margin-bottom: 10px; padding: 9px 10px; }
+  .facility-summary p { display: none; }
+  .dynamic-floor-plan { gap: 6px; grid-auto-rows: minmax(68px, auto); padding: 9px; overflow-x: auto; }
+  .dynamic-spot { min-width: 0; }
+  .facility-editor-modal { width: 100vw; max-width: none; }
+  .facility-details-grid, .spot-editor-card, .spot-editor-new { grid-template-columns: 1fr; }
+  .facility-description { grid-column: auto; }
+  .spot-main-fields { grid-template-columns: 1fr; }
+  .spot-position-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .spot-card-actions { justify-content: flex-end; }
+}

@@ -10,6 +10,7 @@ import { debounceTime } from 'rxjs/operators';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { OperationProgressService } from '../../services/operation-progress.service';
+import { calculateStorageLocation, makeStoragePart, StorageLocationRule, StoragePartType } from '../../utils/storage-location-rules';
 
 @Component({
   selector: 'app-lab-group-archive-page',
@@ -56,6 +57,12 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   isCreatingInlineRecord = false;
   linkNewRecordToSample: any = null;
   showSpreadsheetDropdown = false;
+  storageRules: StorageLocationRule[] = [];
+  canManageStorageRules = false;
+  showStorageRulesModal = false;
+  storageRuleExampleBarcode = 'AD12';
+  savingStorageRules = false;
+  storageRulesError = '';
 
   // Auto-save & Resize & Sort states
   syncState: 'saved' | 'saving' | 'error' = 'saved';
@@ -195,6 +202,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
             this.isReadOnly = !!this.archiveDeletionAt;
           }
           await this.loadRecords();
+          await this.loadStorageRules();
           await this.loadSamples();
         } catch (e) {
           console.error('Failed to load archive', e);
@@ -319,6 +327,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   async loadSamples() {
     try {
       this.samples = await this.archiveService.getSamples(this.labId);
+      this.recalculateStorageLocations();
       this.originalSamplesJson = JSON.stringify(this.samples);
     } catch (e) {
       console.error('Failed to load samples', e);
@@ -327,6 +336,103 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     } finally {
       this.cdr.detectChanges();
     }
+  }
+
+  async loadStorageRules() {
+    try {
+      const settings = await this.archiveService.getSettings(this.labId);
+      this.storageRules = settings.storage_location_rules || [];
+      this.canManageStorageRules = !!settings.can_manage;
+    } catch (error) {
+      console.error('Failed to load storage location rules', error);
+      this.storageRules = [];
+      this.canManageStorageRules = false;
+    }
+  }
+
+  openStorageRules() {
+    this.storageRulesError = '';
+    this.showStorageRulesModal = true;
+  }
+
+  closeStorageRules() { if (!this.savingStorageRules) this.showStorageRulesModal = false; }
+
+  addStorageRule(template: 'positions' | 'following-number' | 'blank' = 'blank') {
+    const rule: StorageLocationRule = {
+      id: crypto.randomUUID(), name: 'New storage rule', enabled: true,
+      match: { type: 'starts_with', value: '' }, separator: ' ', parts: [makeStoragePart('text')]
+    };
+    if (template === 'positions') {
+      rule.name = 'Prefix and barcode positions';
+      rule.match.value = 'AD';
+      rule.parts = [
+        { ...makeStoragePart('text'), value: 'Admin room' },
+        { ...makeStoragePart('characters'), start: 3, end: 4 },
+        { ...makeStoragePart('text'), value: 'layer' }
+      ];
+      this.storageRuleExampleBarcode = 'AD12';
+    }
+    if (template === 'following-number') {
+      rule.name = 'Number following a marker';
+      rule.match.value = 'BOX';
+      rule.parts = [
+        { ...makeStoragePart('text'), value: 'Freezer' },
+        { ...makeStoragePart('digits_after'), value: 'BOX' },
+        { ...makeStoragePart('text'), value: 'shelf' }
+      ];
+      this.storageRuleExampleBarcode = 'BOX27-A';
+    }
+    this.storageRules.push(rule);
+  }
+
+  addStoragePart(rule: StorageLocationRule, type: StoragePartType = 'text') { rule.parts.push(makeStoragePart(type)); }
+  removeStoragePart(rule: StorageLocationRule, index: number) { rule.parts.splice(index, 1); }
+  removeStorageRule(index: number) { this.storageRules.splice(index, 1); }
+
+  moveStorageRule(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= this.storageRules.length) return;
+    [this.storageRules[index], this.storageRules[target]] = [this.storageRules[target], this.storageRules[index]];
+  }
+
+  storageRulePreview(rule: StorageLocationRule): string {
+    const result = calculateStorageLocation(this.storageRuleExampleBarcode, [rule]);
+    return result === null || result === '' ? 'No match' : result;
+  }
+
+  overallStoragePreview(): string {
+    const result = calculateStorageLocation(this.storageRuleExampleBarcode, this.storageRules);
+    return result === null ? 'No rules enabled' : result || 'No matching rule';
+  }
+
+  async saveStorageRules() {
+    if (!this.canManageStorageRules || this.isReadOnly) return;
+    this.savingStorageRules = true;
+    this.storageRulesError = '';
+    try {
+      const saved = await this.archiveService.saveSettings(this.labId, this.storageRules);
+      this.storageRules = saved.storage_location_rules;
+      this.recalculateStorageLocations();
+      await this.triggerAutoSave();
+      this.showStorageRulesModal = false;
+    } catch (error: any) {
+      console.error(error);
+      this.storageRulesError = error?.error?.detail || 'Could not save storage location rules.';
+    } finally {
+      this.savingStorageRules = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  recalculateStorageLocations() {
+    const hasRules = this.storageRules.some(rule => rule.enabled);
+    if (!hasRules) return;
+    for (const sample of this.samples) sample.storage_location = calculateStorageLocation(sample.barcode || '', this.storageRules) || '';
+  }
+
+  onBarcodeChange(sample: any) {
+    if (this.storageRules.some(rule => rule.enabled)) sample.storage_location = calculateStorageLocation(sample.barcode || '', this.storageRules) || '';
+    this.onSamplesChange();
   }
 
   // ── Drag & Drop Reordering ──
@@ -552,6 +658,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
 
   onSamplesChange() {
     if (this.isReadOnly) return;
+    this.recalculateStorageLocations();
     this.syncState = 'saving';
     this.autoSaveSubject.next();
   }

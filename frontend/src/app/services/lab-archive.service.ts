@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AuthService } from './auth.service';
 import { firstValueFrom } from 'rxjs';
+import { ArchiveSettings, StorageLocationRule } from '../utils/storage-location-rules';
 
 @Injectable({ providedIn: 'root' })
 export class LabArchiveService {
@@ -43,6 +44,7 @@ export class LabArchiveService {
       linked_record_id: `demo-archive-record-${group}`
     };
   });
+  private demoSettings: Record<string, ArchiveSettings> = {};
 
   constructor(private http: HttpClient, private auth: AuthService) {}
 
@@ -201,10 +203,27 @@ export class LabArchiveService {
   }
 
   async saveSamples(labId: string, samples: any[]): Promise<any[]> {
+    if (this.auth.isDemo) return samples.map(sample => ({ ...sample, id: sample.id || `demo-sample-${Date.now()}-${Math.random()}` }));
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
       this.http.post<any[]>(`${this.apiUrl}/${labId}/samples`, { samples }, { headers })
     );
+  }
+
+  async getSettings(labId: string): Promise<ArchiveSettings> {
+    if (this.auth.isDemo) return this.demoSettings[labId] || { storage_location_rules: [], can_manage: labId === 'demo-lab-genome' };
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.get<ArchiveSettings>(`${this.apiUrl}/${labId}/settings`, { headers }));
+  }
+
+  async saveSettings(labId: string, rules: StorageLocationRule[]): Promise<ArchiveSettings> {
+    if (this.auth.isDemo) {
+      const settings = { storage_location_rules: rules, can_manage: true, updated_at: new Date().toISOString() };
+      this.demoSettings[labId] = settings;
+      return settings;
+    }
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(this.http.put<ArchiveSettings>(`${this.apiUrl}/${labId}/settings`, { storage_location_rules: rules }, { headers }));
   }
 
   async uploadSampleAttachment(labId: string, sampleId: string, file: File): Promise<any> {

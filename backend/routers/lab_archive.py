@@ -4,9 +4,9 @@ import re
 import shutil
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import User, Lab, LabMember
@@ -64,6 +64,94 @@ def write_samples(lab_dir: str, samples: list):
     samples_file = os.path.join(lab_dir, "archive_samples.json")
     with open(samples_file, "w") as f:
         json.dump(samples, f, indent=2)
+
+def read_archive_settings(lab_dir: str) -> dict:
+    settings_file = os.path.join(lab_dir, "archive_settings.json")
+    if not os.path.exists(settings_file):
+        return {"storage_location_rules": []}
+    try:
+        with open(settings_file, "r") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {"storage_location_rules": []}
+    except (OSError, json.JSONDecodeError):
+        return {"storage_location_rules": []}
+
+def write_archive_settings(lab_dir: str, settings: dict):
+    settings_file = os.path.join(lab_dir, "archive_settings.json")
+    with open(settings_file, "w") as f:
+        json.dump(settings, f, indent=2)
+
+def can_manage_lab(db: Session, current_user: dict, lab_id: str) -> bool:
+    if current_user.get("role") in ["admin", "owner"]:
+        return True
+    return db.query(LabMember).filter(
+        LabMember.lab_id == lab_id,
+        LabMember.user_id == current_user["id"],
+        LabMember.role_in_lab.in_(["leader", "admin"])
+    ).first() is not None
+
+def _rule_matches(barcode: str, match: dict) -> bool:
+    mode = match.get("type", "starts_with")
+    expected = str(match.get("value", ""))
+    actual_folded = barcode.casefold()
+    expected_folded = expected.casefold()
+    if mode == "always":
+        return True
+    if not expected:
+        return False
+    if mode == "starts_with":
+        return actual_folded.startswith(expected_folded)
+    if mode == "contains":
+        return expected_folded in actual_folded
+    if mode == "ends_with":
+        return actual_folded.endswith(expected_folded)
+    if mode == "equals":
+        return actual_folded == expected_folded
+    return False
+
+def _storage_part(barcode: str, part: dict) -> str:
+    part_type = part.get("type", "text")
+    value = str(part.get("value", ""))
+    result = ""
+    if part_type == "text":
+        result = value
+    elif part_type == "barcode":
+        result = barcode
+    elif part_type == "characters":
+        start = max(1, int(part.get("start", 1) or 1)) - 1
+        end = max(start + 1, int(part.get("end", start + 1) or start + 1))
+        result = barcode[start:end]
+    elif part_type in ["digits_after", "remainder_after"]:
+        marker_index = barcode.casefold().find(value.casefold()) if value else -1
+        remainder = barcode[marker_index + len(value):] if marker_index >= 0 else ""
+        if part_type == "digits_after":
+            number_match = re.search(r"\d+", remainder)
+            result = number_match.group(0) if number_match else ""
+        else:
+            result = remainder
+    elif part_type == "number_group":
+        groups = re.findall(r"\d+", barcode)
+        group_index = max(1, int(part.get("group", 1) or 1)) - 1
+        result = groups[group_index] if group_index < len(groups) else ""
+
+    transform = part.get("transform", "as_is")
+    if transform == "uppercase":
+        result = result.upper()
+    elif transform == "lowercase":
+        result = result.lower()
+    return result.strip()
+
+def calculate_storage_location(barcode: str, rules: list) -> Optional[str]:
+    enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
+    if not enabled_rules:
+        return None
+    for rule in enabled_rules:
+        if not _rule_matches(barcode or "", rule.get("match", {})):
+            continue
+        separator = str(rule.get("separator", " "))
+        pieces = [_storage_part(barcode or "", part) for part in rule.get("parts", [])]
+        return separator.join(piece for piece in pieces if piece)
+    return ""
 
 def get_linked_paths(lab_dir: str) -> dict:
     """Returns dict of {relative_path: record_id} for all files linked to records or samples."""
@@ -140,6 +228,29 @@ class SampleItem(BaseModel):
 
 class SamplesSaveRequest(BaseModel):
     samples: List[SampleItem]
+
+class StorageRuleMatch(BaseModel):
+    type: Literal["starts_with", "contains", "ends_with", "equals", "always"] = "starts_with"
+    value: str = ""
+
+class StorageRulePart(BaseModel):
+    type: Literal["text", "barcode", "characters", "digits_after", "remainder_after", "number_group"] = "text"
+    value: str = ""
+    start: int = 1
+    end: int = 1
+    group: int = 1
+    transform: Literal["as_is", "uppercase", "lowercase"] = "as_is"
+
+class StorageLocationRule(BaseModel):
+    id: str
+    name: str = "Storage rule"
+    enabled: bool = True
+    match: StorageRuleMatch = Field(default_factory=StorageRuleMatch)
+    separator: str = " "
+    parts: List[StorageRulePart] = Field(default_factory=list)
+
+class ArchiveSettingsUpdate(BaseModel):
+    storage_location_rules: List[StorageLocationRule] = Field(default_factory=list)
 
 # --- Records API ---
 @router.get("/{lab_id}/records")
@@ -358,6 +469,24 @@ async def unlink_record_file(lab_id: str, record_id: str, req: LinkFileRequest, 
     return {"status": "success"}
 
 # --- Samples API ---
+@router.get("/{lab_id}/settings")
+async def get_archive_settings(lab_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_lab_membership(db, current_user, lab_id)
+    settings = read_archive_settings(get_lab_dir(db, lab_id))
+    settings["can_manage"] = can_manage_lab(db, current_user, lab_id)
+    return settings
+
+@router.put("/{lab_id}/settings")
+async def update_archive_settings(lab_id: str, req: ArchiveSettingsUpdate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_lab_membership(db, current_user, lab_id)
+    if not can_manage_lab(db, current_user, lab_id):
+        raise HTTPException(status_code=403, detail="Only lab leaders can change archive storage rules")
+    if len(req.storage_location_rules) > 50 or any(len(rule.parts) > 20 for rule in req.storage_location_rules):
+        raise HTTPException(status_code=400, detail="Too many storage location rules or output parts")
+    settings = {"storage_location_rules": [rule.dict() for rule in req.storage_location_rules], "updated_at": now_iso()}
+    write_archive_settings(get_lab_dir(db, lab_id), settings)
+    return {**settings, "can_manage": True}
+
 @router.get("/{lab_id}/samples")
 async def list_samples(lab_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     check_lab_membership(db, current_user, lab_id)
@@ -370,17 +499,19 @@ async def save_samples(lab_id: str, req: SamplesSaveRequest, db: Session = Depen
     check_lab_membership(db, current_user, lab_id)
     lab_dir = get_lab_dir(db, lab_id)
     
+    rules = read_archive_settings(lab_dir).get("storage_location_rules", [])
     saved_samples = []
     for s in req.samples:
         s_id = s.id or str(uuid.uuid4())
         created_at = s.created_at or now_iso()
         updated_at = now_iso()
         
+        calculated_location = calculate_storage_location(s.barcode or "", rules)
         saved_samples.append({
             "id": s_id,
             "barcode": s.barcode or "",
             "sample_name": s.sample_name or "",
-            "storage_location": s.storage_location or "",
+            "storage_location": calculated_location if calculated_location is not None else (s.storage_location or ""),
             "person": s.person or "",
             "project": s.project or "",
             "lab": s.lab or "",
@@ -444,7 +575,7 @@ async def fs_list(lab_id: str, path: str = "", db: Session = Depends(get_db), cu
     files = []
     for item in os.listdir(safe_path):
         # Hide the JSON index files
-        if path == "" and (item == "archive_records.json" or item == "archive_samples.json"):
+        if path == "" and item in ("archive_records.json", "archive_samples.json", "archive_settings.json"):
             continue
         item_path = os.path.join(safe_path, item)
         is_dir = os.path.isdir(item_path)
