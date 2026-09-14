@@ -10,7 +10,7 @@ import { debounceTime } from 'rxjs/operators';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { OperationProgressService } from '../../services/operation-progress.service';
-import { calculateStorageLocation, makeStoragePart, StorageLocationRule, StoragePartType } from '../../utils/storage-location-rules';
+import { calculateStorageLocation, makeStoragePart, storagePartValue, StorageRulePart, StorageLocationRule, StoragePartType } from '../../utils/storage-location-rules';
 
 @Component({
   selector: 'app-lab-group-archive-page',
@@ -366,6 +366,25 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
       match: { type: 'always', value: '' }, separator: ' ', parts: []
     };
     this.storageRules.push(rule);
+  }
+
+  partPreview(part: StorageRulePart) { return storagePartValue(this.storageRuleExampleBarcode, part) || 'No value — check extraction'; }
+
+  addStorageMapping(part: StorageRulePart) { (part.mappings ||= []).push({ from:'', to:'' }); }
+
+  addBarcodeExample() {
+    this.addStorageRule();
+    const rule = this.storageRules[this.storageRules.length - 1];
+    rule.name = 'Room / cabinet / layer';
+    rule.match = { type:'starts_with', value:'AD' };
+    rule.parts = [
+      { ...makeStoragePart('characters'), label:'Room', start:1, end:2, mappings:[{from:'AD',to:'Admin room'}], joiner:'' },
+      { ...makeStoragePart('digits_after'), label:'Cabinet', value:'AD', trimEnd:1, prefix:'Cabinet ', joiner:' / ' },
+      { ...makeStoragePart('characters_from_end'), label:'Layer', start:1, end:1, prefix:'Layer ', joiner:' / ' }
+    ];
+    this.storageRuleExampleBarcode = 'AD432';
+    // Keep the example ahead of any existing catch-all format so its preview works.
+    this.storageRules.unshift(this.storageRules.pop()!);
   }
 
   addStoragePart(rule: StorageLocationRule, type: StoragePartType = 'text') {

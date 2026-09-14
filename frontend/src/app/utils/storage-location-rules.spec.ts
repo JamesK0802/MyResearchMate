@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { calculateStorageLocation, StorageLocationRule } from './storage-location-rules';
+import { calculateStorageLocation, makeStoragePart, storagePartValue, StorageLocationRule } from './storage-location-rules';
 
 describe('storage location formula', () => {
+  it('splits variable-length cabinet and layer numbers without changing formats', () => {
+    const rule: StorageLocationRule = {
+      id:'split', name:'Location', enabled:true, match:{type:'always',value:''}, separator:' / ',
+      parts:[
+        {...makeStoragePart('characters'), end:2, mappings:[{from:'AD',to:'Admin room'}]},
+        {...makeStoragePart('digits_after'),value:'AD',trimEnd:1,prefix:'Cabinet ',joiner:' / '},
+        {...makeStoragePart('characters_from_end'),prefix:'Layer ',joiner:' / '}
+      ]
+    };
+    expect(calculateStorageLocation('AD12',[rule])).toBe('Admin room / Cabinet 1 / Layer 2');
+    expect(calculateStorageLocation('ad432',[rule])).toBe('Admin room / Cabinet 43 / Layer 2');
+    expect(storagePartValue('AD432',{...makeStoragePart('digits_after'),value:'AD'})).toBe('432');
+    expect(storagePartValue('AD432',{...makeStoragePart('characters_from_end'),end:2})).toBe('32');
+    expect(storagePartValue('AD',{...makeStoragePart('digits_after'),value:'AD',prefix:'Cabinet '})).toBe('');
+  });
   it('combines any number of barcode and text elements in order', () => {
     const rule: StorageLocationRule = {
       id: 'rule-1', name: 'Admin room', enabled: true,

@@ -1,5 +1,5 @@
 export type StorageMatchType = 'starts_with' | 'contains' | 'ends_with' | 'equals' | 'always';
-export type StoragePartType = 'text' | 'barcode' | 'characters' | 'digits_after' | 'remainder_after' | 'number_group';
+export type StoragePartType = 'text' | 'barcode' | 'characters' | 'characters_from_end' | 'digits_after' | 'remainder_after' | 'number_group';
 export type StorageTextTransform = 'as_is' | 'uppercase' | 'lowercase';
 
 export interface StorageRulePart {
@@ -10,6 +10,12 @@ export interface StorageRulePart {
   end: number;
   group: number;
   transform: StorageTextTransform;
+  label?: string;
+  trimStart?: number;
+  trimEnd?: number;
+  prefix?: string;
+  suffix?: string;
+  mappings?: { from:string; to:string }[];
 }
 
 export interface StorageLocationRule {
@@ -52,6 +58,11 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
     const end = Math.max(start + 1, Number(part.end) || start + 1);
     value = (barcode || '').slice(start, end);
   }
+  if (part.type === 'characters_from_end') {
+    const near = Math.max(1, Number(part.start) || 1);
+    const far = Math.max(near, Number(part.end) || near);
+    value = barcode.slice(Math.max(0, barcode.length - far), Math.max(0, barcode.length - near + 1));
+  }
   if (part.type === 'digits_after' || part.type === 'remainder_after') {
     const marker = part.value || '';
     const index = marker ? (barcode || '').toLocaleLowerCase().indexOf(marker.toLocaleLowerCase()) : -1;
@@ -62,10 +73,13 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
     const groups = (barcode || '').match(/\d+/g) || [];
     value = groups[Math.max(1, Number(part.group) || 1) - 1] || '';
   }
-  value = value.trim();
+  value = value.slice(Math.max(0, part.trimStart || 0), Math.max(0, value.length - Math.max(0, part.trimEnd || 0))).trim();
+  if (!value) return '';
+  const mapping = part.mappings?.find(item => item.from.toLowerCase() === value.toLowerCase());
+  if (mapping) value = mapping.to;
   if (part.transform === 'uppercase') value = value.toUpperCase();
   if (part.transform === 'lowercase') value = value.toLowerCase();
-  return value;
+  return value ? (part.prefix || '') + value + (part.suffix || '') : '';
 }
 
 export function calculateStorageLocation(barcode: string, rules: StorageLocationRule[]): string | null {

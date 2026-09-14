@@ -121,6 +121,10 @@ def _storage_part(barcode: str, part: dict) -> str:
         start = max(1, int(part.get("start", 1) or 1)) - 1
         end = max(start + 1, int(part.get("end", start + 1) or start + 1))
         result = barcode[start:end]
+    elif part_type == "characters_from_end":
+        near = max(1, int(part.get("start", 1) or 1))
+        far = max(near, int(part.get("end", near) or near))
+        result = barcode[max(0, len(barcode)-far):max(0, len(barcode)-near+1)]
     elif part_type in ["digits_after", "remainder_after"]:
         marker_index = barcode.casefold().find(value.casefold()) if value else -1
         remainder = barcode[marker_index + len(value):] if marker_index >= 0 else ""
@@ -134,12 +138,19 @@ def _storage_part(barcode: str, part: dict) -> str:
         group_index = max(1, int(part.get("group", 1) or 1)) - 1
         result = groups[group_index] if group_index < len(groups) else ""
 
+    result = result[max(0, int(part.get("trimStart", 0) or 0)):max(0, len(result)-max(0, int(part.get("trimEnd", 0) or 0)))].strip()
+    if not result:
+        return ""
+    for mapping in part.get("mappings", []) or []:
+        if str(mapping.get("from", "")).lower() == result.lower():
+            result = str(mapping.get("to", ""))
+            break
     transform = part.get("transform", "as_is")
     if transform == "uppercase":
         result = result.upper()
     elif transform == "lowercase":
         result = result.lower()
-    return result.strip()
+    return (str(part.get("prefix", "") or "") + result + str(part.get("suffix", "") or "")) if result else ""
 
 def calculate_storage_location(barcode: str, rules: list) -> Optional[str]:
     enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
@@ -237,13 +248,19 @@ class StorageRuleMatch(BaseModel):
     value: str = ""
 
 class StorageRulePart(BaseModel):
-    type: Literal["text", "barcode", "characters", "digits_after", "remainder_after", "number_group"] = "text"
+    type: Literal["text", "barcode", "characters", "characters_from_end", "digits_after", "remainder_after", "number_group"] = "text"
     joiner: Optional[str] = None
     value: str = ""
     start: int = 1
     end: int = 1
     group: int = 1
     transform: Literal["as_is", "uppercase", "lowercase"] = "as_is"
+    label: str = ""
+    trimStart: int = Field(default=0, ge=0)
+    trimEnd: int = Field(default=0, ge=0)
+    prefix: str = ""
+    suffix: str = ""
+    mappings: List[dict] = Field(default_factory=list)
 
 class StorageLocationRule(BaseModel):
     id: str

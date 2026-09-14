@@ -1017,20 +1017,25 @@
 <div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
   <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
     <header class="storage-rule-header">
-      <div><span class="rule-eyebrow">LAB ARCHIVE SETTINGS</span><h2>Storage Location Rules</h2><p>Build locations from each barcode. Rules run from top to bottom; the first matching rule wins.</p></div>
+      <div><h2>Barcode location builder</h2></div>
       <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
     </header>
 
+    <div class="storage-builder-scroll">
+    <details class="barcode-help"><summary>Try a barcode · {{ overallStoragePreview() }}</summary>
     <div class="storage-rule-preview-bar">
       <label><span>Try a barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
       <div><span>Calculated location</span><strong>{{ overallStoragePreview() }}</strong></div>
     </div>
+    <p>Read each piece separately, then combine them: room + cabinet + layer. Positions count from 1. For variable-length numbers, read the whole number and remove its last digit for the cabinet; read the last digit separately for the layer.</p>
+    </details>
 
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 
     <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
-      <div><strong>Location formulas</strong><span>Each rule can combine any number of elements in any order.</span></div>
-      <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ New location rule</button>
+      <div><strong>Barcode formats</strong><span>Add named pieces in the order you want to display them.</span></div>
+      <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ Blank format</button>
+      <button type="button" (click)="addBarcodeExample()">＋ Room / cabinet / layer example</button>
     </div>
 
     <div class="storage-rules-list">
@@ -1042,14 +1047,16 @@
           <div class="rule-order-actions" *ngIf="canManageStorageRules && !isReadOnly"><button type="button" (click)="moveStorageRule(ruleIndex, -1)" [disabled]="ruleIndex === 0" title="Move up">↑</button><button type="button" (click)="moveStorageRule(ruleIndex, 1)" [disabled]="ruleIndex === storageRules.length - 1" title="Move down">↓</button><button type="button" class="rule-delete" (click)="removeStorageRule(ruleIndex)" title="Delete rule">Delete</button></div>
         </div>
 
-        <div class="rule-condition-row"><strong>When barcode</strong>
+        <details class="barcode-help"><summary>Applies to: {{ rule.match.type === 'always' ? 'all barcodes' : rule.match.type + ' ' + rule.match.value }} (optional)</summary>
+        <div class="rule-condition-row"><strong>Barcode format filter</strong>
           <select [(ngModel)]="rule.match.type" [disabled]="!canManageStorageRules || isReadOnly">
             <option value="starts_with">starts with</option><option value="contains">contains</option><option value="ends_with">ends with</option><option value="equals">exactly equals</option><option value="always">anything (fallback)</option>
           </select>
           <input *ngIf="rule.match.type !== 'always'" [(ngModel)]="rule.match.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. AD">
         </div>
+        <p>Only needed for different barcode formats. The first matching format is used; every piece inside it is combined.</p></details>
 
-        <div class="rule-output-heading"><div><strong>Location formula</strong><span>Add as many elements as needed, then arrange them in the output order.</span></div></div>
+        <div class="rule-output-heading"><div><strong>Read and combine pieces</strong><span>For example: room code → room name, middle digits → cabinet, last digit → layer.</span></div></div>
         <div class="rule-parts">
           <div *ngFor="let part of rule.parts; let partIndex = index" class="rule-part-row">
             <label *ngIf="partIndex > 0" class="part-joiner">Connect with
@@ -1058,8 +1065,9 @@
             <div class="part-element-card">
               <div class="part-element-head">
                 <span class="part-number">{{ partIndex + 1 }}</span>
+                <input [(ngModel)]="part.label" placeholder="Piece name, e.g. Cabinet" aria-label="Piece name" [disabled]="!canManageStorageRules || isReadOnly">
                 <select [(ngModel)]="part.type" [disabled]="!canManageStorageRules || isReadOnly" aria-label="Element type">
-                  <option value="text">Fixed text</option><option value="characters">Barcode characters</option><option value="digits_after">Number after marker</option><option value="remainder_after">Everything after marker</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
+                  <option value="text">Fixed text</option><option value="characters">Positions from start</option><option value="characters_from_end">Positions from end</option><option value="digits_after">Number after marker</option><option value="remainder_after">Everything after marker</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
                 </select>
                 <div class="part-actions" *ngIf="canManageStorageRules && !isReadOnly">
                   <button type="button" (click)="moveStoragePart(rule, partIndex, -1)" [disabled]="partIndex === 0" aria-label="Move element left">←</button>
@@ -1069,11 +1077,26 @@
               </div>
               <div class="part-element-fields">
                 <input *ngIf="part.type === 'text'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Words to add, e.g. Admin room">
-                <ng-container *ngIf="part.type === 'characters'"><label>From position <input type="number" min="1" [(ngModel)]="part.start" [disabled]="!canManageStorageRules || isReadOnly"></label><label>To position <input type="number" min="1" [(ngModel)]="part.end" [disabled]="!canManageStorageRules || isReadOnly"></label></ng-container>
+                <ng-container *ngIf="part.type === 'characters' || part.type === 'characters_from_end'"><label>From position <input type="number" min="1" [(ngModel)]="part.start" [disabled]="!canManageStorageRules || isReadOnly"></label><label>To position <input type="number" min="1" [(ngModel)]="part.end" [disabled]="!canManageStorageRules || isReadOnly"></label><small *ngIf="part.type === 'characters_from_end'">1 = last character. 1 to 2 = last two characters.</small></ng-container>
                 <input *ngIf="part.type === 'digits_after' || part.type === 'remainder_after'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Marker to find, e.g. BOX">
                 <label *ngIf="part.type === 'number_group'">Number group <input type="number" min="1" [(ngModel)]="part.group" [disabled]="!canManageStorageRules || isReadOnly"></label>
                 <select *ngIf="part.type !== 'text'" class="part-case" [(ngModel)]="part.transform" [disabled]="!canManageStorageRules || isReadOnly"><option value="as_is">Keep case</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option></select>
               </div>
+              <details class="barcode-help"><summary>Trim, translate code, or add labels</summary>
+                <div class="part-element-fields">
+                  <label>Remove first characters <input type="number" min="0" [(ngModel)]="part.trimStart" [disabled]="!canManageStorageRules || isReadOnly"></label>
+                  <label>Remove last characters <input type="number" min="0" [(ngModel)]="part.trimEnd" [disabled]="!canManageStorageRules || isReadOnly"></label>
+                  <label>Text before <input [(ngModel)]="part.prefix" placeholder="Cabinet " [disabled]="!canManageStorageRules || isReadOnly"></label>
+                  <label>Text after <input [(ngModel)]="part.suffix" placeholder=" layer" [disabled]="!canManageStorageRules || isReadOnly"></label>
+                </div>
+                <p>Translate extracted codes (AD → Admin room). Unlisted codes stay unchanged.</p>
+                <div class="barcode-mapping" *ngFor="let mapping of part.mappings; let mi = index">
+                  <input [(ngModel)]="mapping.from" placeholder="Code" aria-label="Extracted code" [disabled]="!canManageStorageRules || isReadOnly"><span>→</span><input [(ngModel)]="mapping.to" placeholder="Display name" aria-label="Code display name" [disabled]="!canManageStorageRules || isReadOnly">
+                  <button *ngIf="canManageStorageRules && !isReadOnly" (click)="part.mappings?.splice(mi, 1)" aria-label="Remove code translation">×</button>
+                </div>
+                <button *ngIf="canManageStorageRules && !isReadOnly" (click)="addStorageMapping(part)">＋ Code translation</button>
+              </details>
+              <div class="piece-preview">{{ part.label || 'This piece' }}: <strong>{{ partPreview(part) }}</strong></div>
             </div>
           </div>
           <div *ngIf="!rule.parts.length" class="rule-parts-empty">Start the formula by choosing an element below.</div>
@@ -1081,6 +1104,7 @@
             <span>Add element</span>
             <button type="button" (click)="addStoragePart(rule, 'text')">＋ Fixed text</button>
             <button type="button" (click)="addStoragePart(rule, 'characters')">＋ Barcode characters</button>
+            <button type="button" (click)="addStoragePart(rule, 'characters_from_end')">＋ From end</button>
             <button type="button" (click)="addStoragePart(rule, 'digits_after')">＋ Number after marker</button>
             <button type="button" (click)="addStoragePart(rule, 'remainder_after')">＋ Remainder after marker</button>
             <button type="button" (click)="addStoragePart(rule, 'number_group')">＋ Number group</button>
@@ -1090,7 +1114,8 @@
         <div class="single-rule-preview"><span>For “{{ storageRuleExampleBarcode || 'empty barcode' }}”</span><strong>{{ storageRulePreview(rule) }}</strong></div>
       </article>
 
-      <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>No location formulas yet</strong><p>Use “New location rule” above, then combine fixed text and barcode-derived elements freely.</p></div>
+      <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>Split your barcode into named pieces</strong><p>Start with the room / cabinet / layer example, or add a blank format.</p></div>
+    </div>
     </div>
 
     <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
