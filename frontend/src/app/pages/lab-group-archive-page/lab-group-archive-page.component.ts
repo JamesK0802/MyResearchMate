@@ -362,7 +362,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
 
   addStorageRule() {
     const rule: StorageLocationRule = {
-      id: crypto.randomUUID(), name: `Location rule ${this.storageRules.length + 1}`, enabled: true,
+      id: typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, name: `Location rule ${this.storageRules.length + 1}`, enabled: true,
       match: { type: 'always', value: '' }, separator: ' ', parts: []
     };
     this.storageRules.push(rule);

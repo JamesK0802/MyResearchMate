@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FacilityBookingService, AllocationItem, FacilityArea, FacilityBooking, FacilitySpot, AvailabilityResult, YearlySummaryResponse } from '../../services/facility-booking.service';
@@ -328,6 +328,8 @@ export class FacilityBookingPageComponent implements OnInit {
   markLayoutDirty() { this.layoutDirty = true; }
 
   drawnArea: { grid_x:number; grid_y:number; grid_width:number; grid_height:number } | null = null;
+  showAreaName = false;
+  @ViewChild('areaNameInput') areaNameInput?: ElementRef<HTMLInputElement>;
   private drawGesture: { x:number; y:number; canvas:HTMLElement; pointerId:number } | null = null;
 
   private cellAt(event: PointerEvent, canvas: HTMLElement) {
@@ -346,6 +348,7 @@ export class FacilityBookingPageComponent implements OnInit {
     canvas.setPointerCapture(event.pointerId);
     this.selectedEditorSpotId = '';
     this.newSpotForm.name = '';
+    this.showAreaName = false;
     this.drawGesture = { ...cell, canvas, pointerId:event.pointerId };
     this.updateDrawnArea(event);
   }
@@ -436,10 +439,17 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   @HostListener('document:pointerup')
-  endLayoutGesture() { this.layoutGesture = null; this.drawGesture = null; }
+  endLayoutGesture() {
+    if (this.drawGesture && this.drawnArea) {
+      this.showAreaName = true;
+      this.cdr.detectChanges();
+      this.areaNameInput?.nativeElement.focus();
+    }
+    this.layoutGesture = null; this.drawGesture = null;
+  }
 
   @HostListener('document:pointercancel')
-  cancelLayoutGesture() { this.endLayoutGesture(); this.drawnArea = null; }
+  cancelLayoutGesture() { this.layoutGesture = null; this.drawGesture = null; this.drawnArea = null; this.showAreaName = false; }
 
   onLayoutSizeChange() {
     this.drawnArea = null;
@@ -675,6 +685,50 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   // ── Yearly Matrix Drag Selection & Interaction ──
+
+  private yearRange: { pointerId:number; grid:HTMLElement } | null = null;
+
+  beginYearRange(event:PointerEvent, spotId:string, month:number, booked:boolean) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    if (booked) { this.fetchAndOpenBooking(spotId, month); return; }
+    const target = event.currentTarget as HTMLElement;
+    const grid = target.closest('.mobile-yearly-grid') as HTMLElement;
+    target.setPointerCapture(event.pointerId);
+    this.yearRange = { pointerId:event.pointerId, grid };
+    this.onYearlyCellMouseDown(spotId, month, false, null);
+  }
+
+  @HostListener('document:pointermove', ['$event'])
+  moveYearRange(event:PointerEvent) {
+    if (!this.yearRange || this.yearRange.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const rect = this.yearRange.grid.getBoundingClientRect();
+    const month = Math.max(1,Math.min(12,Math.floor((event.clientX-rect.left)/rect.width*12)+1));
+    const months = this.yearlySummary?.summary.find(s => s.spot.id === this.dragSpotId)?.months;
+    const start = this.dragStartMonth!;
+    const direction = month >= start ? 1 : -1;
+    let end = start;
+    for (let m=start; direction > 0 ? m<=month : m>=month; m+=direction) {
+      if (months?.find(item => item.month === m)?.booked) break;
+      end = m;
+    }
+    this.dragCurrentMonth = end;
+    this.cdr.detectChanges();
+  }
+
+  @HostListener('document:pointerup')
+  finishYearRange() {
+    if (!this.yearRange) return;
+    this.yearRange = null;
+    this.onGlobalMouseUp();
+  }
+
+  @HostListener('document:pointercancel')
+  cancelYearRange() {
+    this.yearRange = null; this.isDragging = false;
+    this.dragSpotId = null; this.dragStartMonth = null; this.dragCurrentMonth = null;
+  }
 
   onYearlyCellMouseDown(spotId: string, monthVal: number, booked: boolean, userName: string | null) {
     if (booked) {

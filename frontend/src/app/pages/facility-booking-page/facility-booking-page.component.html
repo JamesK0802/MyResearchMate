@@ -440,20 +440,18 @@
       <div class="mobile-yearly-spot-card" *ngFor="let s of yearlySummary.summary">
         <div class="mobile-yearly-spot-title">
           <strong>{{ s.spot.name }}</strong>
-          <span *ngIf="s.spot.room" class="mobile-yearly-spot-room">{{ s.spot.room }}</span>
         </div>
         <div class="mobile-yearly-scroll-wrap">
           <div class="mobile-yearly-grid">
             <div class="mobile-yearly-col" *ngFor="let m of s.months">
-              <span class="mobile-yearly-month-name">{{ months[m.month - 1].label.substring(0, 3) }}</span>
+              <span class="mobile-yearly-month-name">{{ m.month }}</span>
               <button type="button"
                       class="mobile-yearly-cell"
                       [class.yt-booked]="m.booked"
                       [class.yt-avail]="!m.booked"
                       [class.yt-selected]="isCellSelected(s.spot.id, m.month)"
-                      (touchstart)="onYearlyCellTouchStart($event)"
-                      (touchend)="onYearlyCellTouchEnd($event, s.spot.id, m.month, m.booked)"
-                      (click)="onYearlyCellClick(s.spot.id, m.month, m.booked)"
+                      (pointerdown)="beginYearRange($event, s.spot.id, m.month, m.booked)"
+                      (click)="$event.detail === 0 && onYearlyCellClick(s.spot.id, m.month, m.booked)"
                       [title]="m.booked ? 'Booked by ' + m.user_name + ' (Tap to view details)' : 'Available (Tap to book)'">
                 <span *ngIf="m.booked" class="mobile-yt-user">{{ m.user_name }}</span>
                 <span *ngIf="!m.booked && isCellSelected(s.spot.id, m.month)" class="yt-drag-dot"></span>
@@ -589,11 +587,14 @@
             <button class="app-btn app-btn-danger app-btn-sm" (click)="removeFacilitySpot(spot)" [disabled]="facilitySaving">Remove area</button>
           </div>
 
-          <div class="add-layout-spot" *ngIf="drawnArea as area">
+          <div class="area-name-overlay" *ngIf="showAreaName && drawnArea" (click)="$event.stopPropagation()">
+          <div class="add-layout-spot" role="dialog" aria-modal="true" aria-label="Name new area" *ngIf="drawnArea as area">
             <strong>New area · {{ area.grid_width }} × {{ area.grid_height }} cells</strong>
-            <input class="app-input" [(ngModel)]="newSpotForm.name" placeholder="Name this area" aria-label="New area name" (keydown.enter)="addFacilitySpot()" />
+            <input #areaNameInput class="app-input" [(ngModel)]="newSpotForm.name" placeholder="Name this area" aria-label="New area name" (keydown.enter)="addFacilitySpot()" (keydown.escape)="cancelLayoutGesture()" />
             <button class="app-btn app-btn-secondary app-btn-sm" (click)="addFacilitySpot()" [disabled]="facilitySaving || !newSpotForm.name.trim()">＋ Add to map</button>
-            <button class="app-btn app-btn-ghost app-btn-sm" (click)="drawnArea = null" [disabled]="facilitySaving">Cancel</button>
+            <button class="app-btn app-btn-ghost app-btn-sm" (click)="cancelLayoutGesture()" [disabled]="facilitySaving">Cancel</button>
+            <p *ngIf="facilityError" role="alert">{{ facilityError }}</p>
+          </div>
           </div>
         </section>
       </div>
