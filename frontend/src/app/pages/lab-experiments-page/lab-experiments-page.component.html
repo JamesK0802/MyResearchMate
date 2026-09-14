@@ -2,25 +2,10 @@
   <app-my-data-header title="Experiment Logs"></app-my-data-header>
   <p class="page-intro">Use a saved Tree Protocol as the fixed workflow, then record what actually happened: timing, deviations, observations, and evidence.</p>
 
-  <div class="page-toolbar">
-    <div class="status-tabs" role="tablist" aria-label="Experiment log status">
-      <button type="button" role="tab" [attr.aria-selected]="activeTab === 'current'" [class.active]="activeTab === 'current'" (click)="setTab('current')">
-        Current Experiments <span>{{ currentExperiments.length }}</span>
-      </button>
-      <button type="button" role="tab" [attr.aria-selected]="activeTab === 'completed'" [class.active]="activeTab === 'completed'" (click)="setTab('completed')">
-        Completed Experiments <span>{{ completedExperiments.length }}</span>
-      </button>
-    </div>
-    <div class="toolbar-actions">
-      <input type="search" [(ngModel)]="searchQuery" placeholder="Search experiment logs" aria-label="Search experiment logs">
-      <select [(ngModel)]="sortMode" aria-label="Sort experiment logs">
-        <option value="updated-desc">Newest first</option>
-        <option value="updated-asc">Oldest first</option>
-        <option value="name-asc">Name A–Z</option>
-      </select>
-      <button type="button" class="primary-action" (click)="openCreatePanel()">+ New Experiment</button>
-    </div>
-  </div>
+  <app-my-data-list-controls [tabs]="[{value:'current',label:'Current Experiments (' + currentExperiments.length + ')'}, {value:'completed',label:'Completed Experiments (' + completedExperiments.length + ')'}]"
+    [activeTab]="activeTab" (tabChange)="setTab($event)" [searchable]="true" [(query)]="searchQuery"
+    [sort]="sortMode" (sortChange)="sortMode = $event" [sortOptions]="[{value:'updated-desc',label:'Newest first'},{value:'updated-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'}]"
+    createLabel="+ New Experiment" (create)="openCreatePanel()"></app-my-data-list-controls>
 
   <section *ngIf="showCreatePanel" class="create-panel" aria-label="Create experiment log">
     <div class="create-heading">
@@ -38,12 +23,13 @@
         </select>
       </label>
       <label><span>Workflow</span>
-        <select [(ngModel)]="createForm.rootId" [disabled]="!createForm.protocolId">
+        <select [(ngModel)]="createForm.rootId" (ngModelChange)="onWorkflowSelected()" [disabled]="!createForm.protocolId">
           <option value="">Select a protocol first</option>
           <option *ngFor="let root of availableRoots" [value]="root.id">{{ root.name }} · {{ root.nodes.length }} steps</option>
         </select>
-        <small *ngIf="createForm.rootId">The complete tree is copied. You will choose paths when a branch is reached.</small>
+        <small *ngIf="createForm.rootId">A snapshot is kept. At each fork, choose one path to continue your linear experiment log.</small>
       </label>
+      <label *ngIf="startNodes.length > 1"><span>Starting point</span><select [(ngModel)]="createForm.startNodeId"><option *ngFor="let node of startNodes" [value]="node.id">{{node.title}}</option></select></label>
       <label class="full-field"><span>Purpose / context</span><textarea [(ngModel)]="createForm.description" rows="3" placeholder="What are you testing, and what should the reader know before this run starts?"></textarea></label>
     </div>
     <div class="create-empty" *ngIf="!loadingProtocols && !protocols.length">No Tree Protocol is saved in My Data yet. Create and save one before starting an experiment log.</div>
@@ -53,7 +39,7 @@
 
   <div *ngIf="loading" class="loading-state"><span class="spinner"></span><p>Loading experiment logs…</p></div>
 
-  <section *ngIf="!loading && displayExperiments.length" class="experiment-grid" [attr.aria-label]="activeTab === 'current' ? 'Current experiments' : 'Completed experiments'">
+  <app-my-data-grid *ngIf="!loading && displayExperiments.length" [attr.aria-label]="activeTab === 'current' ? 'Current experiments' : 'Completed experiments'">
     <app-my-data-card *ngFor="let exp of displayExperiments"
       [title]="exp.title || 'Untitled experiment'" [description]="exp.description || 'No run context has been added.'"
       [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="!!exp._shared"
@@ -68,7 +54,7 @@
         <div class="sample-row" *ngIf="exp.samples?.length"><span *ngFor="let sample of exp.samples">{{ sample }}</span></div>
       </div>
     </app-my-data-card>
-  </section>
+  </app-my-data-grid>
 
   <section *ngIf="!loading && !displayExperiments.length" class="empty-state">
     <div>{{ activeTab === 'current' ? '🧪' : '✓' }}</div>
@@ -98,15 +84,15 @@
       </section>
 
       <section class="timeline" aria-label="Protocol execution timeline">
-        <article *ngFor="let step of selectedExperiment.steps; let index = index" class="step-card" [class.step-active]="step.status === 'active'" [class.step-completed]="step.status === 'completed'" [class.step-skipped]="step.status === 'skipped'">
+        <article *ngFor="let step of routeSteps(selectedExperiment); let index = index" class="step-card" [class.step-active]="step.status === 'active'" [class.step-completed]="step.status === 'completed'" [class.step-skipped]="step.status === 'skipped'">
           <div class="step-rail"><span>{{ index + 1 }}</span></div>
           <div class="step-content">
             <header><div><span class="step-state">{{ step.status }}</span><h3>{{ step.title }}</h3></div><div class="step-times"><span *ngIf="step.started_at">Started {{ formatDate(step.started_at) }}</span><span *ngIf="step.completed_at">Completed {{ formatDate(step.completed_at) }}</span></div></header>
             <p class="step-description">{{ step.description || 'No protocol detail was supplied for this step.' }}</p>
 
             <div class="step-controls" *ngIf="activeTab === 'current'">
-              <button *ngIf="step.status === 'pending'" type="button" (click)="setStepStatus(selectedExperiment, step, 'active')">Start step</button>
-              <button *ngIf="step.status !== 'completed' && step.status !== 'skipped'" type="button" class="mark-done" (click)="setStepStatus(selectedExperiment, step, 'completed')">Mark complete</button>
+              <button *ngIf="step.status === 'pending' && nextStep(selectedExperiment)?.id === step.id" type="button" (click)="setStepStatus(selectedExperiment, step, 'active')">Start step</button>
+              <button *ngIf="step.status !== 'completed' && step.status !== 'skipped' && nextStep(selectedExperiment)?.id === step.id" type="button" class="mark-done" (click)="setStepStatus(selectedExperiment, step, 'completed')">{{ (step.protocol_next_node_ids?.length || 0) > 1 ? 'Complete & choose path' : 'Mark complete' }}</button>
               <button *ngIf="step.status === 'completed'" type="button" (click)="setStepStatus(selectedExperiment, step, 'active')">Reopen</button>
               <label class="attach-action" *ngIf="step.status !== 'skipped'"><span>{{ uploadingStepId === step.id ? 'Uploading…' : 'Attach image' }}</span><input type="file" accept="image/*" [disabled]="uploadingStepId === step.id" (change)="uploadStepImage($event, selectedExperiment, step)"></label>
             </div>
@@ -139,10 +125,10 @@
 <div *ngIf="branchDecision" class="modal-backdrop" (click)="branchDecision = null">
   <section class="completion-modal branch-modal" role="dialog" aria-modal="true" aria-label="Choose next protocol path" (click)="$event.stopPropagation()">
     <span class="eyebrow">PROTOCOL BRANCH</span><h2>Where did the experiment go next?</h2>
-    <p><strong>{{ branchDecision.step.title }}</strong> leads to multiple paths. Select the path actually followed. Select more than one for parallel work.</p>
+    <p><strong>{{ branchDecision.step.title }}</strong> leads to multiple paths. Choose one next step for this experiment. Use a separate experiment log to run another path.</p>
     <div class="branch-options">
       <label *ngFor="let option of branchOptions(branchDecision.step)" [class.selected]="branchSelections.includes(option.protocol_node_id || '')">
-        <input type="checkbox" [checked]="branchSelections.includes(option.protocol_node_id || '')" (change)="toggleBranch(option.protocol_node_id || '')">
+        <input type="radio" name="experiment-path" [checked]="branchSelections.includes(option.protocol_node_id || '')" (change)="toggleBranch(option.protocol_node_id || '')">
         <span><strong>{{ option.title }}</strong><small>{{ option.description || 'No description' }}</small></span>
       </label>
     </div>

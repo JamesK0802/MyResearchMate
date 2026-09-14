@@ -9,6 +9,8 @@ import { NamuNode, NamuTree } from '../../models/namu.model';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
 import { AuthService } from '../../services/auth.service';
+import { experimentId, experimentRoute } from '../../utils/experiment-route';
+import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
 
 type ExperimentTab = 'current' | 'completed';
 type StepStatus = 'pending' | 'active' | 'completed' | 'skipped';
@@ -33,7 +35,7 @@ interface ExperimentStep {
 @Component({
   selector: 'app-lab-experiments-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
   templateUrl: './lab-experiments-page.component.html',
   styleUrl: './lab-experiments-page.component.css'
 })
@@ -62,6 +64,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   createError = '';
   private saveSubject = new Subject<any>();
   private saveSubscription?: Subscription;
+  private pendingSaves = new Map<string, any>();
   private completingExperimentIds = new Set<string>();
 
   constructor(
@@ -72,14 +75,20 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit() {
-    this.saveSubscription = this.saveSubject.pipe(debounceTime(550)).subscribe(exp => void this.saveExperiment(exp));
+    this.saveSubscription = this.saveSubject.pipe(debounceTime(550)).subscribe(() => this.flushPendingSaves());
     await Promise.all([this.loadExperiments(), this.loadProtocols()]);
   }
 
-  ngOnDestroy() { this.saveSubscription?.unsubscribe(); }
+  ngOnDestroy() { this.saveSubscription?.unsubscribe(); this.flushPendingSaves(); }
+
+  private flushPendingSaves() {
+    const experiments = [...this.pendingSaves.values()];
+    this.pendingSaves.clear();
+    for (const exp of experiments) void this.saveExperiment(exp);
+  }
 
   private emptyCreateForm() {
-    return { title: '', description: '', samples: '', protocolId: '', rootId: '' };
+    return { title: '', description: '', samples: '', protocolId: '', rootId: '', startNodeId:'' };
   }
 
   async loadExperiments() {
@@ -138,7 +147,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   private normalizeExperiment(exp: any) {
     const sourceSteps = exp.steps || [];
     exp.steps = sourceSteps.map((step: any, index: number) => ({
-      id: step.id || crypto.randomUUID(), title: step.title || `Step ${index + 1}`,
+      id: step.id || experimentId(), title: step.title || `Step ${index + 1}`,
       description: step.description || '', status: step.status || (index === 0 ? 'active' : 'pending'),
       comments: step.comments || [], logs: step.logs || [], images: step.images || [],
       started_at: step.started_at || null, completed_at: step.completed_at || null,
@@ -158,10 +167,20 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
 
   get availableRoots(): NamuTree[] { return this.selectedProtocol?.document_json?.trees || []; }
 
+  get startNodes(): NamuNode[] {
+    const tree = this.availableRoots.find(item => item.id === this.createForm.rootId);
+    if (!tree) return [];
+    const incoming = new Set(tree.nodes.flatMap(node => node.nextNodes || []));
+    return tree.nodes.filter(node => node.id === tree.rootNodeId || !incoming.has(node.id));
+  }
+
+  onWorkflowSelected() { this.createForm.startNodeId = this.startNodes[0]?.id || ''; }
+
   onProtocolSelected() {
     const roots = this.availableRoots;
     const preferredId = this.selectedProtocol?.document_json?.activeTreeId;
     this.createForm.rootId = roots.find(root => root.id === preferredId)?.id || roots[0]?.id || '';
+    this.onWorkflowSelected();
     if (!this.createForm.title && this.selectedProtocol) this.createForm.title = `${this.selectedProtocol.title} run`;
   }
 
@@ -169,15 +188,16 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   closeCreatePanel() { if (!this.creating) this.showCreatePanel = false; }
 
   async createExperiment() {
+    if (this.creating) return;
     const protocol = this.selectedProtocol;
     const root = this.availableRoots.find(tree => tree.id === this.createForm.rootId);
     if (!this.createForm.title.trim()) return alert('Add an experiment title.');
     if (!protocol || !root) { this.createError = 'Choose a saved Tree Protocol.'; return; }
-    const steps = this.buildProtocolSteps(root);
-    if (!steps.length) return alert('The selected protocol root has no usable steps.');
     this.creating = true;
     this.createError = '';
     try {
+      const steps = this.buildProtocolSteps({...root, rootNodeId:this.createForm.startNodeId || root.rootNodeId});
+      if (!steps.length) throw new Error('This workflow has no reachable steps. Choose another starting point.');
       await this.notebook.createExperiment({
         title: this.createForm.title.trim(), description: this.createForm.description.trim(),
         samples: this.createForm.samples.split(',').map(value => value.trim()).filter(Boolean), tags: [], work_type: '',
@@ -190,7 +210,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       console.error(error);
       this.createError = error?.error?.detail || error?.message || 'Could not create the experiment log.';
-    } finally { this.creating = false; }
+    } finally { this.creating = false; this.cdr.detectChanges(); }
   }
 
   private buildProtocolSteps(tree: NamuTree): ExperimentStep[] {
@@ -210,7 +230,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     const parentIds = new Map<string, string[]>();
     for (const node of ordered) for (const nextId of node.nextNodes || []) parentIds.set(nextId, [...(parentIds.get(nextId) || []), node.id]);
     return ordered.map((node, index) => ({
-      id: crypto.randomUUID(), protocol_node_id: node.id, title: node.title || `Step ${index + 1}`,
+      id: experimentId(), protocol_node_id: node.id, title: node.title || `Step ${index + 1}`,
       protocol_next_node_ids: [...(node.nextNodes || [])], protocol_parent_node_ids: parentIds.get(node.id) || [], branch_selected_node_ids: [],
       description: [node.description, ...(node.steps || []).map(step => `• ${step}`)].filter(Boolean).join('\n'),
       status: index === 0 ? 'active' : 'pending', comments: [], logs: [], images: [],
@@ -232,11 +252,12 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
 
   setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
   openExperiment(exp: any) { this.selectedExperiment = exp; this.noteDrafts = {}; }
-  closeExperiment() { this.selectedExperiment = null; }
+  closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; }
 
   onExperimentChange(exp: any) {
     if (this.activeTab === 'completed') return;
     this.syncStates[exp.id] = 'saving';
+    this.pendingSaves.set(exp.id, exp);
     this.saveSubject.next(exp);
   }
 
@@ -262,12 +283,13 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   setStepStatus(exp: any, step: ExperimentStep, status: StepStatus) {
-    if (status === 'completed' && (step.protocol_next_node_ids?.length || 0) > 1) {
+    if (status === 'completed' && this.nextStep(exp)?.id !== step.id) return;
+    if (status === 'completed' && (step.protocol_next_node_ids?.length || 0) > 1 && !step.branch_selected_node_ids?.length) {
       this.branchDecision = { experiment: exp, step };
-      this.branchSelections = [...(step.branch_selected_node_ids || [])];
+      this.branchSelections = (step.branch_selected_node_ids || []).slice(0,1);
       return;
     }
-    this.applyStepStatus(exp, step, status, step.protocol_next_node_ids || []);
+    this.applyStepStatus(exp, step, status, step.branch_selected_node_ids?.length ? step.branch_selected_node_ids.slice(0,1) : step.protocol_next_node_ids || []);
   }
 
   private applyStepStatus(exp: any, step: ExperimentStep, status: StepStatus, chosenNextIds: string[]) {
@@ -276,9 +298,13 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     if (status === 'active' && !step.started_at) step.started_at = now;
     step.completed_at = status === 'completed' ? now : null;
     step.logs = step.logs || [];
-    step.logs.push({ id: crypto.randomUUID(), text: status === 'completed' ? 'Step completed' : status === 'active' ? 'Step started' : 'Step reopened', created_at: now, kind: 'status' });
+    step.logs.push({ id: experimentId(), text: status === 'completed' ? 'Step completed' : status === 'active' ? 'Step started' : 'Step reopened', created_at: now, kind: 'status' });
     if (status === 'completed') {
       step.branch_selected_node_ids = chosenNextIds;
+      if ((step.protocol_next_node_ids?.length || 0) > 1) {
+        const chosen = (exp.steps as ExperimentStep[]).find(item => item.protocol_node_id === chosenNextIds[0]);
+        step.logs.push({id:experimentId(), text:`Path selected: ${chosen?.title || chosenNextIds[0]}`, created_at:now, kind:'branch'});
+      }
       this.applyBranchSelection(exp, step, chosenNextIds);
       this.activateReadySteps(exp, now);
     }
@@ -291,11 +317,11 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   toggleBranch(nodeId: string) {
-    this.branchSelections = this.branchSelections.includes(nodeId) ? this.branchSelections.filter(id => id !== nodeId) : [...this.branchSelections, nodeId];
+    this.branchSelections = [nodeId];
   }
 
   confirmBranchSelection() {
-    if (!this.branchDecision || !this.branchSelections.length) return;
+    if (!this.branchDecision || this.branchSelections.length !== 1) return;
     const { experiment, step } = this.branchDecision;
     this.applyStepStatus(experiment, step, 'completed', this.branchSelections);
     this.branchDecision = null;
@@ -333,12 +359,9 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   private activateReadySteps(exp: any, now: string) {
-    for (const candidate of exp.steps as ExperimentStep[]) {
-      if (candidate.status !== 'pending') continue;
-      const parents = (candidate.protocol_parent_node_ids || []).map(id => (exp.steps as ExperimentStep[]).find(step => step.protocol_node_id === id)).filter(Boolean) as ExperimentStep[];
-      if (parents.length && parents.every(parent => parent.status === 'completed' || parent.status === 'skipped') && parents.some(parent => parent.status === 'completed')) {
-        candidate.status = 'active'; candidate.started_at ||= now; candidate.updated_at = now;
-      }
+    const next = this.nextStep(exp);
+    if (next && next.status === 'pending') {
+      next.status = 'active'; next.started_at ||= now; next.updated_at = now;
     }
   }
 
@@ -346,7 +369,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     const text = (this.noteDrafts[step.id] || '').trim();
     if (!text) return;
     step.logs = step.logs || [];
-    step.logs.push({ id: crypto.randomUUID(), text, created_at: new Date().toISOString(), kind: 'note' });
+    step.logs.push({ id: experimentId(), text, created_at: new Date().toISOString(), kind: 'note' });
     this.noteDrafts[step.id] = '';
     this.onExperimentChange(exp);
   }
@@ -360,7 +383,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
       const uploaded = await this.notebook.uploadAsset(file);
       step.images = step.images || []; step.images.push(uploaded.url);
       step.logs = step.logs || [];
-      step.logs.push({ id: crypto.randomUUID(), text: `Attached ${file.name}`, created_at: new Date().toISOString(), kind: 'attachment' });
+      step.logs.push({ id: experimentId(), text: `Attached ${file.name}`, created_at: new Date().toISOString(), kind: 'attachment' });
       this.onExperimentChange(exp);
     } catch (error) {
       console.error(error); alert('Could not attach this image.');
@@ -399,10 +422,11 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  routeStepCount(exp: any): number { return (exp.steps || []).filter((step: ExperimentStep) => step.status !== 'skipped').length; }
-  completedStepCount(exp: any): number { return (exp.steps || []).filter((step: ExperimentStep) => step.status === 'completed').length; }
+  routeSteps(exp: any): ExperimentStep[] { return experimentRoute<ExperimentStep>(exp.steps || []); }
+  routeStepCount(exp: any): number { return this.routeSteps(exp).length; }
+  completedStepCount(exp: any): number { return this.routeSteps(exp).filter(step => step.status === 'completed').length; }
   progress(exp: any): number { const total = this.routeStepCount(exp); return total ? Math.round((this.completedStepCount(exp) / total) * 100) : 0; }
-  nextStep(exp: any): ExperimentStep | undefined { return (exp.steps || []).find((step: ExperimentStep) => step.status === 'active') || (exp.steps || []).find((step: ExperimentStep) => step.status === 'pending'); }
+  nextStep(exp: any): ExperimentStep | undefined { return this.routeSteps(exp).find(step => step.status !== 'completed' && step.status !== 'skipped'); }
   cardBadges(exp: any): MyDataCardBadge[] {
     const badges: MyDataCardBadge[] = [{ label: this.activeTab === 'completed' ? 'COMPLETED' : 'IN PROGRESS', tone: this.activeTab === 'completed' ? 'completed' : 'active' }];
     if (exp._shared) badges.push({ label: 'SHARED', tone: 'shared' });

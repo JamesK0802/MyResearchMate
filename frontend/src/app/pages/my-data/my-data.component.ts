@@ -11,33 +11,21 @@ import { NamuStorageService } from '../../services/namu-storage.service';
 import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
+import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
 
 @Component({
   selector: 'app-my-data',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
   template: `
     <div class="my-data-container">
 
       <app-my-data-header [title]="pageTitle"></app-my-data-header>
 
       <!-- Navigation and compact list controls -->
-      <div class="data-toolbar">
-        <div class="tabs-nav">
-          <button [class.active]="activeTab === 'all'" (click)="setTab('all')">All Data</button>
-          <button [class.active]="activeTab === 'my'" (click)="setTab('my')">My Data</button>
-          <button [class.active]="activeTab === 'shared'" (click)="setTab('shared')">Shared with Me</button>
-        </div>
-        <label class="sort-control">
-          <span>Sort</span>
-          <select [(ngModel)]="sortMode" (ngModelChange)="applySorting()" aria-label="Sort saved data">
-            <option value="date-desc">Newest first</option>
-            <option value="date-asc">Oldest first</option>
-            <option value="name-asc">Name A–Z</option>
-            <option value="name-desc">Name Z–A</option>
-          </select>
-        </label>
-      </div>
+      <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]"
+        [activeTab]="activeTab" (tabChange)="setTab($event)" [sort]="sortMode" (sortChange)="sortMode = $event; applySorting()"
+        [sortOptions]="[{value:'date-desc',label:'Newest first'},{value:'date-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'},{value:'name-desc',label:'Name Z–A'}]"></app-my-data-list-controls>
 
       <div *ngIf="loading" class="loading-spinner">
         <div class="spinner"></div>
@@ -45,7 +33,7 @@ import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-c
       </div>
 
       <!-- Results Grid -->
-      <div *ngIf="!loading && displayResults.length > 0" class="results-grid">
+      <app-my-data-grid *ngIf="!loading && displayResults.length > 0">
         <app-my-data-card *ngFor="let res of displayResults"
           [title]="getItemTitle(res)" [badges]="getCardBadges(res)" [meta]="getCardMeta(res)"
           [shared]="!!res.is_shared" [muted]="resource === 'pcr' && isSystemPreset(res)"
@@ -78,7 +66,7 @@ import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-c
               </div>
           </div>
         </app-my-data-card>
-      </div>
+      </app-my-data-grid>
 
       <div *ngIf="!loading && displayResults.length === 0" class="empty-state">
         <div class="empty-icon">📁</div>
