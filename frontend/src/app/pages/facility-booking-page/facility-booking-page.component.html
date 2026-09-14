@@ -539,8 +539,8 @@
             <button class="app-btn app-btn-primary" (click)="saveFacilityDetails()" [disabled]="facilitySaving || !facilityForm.name.trim()">
               {{ facilitySaving ? 'Saving…' : (facilityEditorMode === 'create' ? 'Create and add spots' : 'Save facility') }}
             </button>
-            <button *ngIf="facilityEditorMode === 'edit' && !showDeleteFacilityConfirm" type="button" class="app-btn app-btn-danger app-btn-sm" (click)="showDeleteFacilityConfirm = true">
-              🗑 Delete facility
+            <button *ngIf="facilityEditorMode === 'edit' && !showDeleteFacilityConfirm" type="button" class="facility-delete-icon" aria-label="Delete facility" title="Delete facility" (click)="showDeleteFacilityConfirm = true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
             </button>
           </div>
 
@@ -559,44 +559,41 @@
 
         <section class="facility-editor-section" *ngIf="facilityEditorMode === 'edit'">
           <div class="facility-section-heading layout-heading">
-            <div><h3>Room layout</h3><p>Drag an area to move it. Drag its bottom-right handle to resize it. Tap an area to edit its name.</p></div>
+            <div><h3>Room layout</h3><p>Tap an empty cell or drag across cells to add an area. Drag existing areas to move; use the corner to resize.</p></div>
             <button class="app-btn app-btn-primary app-btn-sm" (click)="saveFacilityLayout()" [disabled]="facilitySaving || !layoutDirty">
               {{ facilitySaving ? 'Saving…' : (layoutDirty ? 'Save layout' : 'Layout saved') }}
             </button>
           </div>
 
-          <div class="layout-canvas-scroll" aria-label="Scrollable room layout editor">
+          <div class="layout-canvas-scroll" aria-label="Room layout editor">
             <div class="facility-layout-canvas"
-                 [style.grid-template-columns]="'repeat(' + facilityForm.grid_columns + ', minmax(54px, 1fr))'"
-                 [style.grid-template-rows]="'repeat(' + facilityForm.grid_rows + ', 72px)'">
-              <span class="layout-grid-cell" *ngFor="let cell of layoutCells" aria-hidden="true"></span>
+                 (pointerdown)="beginAreaDraw($event)"
+                 [style.grid-template-columns]="'repeat(' + facilityForm.grid_columns + ', minmax(0, 1fr))'"
+                 [style.grid-template-rows]="'repeat(' + facilityForm.grid_rows + ', minmax(0, 1fr))'">
+              <span class="layout-grid-cell" *ngFor="let cell of layoutCells" [ngStyle]="layoutCellStyle(cell)" [class.drawn]="drawnCell(cell)" aria-hidden="true"></span>
               <button type="button" class="layout-spot" *ngFor="let spot of spotDrafts"
                       [class.selected]="spot.id === selectedEditorSpotId" [ngStyle]="editorSpotGridStyle(spot)"
                       (click)="selectEditorSpot(spot)" (pointerdown)="beginLayoutGesture($event, spot, 'move')">
                 <span class="layout-spot-name">{{ spot.name }}</span>
-                <span class="layout-spot-category">{{ spot.category }}</span>
                 <span class="layout-resize-handle" aria-hidden="true"
                       (pointerdown)="beginLayoutGesture($event, spot, 'resize')">↘</span>
               </button>
-              <div class="layout-empty" *ngIf="spotDrafts.length === 0">Add the first bookable area below.</div>
             </div>
           </div>
-          <p class="mobile-layout-hint">On a small screen, swipe the grey background to see the whole room.</p>
 
           <div class="selected-spot-editor" *ngIf="selectedEditorSpot as spot">
             <div class="selected-spot-title"><strong>Edit selected area</strong><span>{{ spot.grid_x }},{{ spot.grid_y }} · {{ spot.grid_width }}×{{ spot.grid_height }}</span></div>
             <div class="spot-main-fields">
               <input class="app-input" [(ngModel)]="spot.name" (ngModelChange)="markLayoutDirty()" aria-label="Selected spot name" placeholder="Spot name" />
-              <input class="app-input" [(ngModel)]="spot.category" (ngModelChange)="markLayoutDirty()" aria-label="Selected spot category" placeholder="Category" />
             </div>
             <button class="app-btn app-btn-danger app-btn-sm" (click)="removeFacilitySpot(spot)" [disabled]="facilitySaving">Remove area</button>
           </div>
 
-          <div class="add-layout-spot">
-            <strong>Add a bookable area</strong>
-            <input class="app-input" [(ngModel)]="newSpotForm.name" placeholder="Area name" aria-label="New area name" />
-            <input class="app-input" [(ngModel)]="newSpotForm.category" placeholder="Category" aria-label="New area category" />
+          <div class="add-layout-spot" *ngIf="drawnArea as area">
+            <strong>New area · {{ area.grid_width }} × {{ area.grid_height }} cells</strong>
+            <input class="app-input" [(ngModel)]="newSpotForm.name" placeholder="Name this area" aria-label="New area name" (keydown.enter)="addFacilitySpot()" />
             <button class="app-btn app-btn-secondary app-btn-sm" (click)="addFacilitySpot()" [disabled]="facilitySaving || !newSpotForm.name.trim()">＋ Add to map</button>
+            <button class="app-btn app-btn-ghost app-btn-sm" (click)="drawnArea = null" [disabled]="facilitySaving">Cancel</button>
           </div>
         </section>
       </div>

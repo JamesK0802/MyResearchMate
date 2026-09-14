@@ -57,7 +57,7 @@ class SpotCreate(BaseModel):
     grid_x: int = Field(default=1, ge=1, le=12)
     grid_y: int = Field(default=1, ge=1, le=100)
     grid_width: int = Field(default=1, ge=1, le=12)
-    grid_height: int = Field(default=1, ge=1, le=12)
+    grid_height: int = Field(default=1, ge=1, le=20)
 
 class SpotUpdate(SpotCreate):
     display_order: int = Field(default=0, ge=0)

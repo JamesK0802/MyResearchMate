@@ -176,6 +176,7 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   openNewFacility() {
+    this.cancelLayoutGesture();
     if (!this.canManageFacilities) return;
     this.facilityEditorMode = 'create';
     this.facilityForm = { name:'', location:'', description:'', grid_columns:4, grid_rows:4, display_order:this.facilities.length + 1 };
@@ -189,6 +190,7 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   openFacilitySettings() {
+    this.cancelLayoutGesture();
     const facility = this.selectedFacility;
     if (!facility || !this.canManageFacilities) return;
     this.facilityEditorMode = 'edit';
@@ -261,16 +263,15 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   async addFacilitySpot() {
-    if (!this.selectedFacilityId || !this.newSpotForm.name.trim()) return;
+    if (this.facilitySaving || !this.selectedFacilityId || !this.newSpotForm.name.trim() || !this.drawnArea) return;
     this.facilitySaving = true; this.facilityError = '';
     try {
       if (this.layoutDirty) await this.persistFacilityLayout();
-      const openCell = this.firstOpenLayoutCell();
-      if (!openCell) throw new Error('The room map is full. Increase the room width or height first.');
-      this.newSpotForm.grid_x = openCell.x;
-      this.newSpotForm.grid_y = openCell.y;
+      Object.assign(this.newSpotForm, this.drawnArea);
       await this.bookingService.createSpot(this.selectedFacilityId, this.newSpotForm);
       this.newSpotForm = { name:'', category:'General', grid_x:1, grid_y:1, grid_width:1, grid_height:1 };
+      this.drawnArea = null;
+      this.layoutDirty = false;
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
       this.selectedEditorSpotId = this.spotDrafts.at(-1)?.id || '';
@@ -326,6 +327,50 @@ export class FacilityBookingPageComponent implements OnInit {
 
   markLayoutDirty() { this.layoutDirty = true; }
 
+  drawnArea: { grid_x:number; grid_y:number; grid_width:number; grid_height:number } | null = null;
+  private drawGesture: { x:number; y:number; canvas:HTMLElement; pointerId:number } | null = null;
+
+  private cellAt(event: PointerEvent, canvas: HTMLElement) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(1, Math.min(this.facilityForm.grid_columns, Math.floor((event.clientX - rect.left) / rect.width * this.facilityForm.grid_columns) + 1)),
+      y: Math.max(1, Math.min(this.facilityForm.grid_rows, Math.floor((event.clientY - rect.top) / rect.height * this.facilityForm.grid_rows) + 1))
+    };
+  }
+
+  beginAreaDraw(event: PointerEvent) {
+    if (this.facilitySaving || event.button !== 0) return;
+    event.preventDefault();
+    const canvas = event.currentTarget as HTMLElement;
+    const cell = this.cellAt(event, canvas);
+    canvas.setPointerCapture(event.pointerId);
+    this.selectedEditorSpotId = '';
+    this.newSpotForm.name = '';
+    this.drawGesture = { ...cell, canvas, pointerId:event.pointerId };
+    this.updateDrawnArea(event);
+  }
+
+  private updateDrawnArea(event: PointerEvent) {
+    const start = this.drawGesture;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const end = this.cellAt(event, start.canvas);
+    const area = { grid_x:Math.min(start.x,end.x), grid_y:Math.min(start.y,end.y), grid_width:Math.abs(end.x-start.x)+1, grid_height:Math.abs(end.y-start.y)+1 };
+    const overlaps = this.spotDrafts.some(s => area.grid_x < s.grid_x+s.grid_width && area.grid_x+area.grid_width > s.grid_x && area.grid_y < s.grid_y+s.grid_height && area.grid_y+area.grid_height > s.grid_y);
+    this.drawnArea = overlaps ? null : area;
+    this.facilityError = overlaps ? 'Choose empty cells without overlapping an existing area.' : '';
+  }
+
+  drawnCell(cell:number): boolean {
+    const area = this.drawnArea;
+    const x = cell % this.facilityForm.grid_columns + 1;
+    const y = Math.floor(cell / this.facilityForm.grid_columns) + 1;
+    return !!area && x >= area.grid_x && x < area.grid_x+area.grid_width && y >= area.grid_y && y < area.grid_y+area.grid_height;
+  }
+
+  layoutCellStyle(cell:number): Record<string,string> {
+    return { 'grid-column':String(cell % this.facilityForm.grid_columns + 1), 'grid-row':String(Math.floor(cell / this.facilityForm.grid_columns) + 1) };
+  }
+
   private firstOpenLayoutCell(): { x: number; y: number } | null {
     const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
     const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
@@ -349,11 +394,12 @@ export class FacilityBookingPageComponent implements OnInit {
     return { 'grid-column': `${x} / span ${width}`, 'grid-row': `${y} / span ${height}` };
   }
 
-  selectEditorSpot(spot: FacilitySpot) { this.selectedEditorSpotId = spot.id; }
+  selectEditorSpot(spot: FacilitySpot) { this.drawnArea = null; this.selectedEditorSpotId = spot.id; }
 
   beginLayoutGesture(event: PointerEvent, spot: FacilitySpot, mode: 'move' | 'resize') {
-    if (this.facilitySaving) return;
     event.preventDefault(); event.stopPropagation();
+    if (this.facilitySaving) return;
+    this.drawnArea = null;
     const target = event.currentTarget as HTMLElement;
     try { target.setPointerCapture?.(event.pointerId); } catch (e) {}
     const canvas = target.closest('.facility-layout-canvas') as HTMLElement | null;
@@ -371,6 +417,7 @@ export class FacilityBookingPageComponent implements OnInit {
 
   @HostListener('document:pointermove', ['$event'])
   onLayoutPointerMove(event: PointerEvent) {
+    if (this.drawGesture) { event.preventDefault(); this.updateDrawnArea(event); return; }
     const gesture = this.layoutGesture;
     if (!gesture) return;
     event.preventDefault();
@@ -389,9 +436,13 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   @HostListener('document:pointerup')
-  endLayoutGesture() { this.layoutGesture = null; }
+  endLayoutGesture() { this.layoutGesture = null; this.drawGesture = null; }
+
+  @HostListener('document:pointercancel')
+  cancelLayoutGesture() { this.endLayoutGesture(); this.drawnArea = null; }
 
   onLayoutSizeChange() {
+    this.drawnArea = null;
     this.facilityForm.grid_columns = Math.min(12, Math.max(1, Number(this.facilityForm.grid_columns) || 1));
     this.facilityForm.grid_rows = Math.min(20, Math.max(1, Number(this.facilityForm.grid_rows) || 1));
     for (const spot of this.spotDrafts) {
