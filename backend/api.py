@@ -47,6 +47,7 @@ if multiprocessing.current_process().name == 'MainProcess':
             conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_y INTEGER DEFAULT 1"))
             conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_width INTEGER DEFAULT 1"))
             conn.execute(text("ALTER TABLE facility_spots ADD COLUMN IF NOT EXISTS grid_height INTEGER DEFAULT 1"))
+            conn.execute(text("ALTER TABLE facility_areas ADD COLUMN IF NOT EXISTS grid_rows INTEGER DEFAULT 4"))
             conn.commit()
     except Exception as e:
         print(f"[BOOKING] Facility layout schema migration failed: {e}")

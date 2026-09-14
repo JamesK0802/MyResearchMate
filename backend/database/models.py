@@ -227,6 +227,7 @@ class FacilityArea(Base):
     location = Column(String, default="")
     description = Column(Text, default="")
     grid_columns = Column(Integer, default=4)
+    grid_rows = Column(Integer, default=4)
     display_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

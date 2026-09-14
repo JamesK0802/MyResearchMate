@@ -24,6 +24,7 @@ export interface FacilityArea {
   location: string;
   description: string;
   grid_columns: number;
+  grid_rows: number;
   display_order: number;
   is_active: boolean;
   spot_count: number;
@@ -79,8 +80,8 @@ export interface YearlySummaryResponse {
 export class FacilityBookingService {
   private apiUrl = '/api/facility';
   private demoFacilities: FacilityArea[] = [
-    { id:'facility-acacia', name:'Acacia Room 18', location:'Building 134 · Level 1', description:'Controlled growth room', grid_columns:4, display_order:1, is_active:true, spot_count:10 },
-    { id:'facility-speed', name:'Speed Breeding & Drying Room', location:'Building 134 · Level 1', description:'Speed breeding and drying stations', grid_columns:3, display_order:2, is_active:true, spot_count:6 },
+    { id:'facility-acacia', name:'Acacia Room 18', location:'Building 134 · Level 1', description:'Controlled growth room', grid_columns:4, grid_rows:3, display_order:1, is_active:true, spot_count:10 },
+    { id:'facility-speed', name:'Speed Breeding & Drying Room', location:'Building 134 · Level 1', description:'Speed breeding and drying stations', grid_columns:3, grid_rows:2, display_order:2, is_active:true, spot_count:6 },
   ];
   private demoSpots: FacilitySpot[] = [
     ...['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'].map((number, index) => ({ id: `acacia-${index + 1}`, facility_id:'facility-acacia', name: `Acacia Room 18_${number}`, room: 'Acacia Room 18', category: 'Growth Space', display_order: index + 1, map_group: 'Acacia', is_active: true, grid_x:(index%4)+1, grid_y:Math.floor(index/4)+1, grid_width:1, grid_height:1 })),
@@ -192,13 +193,13 @@ export class FacilityBookingService {
     return firstValueFrom(this.http.get<FacilityArea[]>(`${this.apiUrl}/facilities`, { headers }));
   }
 
-  async createFacility(data: Pick<FacilityArea,'name'|'location'|'description'|'grid_columns'>): Promise<FacilityArea> {
+  async createFacility(data: Pick<FacilityArea,'name'|'location'|'description'|'grid_columns'|'grid_rows'>): Promise<FacilityArea> {
     if (this.isDemo()) { const facility = { ...data, id:`demo-facility-${Date.now()}`, display_order:this.demoFacilities.length + 1, is_active:true, spot_count:0 }; this.demoFacilities.push(facility); return facility; }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.post<FacilityArea>(`${this.apiUrl}/facilities`, data, { headers }));
   }
 
-  async updateFacility(id: string, data: Pick<FacilityArea,'name'|'location'|'description'|'grid_columns'|'display_order'>): Promise<FacilityArea> {
+  async updateFacility(id: string, data: Pick<FacilityArea,'name'|'location'|'description'|'grid_columns'|'grid_rows'|'display_order'>): Promise<FacilityArea> {
     if (this.isDemo()) { const facility = this.demoFacilities.find(f => f.id === id); if (!facility) throw new Error('Facility not found'); Object.assign(facility,data); this.demoSpots.filter(s=>s.facility_id===id).forEach(s=>s.room=data.name); return { ...facility, spot_count:this.demoSpots.filter(s=>s.is_active&&s.facility_id===id).length }; }
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.put<FacilityArea>(`${this.apiUrl}/facilities/${id}`, data, { headers }));

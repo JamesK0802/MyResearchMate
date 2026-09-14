@@ -46,6 +46,7 @@ class FacilityCreate(BaseModel):
     location: str = Field(default="", max_length=200)
     description: str = Field(default="", max_length=1000)
     grid_columns: int = Field(default=4, ge=1, le=12)
+    grid_rows: int = Field(default=4, ge=1, le=20)
 
 class FacilityUpdate(FacilityCreate):
     display_order: int = Field(default=0, ge=0)
@@ -101,6 +102,7 @@ def serialize_facility(facility: FacilityArea, spot_count: int = 0) -> dict:
     return {
         "id": str(facility.id), "name": facility.name, "location": facility.location or "",
         "description": facility.description or "", "grid_columns": facility.grid_columns or 4,
+        "grid_rows": facility.grid_rows or 4,
         "display_order": facility.display_order or 0, "is_active": facility.is_active,
         "spot_count": spot_count,
     }
@@ -121,7 +123,7 @@ def ensure_facility_areas(db: Session):
     for order, room in enumerate(sorted(rooms), start=1):
         facility = db.query(FacilityArea).filter(FacilityArea.name == room).first()
         if not facility:
-            facility = FacilityArea(name=room, location="", description="", grid_columns=4, display_order=order, is_active=True)
+            facility = FacilityArea(name=room, location="", description="", grid_columns=4, grid_rows=4, display_order=order, is_active=True)
             db.add(facility)
             db.flush()
             changed = True
@@ -134,6 +136,10 @@ def ensure_facility_areas(db: Session):
                 spot.grid_width = 1
                 spot.grid_height = 1
                 changed = True
+        required_rows = max([((spot.grid_y or 1) + (spot.grid_height or 1) - 1) for spot in spots] or [4])
+        if (facility.grid_rows or 4) < required_rows:
+            facility.grid_rows = required_rows
+            changed = True
     if changed:
         db.commit()
 
@@ -265,7 +271,7 @@ async def create_facility(payload: FacilityCreate, db: Session = Depends(get_db)
     if db.query(FacilityArea).filter(FacilityArea.name.ilike(payload.name.strip())).first():
         raise HTTPException(status_code=409, detail="A facility with this name already exists")
     next_order = (db.query(FacilityArea).count() or 0) + 1
-    facility = FacilityArea(name=payload.name.strip(), location=payload.location.strip(), description=payload.description.strip(), grid_columns=payload.grid_columns, display_order=next_order, is_active=True)
+    facility = FacilityArea(name=payload.name.strip(), location=payload.location.strip(), description=payload.description.strip(), grid_columns=payload.grid_columns, grid_rows=payload.grid_rows, display_order=next_order, is_active=True)
     db.add(facility); db.commit(); db.refresh(facility)
     return serialize_facility(facility)
 
@@ -277,7 +283,7 @@ async def update_facility(facility_id: str, payload: FacilityUpdate, db: Session
     if duplicate: raise HTTPException(status_code=409, detail="A facility with this name already exists")
     old_name = facility.name
     facility.name = payload.name.strip(); facility.location = payload.location.strip(); facility.description = payload.description.strip()
-    facility.grid_columns = payload.grid_columns; facility.display_order = payload.display_order
+    facility.grid_columns = payload.grid_columns; facility.grid_rows = payload.grid_rows; facility.display_order = payload.display_order
     if old_name != facility.name:
         db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id).update({"room": facility.name})
     db.commit(); db.refresh(facility)
@@ -290,7 +296,9 @@ async def create_spot(facility_id: str, payload: SpotCreate, db: Session = Depen
     if db.query(FacilitySpot).filter(FacilitySpot.name.ilike(payload.name.strip())).first():
         raise HTTPException(status_code=409, detail="A booking spot with this name already exists")
     next_order = (db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id).count() or 0) + 1
-    spot = FacilitySpot(facility_id=facility.id, name=payload.name.strip(), room=facility.name, category=payload.category.strip() or "General", display_order=next_order, map_group="custom", is_active=True, grid_x=payload.grid_x, grid_y=payload.grid_y, grid_width=min(payload.grid_width, facility.grid_columns), grid_height=payload.grid_height)
+    grid_x = min(payload.grid_x, facility.grid_columns or 4)
+    grid_y = min(payload.grid_y, facility.grid_rows or 4)
+    spot = FacilitySpot(facility_id=facility.id, name=payload.name.strip(), room=facility.name, category=payload.category.strip() or "General", display_order=next_order, map_group="custom", is_active=True, grid_x=grid_x, grid_y=grid_y, grid_width=min(payload.grid_width, (facility.grid_columns or 4) - grid_x + 1), grid_height=min(payload.grid_height, (facility.grid_rows or 4) - grid_y + 1))
     db.add(spot); db.commit(); db.refresh(spot)
     return serialize_spot(spot)
 
@@ -301,7 +309,11 @@ async def update_spot(spot_id: str, payload: SpotUpdate, db: Session = Depends(g
     duplicate = db.query(FacilitySpot).filter(FacilitySpot.name.ilike(payload.name.strip()), FacilitySpot.id != spot.id).first()
     if duplicate: raise HTTPException(status_code=409, detail="A booking spot with this name already exists")
     spot.name = payload.name.strip(); spot.category = payload.category.strip() or "General"; spot.display_order = payload.display_order
-    spot.grid_x = payload.grid_x; spot.grid_y = payload.grid_y; spot.grid_width = payload.grid_width; spot.grid_height = payload.grid_height
+    facility = db.query(FacilityArea).filter(FacilityArea.id == spot.facility_id).first()
+    columns = (facility.grid_columns or 4) if facility else 12
+    rows = (facility.grid_rows or 4) if facility else 100
+    spot.grid_x = min(payload.grid_x, columns); spot.grid_y = min(payload.grid_y, rows)
+    spot.grid_width = min(payload.grid_width, columns - spot.grid_x + 1); spot.grid_height = min(payload.grid_height, rows - spot.grid_y + 1)
     db.commit(); db.refresh(spot)
     return serialize_spot(spot)
 

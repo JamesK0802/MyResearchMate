@@ -22,11 +22,17 @@ export class FacilityBookingPageComponent implements OnInit {
   selectedFacilityId = '';
   showFacilityEditor = false;
   facilityEditorMode: 'create' | 'edit' = 'edit';
-  facilityForm = { name:'', location:'', description:'', grid_columns:4, display_order:0 };
+  facilityForm = { name:'', location:'', description:'', grid_columns:4, grid_rows:4, display_order:0 };
   spotDrafts: FacilitySpot[] = [];
   newSpotForm = { name:'', category:'General', grid_x:1, grid_y:1, grid_width:1, grid_height:1 };
+  selectedEditorSpotId = '';
+  layoutDirty = false;
   facilitySaving = false;
   facilityError = '';
+  private layoutGesture: null | {
+    spot: FacilitySpot; mode: 'move' | 'resize'; startX: number; startY: number;
+    x: number; y: number; width: number; height: number; cellWidth: number; cellHeight: number;
+  } = null;
   
   // Booking Form State (Top Section) - Using Year-Month string format ("YYYY-MM")
   form = { spot_id: '', user_name: '', species: '', start_month: '', end_month: '', comment: '' };
@@ -169,8 +175,10 @@ export class FacilityBookingPageComponent implements OnInit {
   openNewFacility() {
     if (!this.canManageFacilities) return;
     this.facilityEditorMode = 'create';
-    this.facilityForm = { name:'', location:'', description:'', grid_columns:4, display_order:this.facilities.length + 1 };
+    this.facilityForm = { name:'', location:'', description:'', grid_columns:4, grid_rows:4, display_order:this.facilities.length + 1 };
     this.spotDrafts = [];
+    this.selectedEditorSpotId = '';
+    this.layoutDirty = false;
     this.facilityError = '';
     this.showFacilityEditor = true;
   }
@@ -179,8 +187,10 @@ export class FacilityBookingPageComponent implements OnInit {
     const facility = this.selectedFacility;
     if (!facility || !this.canManageFacilities) return;
     this.facilityEditorMode = 'edit';
-    this.facilityForm = { name:facility.name, location:facility.location || '', description:facility.description || '', grid_columns:facility.grid_columns || 4, display_order:facility.display_order || 0 };
+    this.facilityForm = { name:facility.name, location:facility.location || '', description:facility.description || '', grid_columns:facility.grid_columns || 4, grid_rows:facility.grid_rows || 4, display_order:facility.display_order || 0 };
     this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+    this.selectedEditorSpotId = this.spotDrafts[0]?.id || '';
+    this.layoutDirty = false;
     this.facilityError = '';
     this.showFacilityEditor = true;
   }
@@ -196,10 +206,12 @@ export class FacilityBookingPageComponent implements OnInit {
         this.selectedFacilityId = created.id;
         this.facilityEditorMode = 'edit';
       } else if (this.selectedFacilityId) {
-        await this.bookingService.updateFacility(this.selectedFacilityId, this.facilityForm);
+        await this.persistFacilityLayout();
       }
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+      this.selectedEditorSpotId = this.spotDrafts[0]?.id || '';
+      this.layoutDirty = false;
     } catch (error: any) { this.facilityError = error?.error?.detail || error?.message || 'Could not save facility.'; }
     finally { this.facilitySaving = false; this.cdr.detectChanges(); }
   }
@@ -217,22 +229,41 @@ export class FacilityBookingPageComponent implements OnInit {
     if (!this.selectedFacilityId || !this.newSpotForm.name.trim()) return;
     this.facilitySaving = true; this.facilityError = '';
     try {
+      if (this.layoutDirty) await this.persistFacilityLayout();
+      const openCell = this.firstOpenLayoutCell();
+      if (!openCell) throw new Error('The room map is full. Increase the room width or height first.');
+      this.newSpotForm.grid_x = openCell.x;
+      this.newSpotForm.grid_y = openCell.y;
       await this.bookingService.createSpot(this.selectedFacilityId, this.newSpotForm);
       this.newSpotForm = { name:'', category:'General', grid_x:1, grid_y:1, grid_width:1, grid_height:1 };
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
+      this.selectedEditorSpotId = this.spotDrafts.at(-1)?.id || '';
     } catch (error:any) { this.facilityError = error?.error?.detail || error?.message || 'Could not add booking spot.'; }
     finally { this.facilitySaving=false; this.cdr.detectChanges(); }
   }
 
-  async saveFacilitySpot(spot: FacilitySpot) {
-    this.facilitySaving=true; this.facilityError='';
+  async saveFacilityLayout() {
+    if (!this.selectedFacilityId || !this.canManageFacilities) return;
+    this.facilitySaving = true; this.facilityError = '';
     try {
-      await this.bookingService.updateSpot(spot.id, { name:spot.name, category:spot.category, display_order:spot.display_order, grid_x:spot.grid_x, grid_y:spot.grid_y, grid_width:spot.grid_width, grid_height:spot.grid_height });
+      await this.persistFacilityLayout();
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(item => ({ ...item }));
-    } catch(error:any) { this.facilityError=error?.error?.detail || error?.message || 'Could not save booking spot.'; }
-    finally { this.facilitySaving=false; this.cdr.detectChanges(); }
+      this.layoutDirty = false;
+    } catch (error: any) {
+      this.facilityError = error?.error?.detail || error?.message || 'Could not save the facility layout.';
+    } finally { this.facilitySaving = false; this.cdr.detectChanges(); }
+  }
+
+  private async persistFacilityLayout() {
+    await this.bookingService.updateFacility(this.selectedFacilityId, this.facilityForm);
+    for (const spot of this.spotDrafts) {
+      await this.bookingService.updateSpot(spot.id, {
+        name: spot.name, category: spot.category, display_order: spot.display_order,
+        grid_x: spot.grid_x, grid_y: spot.grid_y, grid_width: spot.grid_width, grid_height: spot.grid_height
+      });
+    }
   }
 
   async removeFacilitySpot(spot: FacilitySpot) {
@@ -248,6 +279,89 @@ export class FacilityBookingPageComponent implements OnInit {
     const start = Math.min(Math.max(1, spot.grid_x || 1), columns);
     const width = Math.min(Math.max(1, spot.grid_width || 1), columns - start + 1);
     return { 'grid-column': `${start} / span ${width}`, 'grid-row': `${Math.max(1,spot.grid_y || 1)} / span ${Math.max(1,spot.grid_height || 1)}` };
+  }
+
+  get selectedEditorSpot(): FacilitySpot | undefined { return this.spotDrafts.find(spot => spot.id === this.selectedEditorSpotId); }
+  get layoutCells(): number[] {
+    const count = Math.max(1, Number(this.facilityForm.grid_columns) || 1) * Math.max(1, Number(this.facilityForm.grid_rows) || 1);
+    return Array.from({ length: count }, (_, index) => index);
+  }
+
+  markLayoutDirty() { this.layoutDirty = true; }
+
+  private firstOpenLayoutCell(): { x: number; y: number } | null {
+    const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
+    const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
+    const occupied = new Set<string>();
+    for (const spot of this.spotDrafts) {
+      for (let y = spot.grid_y; y < spot.grid_y + spot.grid_height; y++) {
+        for (let x = spot.grid_x; x < spot.grid_x + spot.grid_width; x++) occupied.add(`${x}:${y}`);
+      }
+    }
+    for (let y = 1; y <= rows; y++) for (let x = 1; x <= columns; x++) if (!occupied.has(`${x}:${y}`)) return { x, y };
+    return null;
+  }
+
+  editorSpotGridStyle(spot: FacilitySpot): Record<string,string> {
+    const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
+    const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
+    const x = Math.min(Math.max(1, spot.grid_x || 1), columns);
+    const y = Math.min(Math.max(1, spot.grid_y || 1), rows);
+    const width = Math.min(Math.max(1, spot.grid_width || 1), columns - x + 1);
+    const height = Math.min(Math.max(1, spot.grid_height || 1), rows - y + 1);
+    return { 'grid-column': `${x} / span ${width}`, 'grid-row': `${y} / span ${height}` };
+  }
+
+  selectEditorSpot(spot: FacilitySpot) { this.selectedEditorSpotId = spot.id; }
+
+  beginLayoutGesture(event: PointerEvent, spot: FacilitySpot, mode: 'move' | 'resize') {
+    if (this.facilitySaving) return;
+    event.preventDefault(); event.stopPropagation();
+    const canvas = (event.currentTarget as HTMLElement).closest('.facility-layout-canvas') as HTMLElement | null;
+    if (!canvas) return;
+    const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
+    const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
+    const style = getComputedStyle(canvas);
+    const columnGap = parseFloat(style.columnGap) || 8;
+    const rowGap = parseFloat(style.rowGap) || 8;
+    const cellWidth = (canvas.clientWidth - (columns - 1) * columnGap) / columns + columnGap;
+    const cellHeight = (canvas.clientHeight - (rows - 1) * rowGap) / rows + rowGap;
+    this.selectedEditorSpotId = spot.id;
+    this.layoutGesture = { spot, mode, startX:event.clientX, startY:event.clientY, x:spot.grid_x || 1, y:spot.grid_y || 1, width:spot.grid_width || 1, height:spot.grid_height || 1, cellWidth, cellHeight };
+  }
+
+  @HostListener('document:pointermove', ['$event'])
+  onLayoutPointerMove(event: PointerEvent) {
+    const gesture = this.layoutGesture;
+    if (!gesture) return;
+    event.preventDefault();
+    const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
+    const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
+    const dx = Math.round((event.clientX - gesture.startX) / gesture.cellWidth);
+    const dy = Math.round((event.clientY - gesture.startY) / gesture.cellHeight);
+    if (gesture.mode === 'move') {
+      gesture.spot.grid_x = Math.min(Math.max(1, gesture.x + dx), Math.max(1, columns - gesture.width + 1));
+      gesture.spot.grid_y = Math.min(Math.max(1, gesture.y + dy), Math.max(1, rows - gesture.height + 1));
+    } else {
+      gesture.spot.grid_width = Math.min(Math.max(1, gesture.width + dx), columns - gesture.x + 1);
+      gesture.spot.grid_height = Math.min(Math.max(1, gesture.height + dy), rows - gesture.y + 1);
+    }
+    this.layoutDirty = true;
+  }
+
+  @HostListener('document:pointerup')
+  endLayoutGesture() { this.layoutGesture = null; }
+
+  onLayoutSizeChange() {
+    this.facilityForm.grid_columns = Math.min(12, Math.max(1, Number(this.facilityForm.grid_columns) || 1));
+    this.facilityForm.grid_rows = Math.min(20, Math.max(1, Number(this.facilityForm.grid_rows) || 1));
+    for (const spot of this.spotDrafts) {
+      spot.grid_x = Math.min(spot.grid_x || 1, this.facilityForm.grid_columns);
+      spot.grid_y = Math.min(spot.grid_y || 1, this.facilityForm.grid_rows);
+      spot.grid_width = Math.min(spot.grid_width || 1, this.facilityForm.grid_columns - spot.grid_x + 1);
+      spot.grid_height = Math.min(spot.grid_height || 1, this.facilityForm.grid_rows - spot.grid_y + 1);
+    }
+    this.layoutDirty = true;
   }
 
   onMonthlySpotItemClick(item: AllocationItem) {
