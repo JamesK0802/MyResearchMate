@@ -341,7 +341,10 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   async loadStorageRules() {
     try {
       const settings = await this.archiveService.getSettings(this.labId);
-      this.storageRules = settings.storage_location_rules || [];
+      this.storageRules = (settings.storage_location_rules || []).map(rule => ({
+        ...rule,
+        parts: (rule.parts || []).map((part, index) => ({ ...part, joiner: index === 0 ? '' : (part.joiner ?? rule.separator ?? ' ') }))
+      }));
       this.canManageStorageRules = !!settings.can_manage;
     } catch (error) {
       console.error('Failed to load storage location rules', error);
@@ -357,37 +360,29 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
 
   closeStorageRules() { if (!this.savingStorageRules) this.showStorageRulesModal = false; }
 
-  addStorageRule(template: 'positions' | 'following-number' | 'blank' = 'blank') {
+  addStorageRule() {
     const rule: StorageLocationRule = {
-      id: crypto.randomUUID(), name: 'New storage rule', enabled: true,
-      match: { type: 'starts_with', value: '' }, separator: ' ', parts: [makeStoragePart('text')]
+      id: crypto.randomUUID(), name: `Location rule ${this.storageRules.length + 1}`, enabled: true,
+      match: { type: 'always', value: '' }, separator: ' ', parts: []
     };
-    if (template === 'positions') {
-      rule.name = 'Prefix and barcode positions';
-      rule.match.value = 'AD';
-      rule.parts = [
-        { ...makeStoragePart('text'), value: 'Admin room' },
-        { ...makeStoragePart('characters'), start: 3, end: 4 },
-        { ...makeStoragePart('text'), value: 'layer' }
-      ];
-      this.storageRuleExampleBarcode = 'AD12';
-    }
-    if (template === 'following-number') {
-      rule.name = 'Number following a marker';
-      rule.match.value = 'BOX';
-      rule.parts = [
-        { ...makeStoragePart('text'), value: 'Freezer' },
-        { ...makeStoragePart('digits_after'), value: 'BOX' },
-        { ...makeStoragePart('text'), value: 'shelf' }
-      ];
-      this.storageRuleExampleBarcode = 'BOX27-A';
-    }
     this.storageRules.push(rule);
   }
 
-  addStoragePart(rule: StorageLocationRule, type: StoragePartType = 'text') { rule.parts.push(makeStoragePart(type)); }
+  addStoragePart(rule: StorageLocationRule, type: StoragePartType = 'text') {
+    const part = makeStoragePart(type);
+    part.joiner = rule.parts.length ? ' ' : '';
+    rule.parts.push(part);
+  }
   removeStoragePart(rule: StorageLocationRule, index: number) { rule.parts.splice(index, 1); }
   removeStorageRule(index: number) { this.storageRules.splice(index, 1); }
+
+  moveStoragePart(rule: StorageLocationRule, index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= rule.parts.length) return;
+    [rule.parts[index], rule.parts[target]] = [rule.parts[target], rule.parts[index]];
+    rule.parts[0].joiner = '';
+    if (rule.parts[1] && !rule.parts[1].joiner) rule.parts[1].joiner = ' ';
+  }
 
   moveStorageRule(index: number, direction: -1 | 1) {
     const target = index + direction;

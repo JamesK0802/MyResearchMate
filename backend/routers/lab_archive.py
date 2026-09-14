@@ -149,8 +149,11 @@ def calculate_storage_location(barcode: str, rules: list) -> Optional[str]:
         if not _rule_matches(barcode or "", rule.get("match", {})):
             continue
         separator = str(rule.get("separator", " "))
-        pieces = [_storage_part(barcode or "", part) for part in rule.get("parts", [])]
-        return separator.join(piece for piece in pieces if piece)
+        pieces = [(part, _storage_part(barcode or "", part)) for part in rule.get("parts", [])]
+        output = ""
+        for part, piece in ((part, piece) for part, piece in pieces if piece):
+            output += ((separator if part.get("joiner") is None else str(part.get("joiner"))) if output else "") + piece
+        return output
     return ""
 
 def get_linked_paths(lab_dir: str) -> dict:
@@ -235,6 +238,7 @@ class StorageRuleMatch(BaseModel):
 
 class StorageRulePart(BaseModel):
     type: Literal["text", "barcode", "characters", "digits_after", "remainder_after", "number_group"] = "text"
+    joiner: Optional[str] = None
     value: str = ""
     start: int = 1
     end: int = 1

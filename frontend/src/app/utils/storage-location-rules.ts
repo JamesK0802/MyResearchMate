@@ -4,6 +4,7 @@ export type StorageTextTransform = 'as_is' | 'uppercase' | 'lowercase';
 
 export interface StorageRulePart {
   type: StoragePartType;
+  joiner?: string;
   value: string;
   start: number;
   end: number;
@@ -27,7 +28,7 @@ export interface ArchiveSettings {
 }
 
 export function makeStoragePart(type: StoragePartType = 'text'): StorageRulePart {
-  return { type, value: '', start: 1, end: 1, group: 1, transform: 'as_is' };
+  return { type, joiner: ' ', value: '', start: 1, end: 1, group: 1, transform: 'as_is' };
 }
 
 export function storageRuleMatches(barcode: string, rule: StorageLocationRule): boolean {
@@ -72,5 +73,6 @@ export function calculateStorageLocation(barcode: string, rules: StorageLocation
   if (!enabled.length) return null;
   const rule = enabled.find(candidate => storageRuleMatches(barcode, candidate));
   if (!rule) return '';
-  return rule.parts.map(part => storagePartValue(barcode, part)).filter(Boolean).join(rule.separator ?? ' ');
+  const pieces = rule.parts.map(part => ({ value: storagePartValue(barcode, part), joiner: part.joiner })).filter(piece => piece.value);
+  return pieces.reduce((output, piece, index) => output + (index ? (piece.joiner ?? rule.separator ?? ' ') : '') + piece.value, '');
 }

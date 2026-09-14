@@ -1029,10 +1029,8 @@
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 
     <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
-      <span>Add a guided rule:</span>
-      <button type="button" (click)="addStorageRule('positions')">Prefix + positions</button>
-      <button type="button" (click)="addStorageRule('following-number')">Text + following number</button>
-      <button type="button" (click)="addStorageRule('blank')">Blank rule</button>
+      <div><strong>Location formulas</strong><span>Each rule can combine any number of elements in any order.</span></div>
+      <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ New location rule</button>
     </div>
 
     <div class="storage-rules-list">
@@ -1051,26 +1049,48 @@
           <input *ngIf="rule.match.type !== 'always'" [(ngModel)]="rule.match.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. AD">
         </div>
 
-        <div class="rule-output-heading"><strong>Build location from</strong><label>Join with <select [(ngModel)]="rule.separator" [disabled]="!canManageStorageRules || isReadOnly"><option value=" ">space</option><option value=" / "> / </option><option value=" - "> - </option><option value="">nothing</option><option value=", ">comma</option></select></label></div>
+        <div class="rule-output-heading"><div><strong>Location formula</strong><span>Add as many elements as needed, then arrange them in the output order.</span></div></div>
         <div class="rule-parts">
           <div *ngFor="let part of rule.parts; let partIndex = index" class="rule-part-row">
-            <span class="part-number">{{ partIndex + 1 }}</span>
-            <select [(ngModel)]="part.type" [disabled]="!canManageStorageRules || isReadOnly">
-              <option value="text">Fixed words</option><option value="characters">Barcode positions</option><option value="digits_after">Number after text</option><option value="remainder_after">Everything after text</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
-            </select>
-            <input *ngIf="part.type === 'text'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. Admin room">
-            <ng-container *ngIf="part.type === 'characters'"><label>from <input type="number" min="1" [(ngModel)]="part.start" [disabled]="!canManageStorageRules || isReadOnly"></label><label>to <input type="number" min="1" [(ngModel)]="part.end" [disabled]="!canManageStorageRules || isReadOnly"></label></ng-container>
-            <input *ngIf="part.type === 'digits_after' || part.type === 'remainder_after'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Text to find, e.g. BOX">
-            <label *ngIf="part.type === 'number_group'">group <input type="number" min="1" [(ngModel)]="part.group" [disabled]="!canManageStorageRules || isReadOnly"></label>
-            <select *ngIf="part.type !== 'text'" class="part-case" [(ngModel)]="part.transform" [disabled]="!canManageStorageRules || isReadOnly"><option value="as_is">Keep case</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option></select>
-            <button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="remove-part" (click)="removeStoragePart(rule, partIndex)" aria-label="Remove output part">×</button>
+            <label *ngIf="partIndex > 0" class="part-joiner">Connect with
+              <select [(ngModel)]="part.joiner" [disabled]="!canManageStorageRules || isReadOnly"><option value=" ">space</option><option value=" / "> / </option><option value=" - "> - </option><option value=", ">comma</option><option value="">nothing</option></select>
+            </label>
+            <div class="part-element-card">
+              <div class="part-element-head">
+                <span class="part-number">{{ partIndex + 1 }}</span>
+                <select [(ngModel)]="part.type" [disabled]="!canManageStorageRules || isReadOnly" aria-label="Element type">
+                  <option value="text">Fixed text</option><option value="characters">Barcode characters</option><option value="digits_after">Number after marker</option><option value="remainder_after">Everything after marker</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
+                </select>
+                <div class="part-actions" *ngIf="canManageStorageRules && !isReadOnly">
+                  <button type="button" (click)="moveStoragePart(rule, partIndex, -1)" [disabled]="partIndex === 0" aria-label="Move element left">←</button>
+                  <button type="button" (click)="moveStoragePart(rule, partIndex, 1)" [disabled]="partIndex === rule.parts.length - 1" aria-label="Move element right">→</button>
+                  <button type="button" class="remove-part" (click)="removeStoragePart(rule, partIndex)" aria-label="Remove element">×</button>
+                </div>
+              </div>
+              <div class="part-element-fields">
+                <input *ngIf="part.type === 'text'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Words to add, e.g. Admin room">
+                <ng-container *ngIf="part.type === 'characters'"><label>From position <input type="number" min="1" [(ngModel)]="part.start" [disabled]="!canManageStorageRules || isReadOnly"></label><label>To position <input type="number" min="1" [(ngModel)]="part.end" [disabled]="!canManageStorageRules || isReadOnly"></label></ng-container>
+                <input *ngIf="part.type === 'digits_after' || part.type === 'remainder_after'" [(ngModel)]="part.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="Marker to find, e.g. BOX">
+                <label *ngIf="part.type === 'number_group'">Number group <input type="number" min="1" [(ngModel)]="part.group" [disabled]="!canManageStorageRules || isReadOnly"></label>
+                <select *ngIf="part.type !== 'text'" class="part-case" [(ngModel)]="part.transform" [disabled]="!canManageStorageRules || isReadOnly"><option value="as_is">Keep case</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option></select>
+              </div>
+            </div>
           </div>
-          <button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="add-rule-part" (click)="addStoragePart(rule)">+ Add another part</button>
+          <div *ngIf="!rule.parts.length" class="rule-parts-empty">Start the formula by choosing an element below.</div>
+          <div *ngIf="canManageStorageRules && !isReadOnly" class="element-palette">
+            <span>Add element</span>
+            <button type="button" (click)="addStoragePart(rule, 'text')">＋ Fixed text</button>
+            <button type="button" (click)="addStoragePart(rule, 'characters')">＋ Barcode characters</button>
+            <button type="button" (click)="addStoragePart(rule, 'digits_after')">＋ Number after marker</button>
+            <button type="button" (click)="addStoragePart(rule, 'remainder_after')">＋ Remainder after marker</button>
+            <button type="button" (click)="addStoragePart(rule, 'number_group')">＋ Number group</button>
+            <button type="button" (click)="addStoragePart(rule, 'barcode')">＋ Entire barcode</button>
+          </div>
         </div>
         <div class="single-rule-preview"><span>For “{{ storageRuleExampleBarcode || 'empty barcode' }}”</span><strong>{{ storageRulePreview(rule) }}</strong></div>
       </article>
 
-      <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>No automatic rules yet</strong><p>Existing imported locations stay untouched until the lab leader adds a rule.</p></div>
+      <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>No location formulas yet</strong><p>Use “New location rule” above, then combine fixed text and barcode-derived elements freely.</p></div>
     </div>
 
     <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
