@@ -403,7 +403,8 @@
       </div>
     </div>
 
-    <div class="app-table-container">
+    <!-- Desktop Table View (Spot on left, months on right) -->
+    <div class="app-table-container desktop-yearly-table-container">
       <table class="yearly-table" style="user-select: none;">
         <thead>
           <tr>
@@ -432,6 +433,38 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile Yearly List (Centered Spot Title on top, then 12 months) -->
+    <div class="mobile-yearly-list">
+      <div class="mobile-yearly-spot-card" *ngFor="let s of yearlySummary.summary">
+        <div class="mobile-yearly-spot-title">
+          <strong>{{ s.spot.name }}</strong>
+          <span *ngIf="s.spot.room" class="mobile-yearly-spot-room">{{ s.spot.room }}</span>
+        </div>
+        <div class="mobile-yearly-scroll-wrap">
+          <div class="mobile-yearly-grid">
+            <div class="mobile-yearly-col" *ngFor="let m of s.months">
+              <span class="mobile-yearly-month-name">{{ months[m.month - 1].label.substring(0, 3) }}</span>
+              <button type="button"
+                      class="mobile-yearly-cell"
+                      [class.yt-booked]="m.booked"
+                      [class.yt-avail]="!m.booked"
+                      [class.yt-selected]="isCellSelected(s.spot.id, m.month)"
+                      (touchstart)="onYearlyCellTouchStart($event)"
+                      (touchend)="onYearlyCellTouchEnd($event, s.spot.id, m.month, m.booked)"
+                      (click)="onYearlyCellClick(s.spot.id, m.month, m.booked)"
+                      [title]="m.booked ? 'Booked by ' + m.user_name + ' (Tap to view details)' : 'Available (Tap to book)'">
+                <span *ngIf="m.booked" class="mobile-yt-user">{{ m.user_name }}</span>
+                <span *ngIf="!m.booked && isCellSelected(s.spot.id, m.month)" class="yt-drag-dot"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div *ngIf="yearlySummary.summary.length === 0" class="mobile-empty-bookings">
+        No spots found for this facility.
+      </div>
     </div>
   </div>
 
@@ -494,18 +527,34 @@
       </div>
       <div class="app-modal-body facility-editor-body">
         <div *ngIf="facilityError" class="app-alert app-alert-error">{{ facilityError }}</div>
+        <div *ngIf="facilitySuccess" class="app-alert app-alert-success">{{ facilitySuccess }}</div>
         <section class="facility-editor-section">
           <h3>Facility details</h3>
           <div class="facility-details-grid">
-            <div class="app-form-group"><label class="app-label">Name *</label><input class="app-input" [(ngModel)]="facilityForm.name" placeholder="e.g. Growth Room 3" /></div>
-            <div class="app-form-group"><label class="app-label">Location</label><input class="app-input" [(ngModel)]="facilityForm.location" placeholder="Building, level or room" /></div>
-            <div class="app-form-group facility-description"><label class="app-label">Description</label><input class="app-input" [(ngModel)]="facilityForm.description" placeholder="What this facility is used for" /></div>
+            <div class="app-form-group facility-name-field"><label class="app-label">Name *</label><input class="app-input" [(ngModel)]="facilityForm.name" placeholder="e.g. Growth Room 3" /></div>
             <div class="app-form-group"><label class="app-label">Room width</label><input class="app-input" type="number" min="1" max="12" [(ngModel)]="facilityForm.grid_columns" (change)="onLayoutSizeChange()" /></div>
             <div class="app-form-group"><label class="app-label">Room height</label><input class="app-input" type="number" min="1" max="20" [(ngModel)]="facilityForm.grid_rows" (change)="onLayoutSizeChange()" /></div>
           </div>
-          <button class="app-btn app-btn-primary" (click)="saveFacilityDetails()" [disabled]="facilitySaving || !facilityForm.name.trim()">
-            {{ facilitySaving ? 'Saving…' : (facilityEditorMode === 'create' ? 'Create and add spots' : 'Save facility') }}
-          </button>
+          <div class="facility-details-actions">
+            <button class="app-btn app-btn-primary" (click)="saveFacilityDetails()" [disabled]="facilitySaving || !facilityForm.name.trim()">
+              {{ facilitySaving ? 'Saving…' : (facilityEditorMode === 'create' ? 'Create and add spots' : 'Save facility') }}
+            </button>
+            <button *ngIf="facilityEditorMode === 'edit' && !showDeleteFacilityConfirm" type="button" class="app-btn app-btn-danger app-btn-sm" (click)="showDeleteFacilityConfirm = true">
+              🗑 Delete facility
+            </button>
+          </div>
+
+          <div *ngIf="showDeleteFacilityConfirm" class="app-alert app-alert-warning delete-facility-confirm-box" style="margin-top: 12px;">
+            <p>Are you sure you want to delete <strong>{{ facilityForm.name }}</strong> and its spots? Existing booking records will be preserved.</p>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+              <button class="app-btn app-btn-danger app-btn-sm" (click)="deleteCurrentFacility()" [disabled]="facilityDeleting">
+                {{ facilityDeleting ? 'Deleting…' : 'Yes, delete facility' }}
+              </button>
+              <button class="app-btn app-btn-ghost app-btn-sm" (click)="showDeleteFacilityConfirm = false" [disabled]="facilityDeleting">
+                Cancel
+              </button>
+            </div>
+          </div>
         </section>
 
         <section class="facility-editor-section" *ngIf="facilityEditorMode === 'edit'">

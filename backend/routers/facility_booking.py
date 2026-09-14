@@ -289,6 +289,16 @@ async def update_facility(facility_id: str, payload: FacilityUpdate, db: Session
     db.commit(); db.refresh(facility)
     return serialize_facility(facility, db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id, FacilitySpot.is_active == True).count())
 
+@router.delete("/facilities/{facility_id}")
+async def delete_facility(facility_id: str, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
+    facility = db.query(FacilityArea).filter(FacilityArea.id == facility_id, FacilityArea.is_active == True).first()
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    facility.is_active = False
+    db.query(FacilitySpot).filter(FacilitySpot.facility_id == facility.id).update({"is_active": False})
+    db.commit()
+    return {"status": "success", "message": "Facility deleted successfully"}
+
 @router.post("/facilities/{facility_id}/spots")
 async def create_spot(facility_id: str, payload: SpotCreate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin)):
     facility = db.query(FacilityArea).filter(FacilityArea.id == facility_id, FacilityArea.is_active == True).first()

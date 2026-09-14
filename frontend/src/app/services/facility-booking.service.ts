@@ -205,6 +205,17 @@ export class FacilityBookingService {
     return firstValueFrom(this.http.put<FacilityArea>(`${this.apiUrl}/facilities/${id}`, data, { headers }));
   }
 
+  async deleteFacility(id: string): Promise<void> {
+    if (this.isDemo()) {
+      const facility = this.demoFacilities.find(f => f.id === id);
+      if (facility) facility.is_active = false;
+      this.demoSpots.filter(s => s.facility_id === id).forEach(s => s.is_active = false);
+      return;
+    }
+    const headers = await this.getAuthHeaders();
+    await firstValueFrom(this.http.delete(`${this.apiUrl}/facilities/${id}`, { headers }));
+  }
+
   async createSpot(facilityId: string, data: any): Promise<FacilitySpot> {
     if (this.isDemo()) { const facility=this.demoFacilities.find(f=>f.id===facilityId); if(!facility) throw new Error('Facility not found'); const spot={...data,id:`demo-spot-${Date.now()}`,facility_id:facilityId,room:facility.name,display_order:this.demoSpots.length+1,map_group:'custom',is_active:true}; this.demoSpots.push(spot); return spot; }
     const headers = await this.getAuthHeaders();

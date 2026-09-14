@@ -534,6 +534,13 @@
   margin: 0 auto;
 }
 
+.desktop-yearly-table-container {
+  display: block;
+}
+.mobile-yearly-list {
+  display: none;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .booking-page {
@@ -922,41 +929,115 @@
 
   .yearly-controls > div:last-child { display: none; }
   .detail-grid, .form-grid { grid-template-columns: 1fr !important; }
-  .yearly-table {
-    min-width: 650px;
-    table-layout: fixed;
-    border-spacing: 2px;
-    font-size: .6rem;
+  .desktop-yearly-table-container {
+    display: none !important;
   }
-  .yearly-table th,
-  .yearly-table td {
+  .mobile-yearly-list {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+  .mobile-yearly-spot-card {
+    background: #ffffff;
+    border: 1px solid var(--color-border-light);
+    border-radius: 12px;
+    padding: 10px 8px 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+  .mobile-yearly-spot-title {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-bottom: 9px;
+  }
+  .mobile-yearly-spot-title strong {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 20px;
+    padding: 3px 14px;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-yearly-spot-room {
+    font-size: 0.65rem;
+    color: var(--color-text-tertiary);
+  }
+  .mobile-yearly-scroll-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .mobile-yearly-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(26px, 1fr));
+    gap: 3px;
+    width: 100%;
+    min-width: 320px;
+  }
+  .mobile-yearly-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .mobile-yearly-month-name {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+  .mobile-yearly-cell {
+    width: 100%;
+    height: 38px;
+    border-radius: 6px;
+    border: 1.5px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    font-family: inherit;
+    cursor: pointer;
     box-sizing: border-box;
-    height: 32px !important;
-    min-height: 0 !important;
-    padding: 3px !important;
-    line-height: 1.05;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    touch-action: manipulation;
   }
-  .yearly-table th.yt-spot-col,
-  .yearly-table td.yt-spot-col {
-    width: 108px !important;
-    min-width: 108px !important;
-    max-width: 108px !important;
-    padding: 4px 6px !important;
+  .mobile-yearly-cell:active {
+    transform: scale(0.95);
   }
-  .yearly-table td.yt-spot-col strong {
-    display: block;
+  .mobile-yearly-cell.yt-avail {
+    background: #f0fdf4;
+    border-color: #86efac;
+  }
+  .mobile-yearly-cell.yt-booked {
+    background: #fef2f2;
+    border-color: #fca5a5;
+  }
+  .mobile-yearly-cell.yt-selected {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
+  .mobile-yt-user {
+    font-size: 0.52rem;
+    font-weight: 700;
+    color: #991b1b;
+    line-height: 1.1;
     overflow: hidden;
-    font-size: .62rem;
-    line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .yearly-table .yt-room-name { display: none; }
-  .yearly-table .yt-name {
+    max-width: 100%;
     display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .booking-list-toolbar { margin-bottom: 8px; }
@@ -1026,16 +1107,37 @@
 .dynamic-spot.booked { border-color: #fecaca; background: #fff1f2; }
 .facility-map-empty { grid-column: 1 / -1; display: grid; place-items: center; color: var(--color-text-secondary); text-align: center; }
 
-.facility-editor-modal { width: min(1040px, calc(100vw - 32px)); max-width: 1040px; max-height: 94vh; }
-.facility-editor-body { display: grid; min-width:0; gap: 18px; overflow-y: auto; overflow-x:hidden; }
+.facility-editor-modal {
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(1040px, calc(100vw - 32px));
+  max-width: 1040px;
+  height: min(860px, 94vh);
+  max-height: 94vh;
+  overflow: hidden !important;
+}
+.facility-editor-modal .app-modal-header {
+  flex: 0 0 auto;
+}
+.facility-editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 18px;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
 .facility-editor-section { min-width:0; padding: 16px; border: 1px solid var(--color-border-light); border-radius: 14px; background: #fff; }
 .facility-editor-section h3 { margin: 0 0 12px; }
-.facility-details-grid { display: grid; grid-template-columns: 1fr 1fr 120px 120px; gap: 12px; margin-bottom: 14px; }
-.facility-description { grid-column: 1 / 3; }
+.facility-details-grid { display: grid; grid-template-columns: minmax(180px, 2fr) 110px 110px; gap: 12px; margin-bottom: 14px; }
+.facility-details-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.delete-facility-confirm-box { border-radius: var(--radius-md); padding: 12px 14px; }
 .facility-section-heading p { margin: -6px 0 14px; color: var(--color-text-secondary); font-size: .84rem; }
 .layout-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
 .layout-heading .app-btn { flex:0 0 auto; }
-.layout-canvas-scroll { box-sizing:border-box; width:100%; max-width:100%; min-width:0; overflow:auto; padding:6px; border:1px solid #cbd5e1; border-radius:12px; background:#e2e8f0; overscroll-behavior:contain; }
+.layout-canvas-scroll { box-sizing:border-box; width:100%; max-width:100%; min-width:0; overflow:auto; padding:6px; border:1px solid #cbd5e1; border-radius:12px; background:#e2e8f0; overscroll-behavior:contain; -webkit-overflow-scrolling: touch; }
 .facility-layout-canvas { position:relative; display:grid; gap:5px; min-width:620px; width:100%; min-height:72px; box-sizing:border-box; }
 .layout-grid-cell { border:1px dashed #cbd5e1; border-radius:2px; background:#f8fafc; }
 .layout-spot { position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; padding:8px 16px 8px 8px; overflow:hidden; border:2px solid #4f9470; border-radius:5px; background:#dcfce7; color:#14532d; box-shadow:0 2px 5px rgba(15,23,42,.12); cursor:grab; touch-action:none; user-select:none; }
@@ -1061,16 +1163,33 @@
   .facility-summary p { display: none; }
   .dynamic-floor-plan { gap: 6px; grid-auto-rows: minmax(68px, auto); padding: 9px; overflow-x: auto; }
   .dynamic-spot { min-width: 0; }
-  .facility-editor-modal { width: 100vw; max-width: none; height:100dvh; max-height:100dvh; border-radius:0 !important; }
-  .facility-editor-modal { overflow:hidden; }
-  .facility-editor-modal .app-modal-header { flex:0 0 auto; }
-  .facility-editor-body { padding-bottom:calc(18px + env(safe-area-inset-bottom)) !important; }
-  .facility-details-grid { grid-template-columns:minmax(0,1fr); }
-  .facility-description { grid-column:auto; }
+  .facility-editor-modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+  .facility-editor-modal .app-modal-header {
+    flex: 0 0 auto;
+    padding: 14px 16px !important;
+  }
+  .facility-editor-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 16px calc(32px + env(safe-area-inset-bottom)) !important;
+  }
+  .facility-details-grid { grid-template-columns: 1fr 1fr; }
+  .facility-name-field { grid-column: 1 / -1; }
   .layout-heading { align-items:stretch; flex-direction:column; }
   .layout-heading p { margin-bottom:0; }
   .layout-heading .app-btn { width:100%; }
-  .facility-layout-canvas { min-width:560px; }
+  .facility-layout-canvas { min-width: 480px; }
   .mobile-layout-hint { display:block; }
   .selected-spot-editor { grid-template-columns:1fr; }
   .selected-spot-title { grid-column:auto; }

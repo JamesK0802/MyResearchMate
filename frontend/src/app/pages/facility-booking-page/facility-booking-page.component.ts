@@ -28,7 +28,10 @@ export class FacilityBookingPageComponent implements OnInit {
   selectedEditorSpotId = '';
   layoutDirty = false;
   facilitySaving = false;
+  facilityDeleting = false;
   facilityError = '';
+  facilitySuccess = '';
+  showDeleteFacilityConfirm = false;
   private layoutGesture: null | {
     spot: FacilitySpot; mode: 'move' | 'resize'; startX: number; startY: number;
     x: number; y: number; width: number; height: number; cellWidth: number; cellHeight: number;
@@ -180,6 +183,8 @@ export class FacilityBookingPageComponent implements OnInit {
     this.selectedEditorSpotId = '';
     this.layoutDirty = false;
     this.facilityError = '';
+    this.facilitySuccess = '';
+    this.showDeleteFacilityConfirm = false;
     this.showFacilityEditor = true;
   }
 
@@ -192,28 +197,58 @@ export class FacilityBookingPageComponent implements OnInit {
     this.selectedEditorSpotId = this.spotDrafts[0]?.id || '';
     this.layoutDirty = false;
     this.facilityError = '';
+    this.facilitySuccess = '';
+    this.showDeleteFacilityConfirm = false;
     this.showFacilityEditor = true;
   }
 
-  closeFacilityEditor() { if (!this.facilitySaving) this.showFacilityEditor = false; }
+  closeFacilityEditor() {
+    if (!this.facilitySaving && !this.facilityDeleting) {
+      this.showFacilityEditor = false;
+      this.showDeleteFacilityConfirm = false;
+      this.facilitySuccess = '';
+      this.facilityError = '';
+    }
+  }
 
   async saveFacilityDetails() {
     if (!this.canManageFacilities || !this.facilityForm.name.trim()) return;
-    this.facilitySaving = true; this.facilityError = '';
+    this.facilitySaving = true; this.facilityError = ''; this.facilitySuccess = '';
     try {
       if (this.facilityEditorMode === 'create') {
         const created = await this.bookingService.createFacility(this.facilityForm);
         this.selectedFacilityId = created.id;
         this.facilityEditorMode = 'edit';
+        this.facilitySuccess = 'Facility created! You can now arrange spots below.';
       } else if (this.selectedFacilityId) {
         await this.persistFacilityLayout();
+        this.facilitySuccess = '✓ Facility saved successfully!';
       }
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(spot => ({ ...spot }));
       this.selectedEditorSpotId = this.spotDrafts[0]?.id || '';
       this.layoutDirty = false;
+      setTimeout(() => { if (this.facilitySuccess) { this.facilitySuccess = ''; this.cdr.detectChanges(); } }, 3500);
     } catch (error: any) { this.facilityError = error?.error?.detail || error?.message || 'Could not save facility.'; }
     finally { this.facilitySaving = false; this.cdr.detectChanges(); }
+  }
+
+  async deleteCurrentFacility() {
+    if (!this.selectedFacilityId || !this.canManageFacilities || this.facilityDeleting) return;
+    this.facilityDeleting = true;
+    this.facilityError = '';
+    try {
+      await this.bookingService.deleteFacility(this.selectedFacilityId);
+      this.showDeleteFacilityConfirm = false;
+      this.showFacilityEditor = false;
+      this.facilitySuccess = '';
+      await this.loadInitialData();
+    } catch (error: any) {
+      this.facilityError = error?.error?.detail || error?.message || 'Could not delete facility.';
+    } finally {
+      this.facilityDeleting = false;
+      this.cdr.detectChanges();
+    }
   }
 
   async reloadFacilities() {
@@ -245,12 +280,14 @@ export class FacilityBookingPageComponent implements OnInit {
 
   async saveFacilityLayout() {
     if (!this.selectedFacilityId || !this.canManageFacilities) return;
-    this.facilitySaving = true; this.facilityError = '';
+    this.facilitySaving = true; this.facilityError = ''; this.facilitySuccess = '';
     try {
       await this.persistFacilityLayout();
       await this.reloadFacilities();
       this.spotDrafts = this.facilitySpots.map(item => ({ ...item }));
       this.layoutDirty = false;
+      this.facilitySuccess = '✓ Room layout saved successfully!';
+      setTimeout(() => { if (this.facilitySuccess) { this.facilitySuccess = ''; this.cdr.detectChanges(); } }, 3500);
     } catch (error: any) {
       this.facilityError = error?.error?.detail || error?.message || 'Could not save the facility layout.';
     } finally { this.facilitySaving = false; this.cdr.detectChanges(); }
@@ -317,7 +354,9 @@ export class FacilityBookingPageComponent implements OnInit {
   beginLayoutGesture(event: PointerEvent, spot: FacilitySpot, mode: 'move' | 'resize') {
     if (this.facilitySaving) return;
     event.preventDefault(); event.stopPropagation();
-    const canvas = (event.currentTarget as HTMLElement).closest('.facility-layout-canvas') as HTMLElement | null;
+    const target = event.currentTarget as HTMLElement;
+    try { target.setPointerCapture?.(event.pointerId); } catch (e) {}
+    const canvas = target.closest('.facility-layout-canvas') as HTMLElement | null;
     if (!canvas) return;
     const columns = Math.max(1, Number(this.facilityForm.grid_columns) || 1);
     const rows = Math.max(1, Number(this.facilityForm.grid_rows) || 1);
@@ -621,6 +660,21 @@ export class FacilityBookingPageComponent implements OnInit {
     // A swipe remains table scrolling; a deliberate tap opens/selects the cell.
     if (moved > 10) return;
     event.preventDefault();
+    if (booked) {
+      this.fetchAndOpenBooking(spotId, monthVal);
+      return;
+    }
+    this.mobileBookingFormOpen = true;
+    this.form.spot_id = spotId;
+    const month = String(monthVal).padStart(2, '0');
+    this.form.start_month = `${this.selectedYear}-${month}`;
+    this.form.end_month = `${this.selectedYear}-${month}`;
+    this.formSuccess = `Selected: ${this.months[monthVal - 1].label}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.cdr.detectChanges();
+  }
+
+  onYearlyCellClick(spotId: string, monthVal: number, booked: boolean) {
     if (booked) {
       this.fetchAndOpenBooking(spotId, monthVal);
       return;
