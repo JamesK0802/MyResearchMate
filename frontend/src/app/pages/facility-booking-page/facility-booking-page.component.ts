@@ -346,7 +346,6 @@ export class FacilityBookingPageComponent implements OnInit {
     const canvas = event.currentTarget as HTMLElement;
     const cell = this.cellAt(event, canvas);
     canvas.setPointerCapture(event.pointerId);
-    this.selectedEditorSpotId = '';
     this.newSpotForm.name = '';
     this.showAreaName = false;
     this.drawGesture = { ...cell, canvas, pointerId:event.pointerId };
@@ -418,7 +417,6 @@ export class FacilityBookingPageComponent implements OnInit {
     this.layoutGesture = { spot, mode, startX:event.clientX, startY:event.clientY, x:spot.grid_x || 1, y:spot.grid_y || 1, width:spot.grid_width || 1, height:spot.grid_height || 1, cellWidth, cellHeight };
   }
 
-  @HostListener('document:pointermove', ['$event'])
   onLayoutPointerMove(event: PointerEvent) {
     if (this.drawGesture) { event.preventDefault(); this.updateDrawnArea(event); return; }
     const gesture = this.layoutGesture;
@@ -438,9 +436,9 @@ export class FacilityBookingPageComponent implements OnInit {
     this.layoutDirty = true;
   }
 
-  @HostListener('document:pointerup')
   endLayoutGesture() {
     if (this.drawGesture && this.drawnArea) {
+      this.selectedEditorSpotId = '';
       this.showAreaName = true;
       this.cdr.detectChanges();
       this.areaNameInput?.nativeElement.focus();
@@ -448,7 +446,6 @@ export class FacilityBookingPageComponent implements OnInit {
     this.layoutGesture = null; this.drawGesture = null;
   }
 
-  @HostListener('document:pointercancel')
   cancelLayoutGesture() { this.layoutGesture = null; this.drawGesture = null; this.drawnArea = null; this.showAreaName = false; }
 
   onLayoutSizeChange() {
@@ -700,6 +697,23 @@ export class FacilityBookingPageComponent implements OnInit {
   }
 
   @HostListener('document:pointermove', ['$event'])
+  onDocumentPointerMove(event: PointerEvent) {
+    this.onLayoutPointerMove(event);
+    this.moveYearRange(event);
+  }
+
+  @HostListener('document:pointerup')
+  onDocumentPointerUp() {
+    this.endLayoutGesture();
+    this.finishYearRange();
+  }
+
+  @HostListener('document:pointercancel')
+  onDocumentPointerCancel() {
+    this.cancelLayoutGesture();
+    this.cancelYearRange();
+  }
+
   moveYearRange(event:PointerEvent) {
     if (!this.yearRange || this.yearRange.pointerId !== event.pointerId) return;
     event.preventDefault();
@@ -717,14 +731,12 @@ export class FacilityBookingPageComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  @HostListener('document:pointerup')
   finishYearRange() {
     if (!this.yearRange) return;
     this.yearRange = null;
     this.onGlobalMouseUp();
   }
 
-  @HostListener('document:pointercancel')
   cancelYearRange() {
     this.yearRange = null; this.isDragging = false;
     this.dragSpotId = null; this.dragStartMonth = null; this.dragCurrentMonth = null;
