@@ -10,11 +10,12 @@ import { ProtocolTreeService, ProtocolTreeRecord } from '../../services/protocol
 import { NamuStorageService } from '../../services/namu-storage.service';
 import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
+import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
 
 @Component({
   selector: 'app-my-data',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
+  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent],
   template: `
     <div class="my-data-container">
 
@@ -45,27 +46,13 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
 
       <!-- Results Grid -->
       <div *ngIf="!loading && displayResults.length > 0" class="results-grid">
-        <div *ngFor="let res of displayResults" class="result-card" [class.shared-card]="res.is_shared" [class.system-preset-card]="resource === 'pcr' && isSystemPreset(res)">
-          <button type="button" class="btn-pin" [class.pinned]="isPinned(res)" (click)="togglePin(res, $event)" [attr.aria-label]="isPinned(res) ? 'Unpin from top' : 'Pin to top'" [title]="isPinned(res) ? 'Unpin from top' : 'Pin to top'">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Zm3 11h2v7l-1-1-1 1v-7Z"></path></svg>
-          </button>
-          <div class="card-body">
-            <div class="card-top">
-              <h3 class="result-title">{{ getItemTitle(res) }}</h3>
-              <div class="card-badges">
-                <span *ngIf="isOwner(res)" class="badge owner">OWNER</span>
-                <span *ngIf="res.is_shared" class="badge shared">SHARED</span>
-              </div>
-            </div>
-            
-            <div class="result-meta">
-              <span *ngIf="!(resource === 'pcr' && isSystemPreset(res))">📅 {{ res.created_at | date:'mediumDate' }}</span>
-              <span *ngIf="resource === 'crispr'">🧬 {{ getGeneCount(res) }} Genes</span>
-              <span *ngIf="resource === 'protocol'">🌿 {{ getNodeCount(res) }} Steps</span>
-              <span *ngIf="resource === 'pcr'">🧪 {{ getPcrComponentCount(res) }} Components</span>
-            </div>
-
-            <div *ngIf="res.is_shared" class="sharing-info">
+        <app-my-data-card *ngFor="let res of displayResults"
+          [title]="getItemTitle(res)" [badges]="getCardBadges(res)" [meta]="getCardMeta(res)"
+          [shared]="!!res.is_shared" [muted]="resource === 'pcr' && isSystemPreset(res)"
+          [showPin]="true" [pinned]="isPinned(res)" [primaryLabel]="resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'View Crispr Analysis'"
+          [showShare]="canManage(res)" [showDelete]="canManage(res)" [readOnly]="!!res.is_shared && !isOwner(res)"
+          (pin)="togglePin(res, $event)" (open)="loadItem(res)" (share)="openShareModal(res)" (remove)="deleteItem(res.id || '')">
+          <div card-content *ngIf="res.is_shared" class="sharing-info">
               <!-- If I am owner, show WHO I shared it with -->
               <div *ngIf="isOwner(res)" class="info-row vertical">
                 <span class="label">Shared with:</span>
@@ -89,30 +76,8 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
                   </div>
                 </div>
               </div>
-            </div>
           </div>
-
-          <div class="card-actions">
-            <button (click)="loadItem(res)" class="btn-load">{{ resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'View Crispr Analysis' }}</button>
-            
-            <!-- Owner Actions -->
-            <ng-container *ngIf="canManage(res)">
-              <button (click)="openShareModal(res)" class="btn-share" title="Manage Sharing">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-svg-icon"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-              </button>
-              <button (click)="deleteItem(res.id || '')" class="btn-delete" title="Delete">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-svg-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-              </button>
-            </ng-container>
-
-            <!-- Shared Actions (Non-owner) -->
-            <ng-container *ngIf="res.is_shared && !isOwner(res)">
-              <button class="btn-info-only" title="Read Only">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-svg-icon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              </button>
-            </ng-container>
-          </div>
-        </div>
+        </app-my-data-card>
       </div>
 
       <div *ngIf="!loading && displayResults.length === 0" class="empty-state">
@@ -380,7 +345,7 @@ export class MyDataComponent implements OnInit {
     return this.pinnedIds.has(String((res as any).id || ''));
   }
 
-  togglePin(res: CrisprResult | ProtocolTreeRecord | PCRPreset, event: MouseEvent) {
+  togglePin(res: CrisprResult | ProtocolTreeRecord | PCRPreset, event: Event) {
     event.stopPropagation();
     const id = String((res as any).id || '');
     if (!id) return;
@@ -455,6 +420,25 @@ export class MyDataComponent implements OnInit {
     } as CrisprResult));
   }
   getItemTitle(res: CrisprResult | ProtocolTreeRecord | PCRPreset): string { return (res as any).title || (res as any).name || 'Untitled'; }
+
+  getCardBadges(res: CrisprResult | ProtocolTreeRecord | PCRPreset): MyDataCardBadge[] {
+    return [
+      ...(this.isOwner(res) ? [{ label: 'OWNER', tone: 'owner' as const }] : []),
+      ...((res as any).is_shared ? [{ label: 'SHARED', tone: 'shared' as const }] : [])
+    ];
+  }
+
+  getCardMeta(res: CrisprResult | ProtocolTreeRecord | PCRPreset): string[] {
+    const items: string[] = [];
+    if (!(this.resource === 'pcr' && this.isSystemPreset(res))) {
+      const raw = (res as any).created_at;
+      items.push(`📅 ${raw ? new Date(raw).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'Unknown date'}`);
+    }
+    if (this.resource === 'crispr') items.push(`🧬 ${this.getGeneCount(res)} Genes`);
+    if (this.resource === 'protocol') items.push(`🌿 ${this.getNodeCount(res)} Steps`);
+    if (this.resource === 'pcr') items.push(`🧪 ${this.getPcrComponentCount(res)} Components`);
+    return items;
+  }
 
   getGeneCount(item: CrisprResult | ProtocolTreeRecord | PCRPreset): number {
     const res = item as CrisprResult;
