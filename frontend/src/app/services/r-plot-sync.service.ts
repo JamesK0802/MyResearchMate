@@ -219,6 +219,7 @@ export class RPlotSyncService {
   private nativeRenderSubject = new BehaviorSubject<NativeRImage[]>([]);
   private workbookSheetsSubject = new BehaviorSubject<Record<string, Array<Record<string, any>>>>({});
   private compositionSubject = new BehaviorSubject<FigureComposition | null>(null);
+  private renderedSvgSubject = new BehaviorSubject<string | null>(null);
   private wizardOpenSubject = new BehaviorSubject<boolean>(false);
   private viewModeSubject = new BehaviorSubject<'single' | 'grid'>('single');
 
@@ -233,6 +234,7 @@ export class RPlotSyncService {
   sourceWorkbook$ = this.sourceWorkbookSubject.asObservable();
   nativeRender$ = this.nativeRenderSubject.asObservable();
   composition$ = this.compositionSubject.asObservable();
+  renderedSvg$ = this.renderedSvgSubject.asObservable();
   wizardOpen$ = this.wizardOpenSubject.asObservable();
   viewMode$ = this.viewModeSubject.asObservable();
 
@@ -311,6 +313,7 @@ export class RPlotSyncService {
   }
 
   setNativeRender(images: NativeRImage[]) { this.nativeRenderSubject.next(images); }
+  setRenderedSvg(svg: string | null) { this.renderedSvgSubject.next(svg); }
 
   /** Small, real-shaped datasets used by the in-product plot guide. */
   getPlotExample(type: PlotType): PlotExample {

@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     r-cran-ggrepel \
     r-cran-cowplot \
     r-cran-patchwork \
+    r-cran-svglite \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container

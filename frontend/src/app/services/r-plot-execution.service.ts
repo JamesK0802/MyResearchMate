@@ -16,7 +16,7 @@ export class RPlotExecutionService {
     return new HttpHeaders({ Authorization: `Bearer ${session?.access_token || ''}` });
   }
 
-  async runSourceCode(): Promise<{ images: Array<{ name: string; data_url: string }>; stdout: string }> {
+  async runSourceCode(): Promise<{ images: Array<{ name: string; data_url: string }>; svg?: string; stdout: string }> {
     const code = this.sync.rCode.trim();
     if (!code) throw new Error('Import or paste an R script first');
     const form = new FormData();
@@ -27,8 +27,9 @@ export class RPlotExecutionService {
       form.append('workbook', workbook, workbook.name);
       form.append('input_name', this.sync.expectedInputFileName() || workbook.name);
     }
-    const result = await firstValueFrom(this.http.post<{ images: Array<{ name: string; data_url: string }>; stdout: string }>(this.endpoint, form, { headers: await this.headers() }));
+    const result = await firstValueFrom(this.http.post<{ images: Array<{ name: string; data_url: string }>; svg?: string; stdout: string }>(this.endpoint, form, { headers: await this.headers() }));
     this.sync.setNativeRender(result.images || []);
+    this.sync.setRenderedSvg(result.svg || null);
     return result;
   }
 }

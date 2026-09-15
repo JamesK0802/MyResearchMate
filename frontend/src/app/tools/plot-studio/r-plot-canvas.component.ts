@@ -316,6 +316,10 @@ interface PlotHelpCard extends PlotExample {
         (mouseleave)="endPan()"
         [class.panning]="isPanning">
 
+        <div class="r-svg-canvas" *ngIf="renderedSvg">
+          <img [src]="renderedSvg" alt="R-generated editable figure">
+        </div>
+
         <div class="figure-composer" *ngIf="composition">
           <div *ngFor="let label of composition.labels" class="figure-label" [style.left.%]="label.x * 100" [style.bottom.%]="label.y * 100" [style.font-size.px]="label.size" [style.color]="label.color" [style.font-weight]="label.bold ? 700 : 400">{{ label.text }}</div>
           <div *ngFor="let panel of composition.panels" class="figure-panel" [style.left.%]="panel.x * 100" [style.bottom.%]="panel.y * 100" [style.width.%]="panel.width * 100" [style.height.%]="panel.height * 100">
@@ -326,7 +330,7 @@ interface PlotHelpCard extends PlotExample {
         <!-- Rendered SVG Plot -->
         <div
           class="svg-container"
-          [class.composer-hidden]="composition"
+          [class.composer-hidden]="composition || renderedSvg"
           #svgContainer
           [style.transform]="'scale(' + zoomScale + ') translate(' + panX + 'px, ' + panY + 'px)'"
           [style.transform-origin]="'center center'">
@@ -1378,6 +1382,8 @@ interface PlotHelpCard extends PlotExample {
       background: #0f172a;
     }
     .svg-container.composer-hidden { display: none; }
+    .r-svg-canvas { width: min(100%, 1100px); height: 100%; display: flex; align-items: center; justify-content: center; }
+    .r-svg-canvas img { max-width: 100%; max-height: 100%; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
     .figure-composer { position: relative; width: min(100%, 1100px); aspect-ratio: 12.8 / 9.8; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,.08); overflow: hidden; }
     .figure-panel { position: absolute; min-width: 0; min-height: 0; }
     .figure-panel app-r-plot-preview { display: block; width: 100%; height: 100%; }
@@ -1744,6 +1750,7 @@ export class RPlotCanvasComponent implements OnInit {
   data: Array<Record<string, any>> = [];
   columns: string[] = [];
   composition: FigureComposition | null = null;
+  renderedSvg: string | null = null;
 
   showInspector = false;
   previewSvgMarkup: SafeHtml = '';
@@ -1825,6 +1832,7 @@ export class RPlotCanvasComponent implements OnInit {
       this.viewMode = mode;
     });
     this.rSyncService.composition$.subscribe(composition => this.composition = composition);
+    this.rSyncService.renderedSvg$.subscribe(svg => this.renderedSvg = svg);
 
   }
 

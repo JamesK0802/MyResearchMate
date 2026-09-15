@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service';
+import { RPlotExecutionService } from '../../services/r-plot-execution.service';
 
 @Component({
   selector: 'app-r-code-editor',
@@ -18,6 +19,7 @@ import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service'
         <div class="header-actions">
           <input #rImport type="file" accept=".r,.R" class="hidden-file-input" (change)="importRFile($event)">
           <button type="button" class="btn-download" (click)="rImport.click()">Import .R</button>
+          <button type="button" class="btn-run" (click)="refreshCanvas()">Refresh canvas</button>
           <button type="button" class="btn-download" (click)="downloadRFile()">
             Export .R Script
           </button>
@@ -155,7 +157,7 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
     return this.plots[this.activePlotIndex];
   }
 
-  constructor(private rSyncService: RPlotSyncService) {}
+  constructor(private rSyncService: RPlotSyncService, private rExecution: RPlotExecutionService) {}
 
   ngOnInit() {
     this.subs.push(
@@ -189,6 +191,11 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
     };
     reader.readAsText(file);
     (event.target as HTMLInputElement).value = '';
+  }
+
+  async refreshCanvas() {
+    try { await this.rExecution.runSourceCode(); }
+    catch (error: any) { alert(error?.error?.detail || error?.message || 'Could not render the R source'); }
   }
 
   copyCode() {

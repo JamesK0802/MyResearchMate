@@ -93,8 +93,18 @@ async def run_r_plot(
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "R_DEFAULT_PACKAGES": "datasets,utils,grDevices,graphics,stats,methods",
             "http_proxy": "", "https_proxy": "", "HTTP_PROXY": "", "HTTPS_PROXY": "", "NO_PROXY": "*",
         }
+        # Source the user's code unchanged, then render its final ggplot/cowplot
+        # object as SVG. This preserves R's layout instead of recreating it in
+        # a browser chart library.
+        runner = workdir / "render.R"
+        runner.write_text(
+            "source(" + repr(script_path.name) + ")\n"
+            "target <- if (exists('figure2')) get('figure2') else ggplot2::last_plot()\n"
+            "svglite::svglite('figure.svg', width=12.8, height=9.8)\nprint(target)\ndev.off()\n",
+            encoding="utf-8",
+        )
         result = subprocess.run(
-            ["Rscript", "--vanilla", script_path.name], cwd=workdir, env=safe_env,
+            ["Rscript", "--vanilla", runner.name], cwd=workdir, env=safe_env,
             capture_output=True, text=True, timeout=70, preexec_fn=_limits,
         )
         stdout = (result.stdout or "")[-6000:]
@@ -102,6 +112,10 @@ async def run_r_plot(
         if result.returncode != 0:
             raise HTTPException(status_code=422, detail=(stderr or stdout or "R could not render this script").strip())
 
+        svg = workdir / "figure.svg"
+        if not svg.exists():
+            raise HTTPException(status_code=422, detail="R completed but did not produce an editable SVG figure")
+        svg_data = "data:image/svg+xml;base64," + base64.b64encode(svg.read_bytes()).decode("ascii")
         images = []
         total = 0
         for image in sorted(workdir.rglob("*.png"), key=lambda item: item.stat().st_mtime):
@@ -114,7 +128,7 @@ async def run_r_plot(
             images.append({"name": image.name, "data_url": "data:image/png;base64," + base64.b64encode(payload).decode("ascii")})
         if not images:
             raise HTTPException(status_code=422, detail="R completed but did not create a PNG file. Use ggsave(..., '.png') or png().")
-        return {"images": images, "stdout": stdout}
+        return {"images": images, "svg": svg_data, "stdout": stdout}
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=422, detail="R rendering exceeded the 70-second limit")
     finally:
