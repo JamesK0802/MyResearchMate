@@ -569,6 +569,9 @@ export class RDataTableComponent implements OnInit {
   importFile(event: any) {
     const file = event.target.files[0];
     if (!file) return;
+    // Preserve the original workbook (including every sheet) for an imported
+    // R script. The editable table remains a convenient first-sheet view.
+    void this.rSyncService.setSourceWorkbook(file);
     const progressId = this.operationProgress.begin(`Importing ${file.name}`, 'Reading spreadsheet…', 0);
 
     const reader = new FileReader();

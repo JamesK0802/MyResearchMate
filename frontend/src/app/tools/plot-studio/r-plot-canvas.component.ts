@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
-import { RPlotSyncService, PlotState, PlotType, PlotExample } from '../../services/r-plot-sync.service';
+import { RPlotSyncService, PlotState, PlotType, PlotExample, NativeRImage } from '../../services/r-plot-sync.service';
 import { RPlotPreviewComponent } from './r-plot-preview.component';
 
 interface InlineTextEditorState {
@@ -83,7 +83,7 @@ interface PlotHelpCard extends PlotExample {
       </div>
 
       <!-- Canvas Inspector Toolbar (for Active Plot) -->
-      <div class="canvas-toolbar" *ngIf="viewMode === 'single'">
+      <div class="canvas-toolbar" *ngIf="viewMode === 'single' && !nativeImages.length">
         <div class="toolbar-controls">
           <!-- Chart Type -->
           <div class="ctrl-group type-menu-wrap">
@@ -316,9 +316,17 @@ interface PlotHelpCard extends PlotExample {
         (mouseleave)="endPan()"
         [class.panning]="isPanning">
 
+        <div class="native-r-output" *ngIf="nativeImages.length">
+          <figure *ngFor="let image of nativeImages">
+            <img [src]="image.data_url" [alt]="image.name">
+            <a [href]="image.data_url" [attr.download]="image.name">Download {{ image.name }}</a>
+          </figure>
+        </div>
+
         <!-- Rendered SVG Plot -->
         <div
           class="svg-container"
+          [class.native-render-hidden]="nativeImages.length > 0"
           #svgContainer
           [style.transform]="'scale(' + zoomScale + ') translate(' + panX + 'px, ' + panY + 'px)'"
           [style.transform-origin]="'center center'">
@@ -693,7 +701,13 @@ interface PlotHelpCard extends PlotExample {
 
       <!-- Mode 2: Multi-Plot Grid View (Side-by-Side & Multi-Panel) -->
       <div class="grid-viewport" *ngIf="viewMode === 'grid'">
-        <div class="grid-plots-container" [style.grid-template-columns]="plots.length > 2 ? 'repeat(2, 1fr)' : 'repeat(' + plots.length + ', 1fr)'">
+        <div class="native-r-grid" *ngIf="nativeImages.length">
+          <figure *ngFor="let image of nativeImages">
+            <img [src]="image.data_url" [alt]="image.name">
+            <figcaption><a [href]="image.data_url" [attr.download]="image.name">Download {{ image.name }}</a></figcaption>
+          </figure>
+        </div>
+        <div *ngIf="!nativeImages.length" class="grid-plots-container" [style.grid-template-columns]="plots.length > 2 ? 'repeat(2, 1fr)' : 'repeat(' + plots.length + ', 1fr)'">
           <div *ngFor="let p of plots; let pIdx = index" class="grid-plot-cell" [class.active-cell]="activePlotIndex === pIdx">
             <!-- Cell Control Bar -->
             <div class="cell-top-bar">
@@ -1370,6 +1384,12 @@ interface PlotHelpCard extends PlotExample {
       background: #0f172a;
     }
 
+    .svg-container.native-render-hidden { display: none; }
+    .native-r-output { width: 100%; height: 100%; padding: 20px; box-sizing: border-box; overflow: auto; display: flex; align-items: center; justify-content: center; }
+    .native-r-output figure { margin: 0; width: 100%; max-width: 1200px; text-align: center; }
+    .native-r-output img { display: block; max-width: 100%; max-height: calc(100vh - 220px); margin: 0 auto 10px; object-fit: contain; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+    .native-r-output a, .native-r-grid a { color: #166534; font: 700 12px system-ui, sans-serif; text-decoration: none; }
+
     .paper-svg {
       width: 100%;
       height: 100%;
@@ -1404,6 +1424,10 @@ interface PlotHelpCard extends PlotExample {
       flex-direction: column;
       gap: 16px;
     }
+
+    .native-r-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .native-r-grid figure { margin: 0; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; text-align: center; }
+    .native-r-grid img { display: block; width: 100%; height: auto; margin-bottom: 8px; }
 
     .grid-toolbar-header {
       display: flex;
@@ -1728,6 +1752,7 @@ export class RPlotCanvasComponent implements OnInit {
   viewMode: 'single' | 'grid' = 'single';
   data: Array<Record<string, any>> = [];
   columns: string[] = [];
+  nativeImages: NativeRImage[] = [];
 
   showInspector = false;
   previewSvgMarkup: SafeHtml = '';
@@ -1807,6 +1832,10 @@ export class RPlotCanvasComponent implements OnInit {
 
     this.rSyncService.viewMode$.subscribe(mode => {
       this.viewMode = mode;
+    });
+
+    this.rSyncService.nativeRender$.subscribe(images => {
+      this.nativeImages = images;
     });
   }
 

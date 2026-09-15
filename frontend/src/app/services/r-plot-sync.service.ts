@@ -106,6 +106,17 @@ export interface PanelConfig {
   plotWidth: number;
 }
 
+export interface RSourceWorkbook {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
+export interface NativeRImage {
+  name: string;
+  data_url: string;
+}
+
 export interface PlotProjectDocument {
   version: 1;
   columns: string[];
@@ -115,6 +126,8 @@ export interface PlotProjectDocument {
   panelConfig: PanelConfig;
   viewMode: 'single' | 'grid';
   rCode: string;
+  rSourceMode?: boolean;
+  sourceWorkbook?: RSourceWorkbook | null;
 }
 
 export interface PlotExample {
@@ -194,6 +207,9 @@ export class RPlotSyncService {
   private activePlotIndexSubject = new BehaviorSubject<number>(0);
   private panelConfigSubject = new BehaviorSubject<PanelConfig>(this.initialPanelConfig);
   private rCodeSubject = new BehaviorSubject<string>('');
+  private rSourceModeSubject = new BehaviorSubject<boolean>(false);
+  private sourceWorkbookSubject = new BehaviorSubject<RSourceWorkbook | null>(null);
+  private nativeRenderSubject = new BehaviorSubject<NativeRImage[]>([]);
   private wizardOpenSubject = new BehaviorSubject<boolean>(false);
   private viewModeSubject = new BehaviorSubject<'single' | 'grid'>('single');
 
@@ -204,6 +220,9 @@ export class RPlotSyncService {
   activePlotIndex$ = this.activePlotIndexSubject.asObservable();
   panelConfig$ = this.panelConfigSubject.asObservable();
   rCode$ = this.rCodeSubject.asObservable();
+  rSourceMode$ = this.rSourceModeSubject.asObservable();
+  sourceWorkbook$ = this.sourceWorkbookSubject.asObservable();
+  nativeRender$ = this.nativeRenderSubject.asObservable();
   wizardOpen$ = this.wizardOpenSubject.asObservable();
   viewMode$ = this.viewModeSubject.asObservable();
 
@@ -232,6 +251,48 @@ export class RPlotSyncService {
   get panelConfig(): PanelConfig { return this.panelConfigSubject.value; }
   get viewMode(): 'single' | 'grid' { return this.viewModeSubject.value; }
   get rCode(): string { return this.rCodeSubject.value; }
+  get rSourceMode(): boolean { return this.rSourceModeSubject.value; }
+  get sourceWorkbook(): RSourceWorkbook | null { return this.sourceWorkbookSubject.value; }
+
+  setRSourceCode(code: string) {
+    this.rSourceModeSubject.next(true);
+    this.rCodeSubject.next(code);
+    this.nativeRenderSubject.next([]);
+  }
+
+  leaveRSourceMode() {
+    this.rSourceModeSubject.next(false);
+    this.nativeRenderSubject.next([]);
+    this.updateRCodeFromState();
+  }
+
+  async setSourceWorkbook(file: File): Promise<void> {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read this spreadsheet'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    });
+    this.sourceWorkbookSubject.next({ name: file.name, mimeType: file.type || 'application/octet-stream', dataUrl });
+    this.nativeRenderSubject.next([]);
+  }
+
+  async sourceWorkbookFile(): Promise<File | null> {
+    const source = this.sourceWorkbook;
+    if (!source?.dataUrl) return null;
+    const blob = await (await fetch(source.dataUrl)).blob();
+    return new File([blob], source.name, { type: source.mimeType });
+  }
+
+  expectedInputFileName(): string {
+    const code = this.rCode;
+    const assignment = code.match(/(?:input_file|input_path|file_path)\s*<-\s*["']([^"']+)["']/i);
+    if (assignment?.[1]) return assignment[1];
+    const readerCall = code.match(/(?:read_excel|read\.csv|read_csv)\s*\(\s*["']([^"']+)["']/i);
+    return readerCall?.[1] || this.sourceWorkbook?.name || '';
+  }
+
+  setNativeRender(images: NativeRImage[]) { this.nativeRenderSubject.next(images); }
 
   /** Small, real-shaped datasets used by the in-product plot guide. */
   getPlotExample(type: PlotType): PlotExample {
@@ -270,6 +331,9 @@ export class RPlotSyncService {
   }
 
   loadPlotExample(type: PlotType) {
+    this.rSourceModeSubject.next(false);
+    this.sourceWorkbookSubject.next(null);
+    this.nativeRenderSubject.next([]);
     const example = this.getPlotExample(type);
     this.columnsSubject.next(example.columns);
     this.dataSubject.next(example.rows);
@@ -288,7 +352,9 @@ export class RPlotSyncService {
       activePlotIndex: this.activePlotIndex,
       panelConfig: { ...this.panelConfig },
       viewMode: this.viewMode,
-      rCode: this.rCode
+      rCode: this.rCode,
+      rSourceMode: this.rSourceMode,
+      sourceWorkbook: this.sourceWorkbook
     };
   }
 
@@ -300,6 +366,9 @@ export class RPlotSyncService {
     this.panelConfigSubject.next({ ...this.initialPanelConfig, ...(project?.panelConfig || {}) });
     this.viewModeSubject.next(project?.viewMode === 'grid' ? 'grid' : 'single');
     this.rCodeSubject.next(project?.rCode || '');
+    this.rSourceModeSubject.next(!!project?.rSourceMode);
+    this.sourceWorkbookSubject.next(project?.sourceWorkbook || null);
+    this.nativeRenderSubject.next([]);
     if (!project?.rCode) this.updateRCodeFromState();
     this.closeWizard();
   }
@@ -421,6 +490,7 @@ export class RPlotSyncService {
     this.columnsSubject.next(columns);
     this.dataSubject.next(data);
     this.updateRCodeFromState();
+    this.nativeRenderSubject.next([]);
   }
 
   // Update Active Plot State
@@ -453,6 +523,9 @@ export class RPlotSyncService {
 
   // Manual Scratchpad for R Studio Users (Empty / Clean Slate)
   loadManualScratchpad() {
+    this.rSourceModeSubject.next(false);
+    this.sourceWorkbookSubject.next(null);
+    this.nativeRenderSubject.next([]);
     const emptyCols = ['Sample', 'Value'];
     const emptyRows = [
       { Sample: 'Sample 1', Value: 1 },
@@ -678,6 +751,7 @@ export class RPlotSyncService {
   }
 
   private updateRCodeFromState() {
+    if (this.rSourceMode) return;
     const plots = this.plotsSubject.value;
     const cols = this.columnsSubject.value;
     const rows = this.dataSubject.value;
@@ -858,50 +932,9 @@ export class RPlotSyncService {
 
   // Parse modified R script
   parseRCodeAndUpdateState(rawCode: string) {
-    this.rCodeSubject.next(rawCode);
-    const stateUpdate: Partial<PlotState> = {};
-
-    const titleMatch = rawCode.match(/title\s*=\s*"([^"]+)"/);
-    if (titleMatch) stateUpdate.title = titleMatch[1];
-
-    const subtitleMatch = rawCode.match(/subtitle\s*=\s*"([^"]+)"/);
-    if (subtitleMatch) stateUpdate.subtitle = subtitleMatch[1];
-
-    const xMatch = rawCode.match(/x\s*=\s*"([^"]+)"/);
-    if (xMatch) stateUpdate.xLabel = xMatch[1];
-
-    const yMatch = rawCode.match(/y\s*=\s*"([^"]+)"/);
-    if (yMatch) stateUpdate.yLabel = yMatch[1];
-
-    const fillMatch = rawCode.match(/fill\s*=\s*"([^"]+)"/);
-    if (fillMatch) stateUpdate.legendTitle = fillMatch[1];
-
-    if (rawCode.includes('geom_vline') && rawCode.includes('geom_hline')) stateUpdate.chartType = 'volcano';
-    else if (rawCode.includes('geom_violin')) stateUpdate.chartType = 'violin';
-    else if (rawCode.includes('geom_tile')) stateUpdate.chartType = 'heatmap';
-    else if (rawCode.includes('geom_histogram')) stateUpdate.chartType = 'histogram';
-    else if (rawCode.includes('geom_density')) stateUpdate.chartType = 'density';
-    else if (rawCode.includes('geom_boxplot')) stateUpdate.chartType = 'boxplot';
-    else if (rawCode.includes('geom_bar')) stateUpdate.chartType = 'bar';
-    else if (rawCode.includes('geom_smooth') || (rawCode.includes('geom_point') && !rawCode.includes('geom_line'))) stateUpdate.chartType = 'scatter';
-    else if (rawCode.includes('geom_line')) stateUpdate.chartType = 'line';
-
-    const colorsMatch = rawCode.match(/scale_fill_manual\(values\s*=\s*c\(([^)]+)\)\)/);
-    if (colorsMatch) {
-      const parsedColors = colorsMatch[1].split(',').map(c => c.trim().replace(/"/g, ''));
-      if (parsedColors.length > 0) stateUpdate.palette = parsedColors;
-    }
-
-    const legPosMatch = rawCode.match(/legend\.position\s*=\s*"([^"]+)"/);
-    if (legPosMatch) {
-      const pos = legPosMatch[1] as any;
-      if (['top', 'bottom', 'left', 'right', 'none'].includes(pos)) {
-        stateUpdate.legendPosition = pos;
-      }
-    }
-
-    if (Object.keys(stateUpdate).length > 0) {
-      this.updateActivePlotState(stateUpdate);
-    }
+    // Imported or pasted R code is the authoritative program.  Do not reduce
+    // it to a guessed chart configuration: it will run unchanged on the R
+    // renderer with the selected input workbook.
+    this.setRSourceCode(rawCode);
   }
 }

@@ -13,6 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     postgresql-client \
+    r-base \
+    r-cran-readxl \
+    r-cran-dplyr \
+    r-cran-tidyr \
+    r-cran-ggplot2 \
+    r-cran-scales \
+    r-cran-ggrepel \
+    r-cran-cowplot \
+    r-cran-patchwork \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container

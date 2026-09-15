@@ -636,6 +636,7 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
       };
       reader.readAsText(file);
     } else {
+      void this.rSyncService.setSourceWorkbook(file);
       reader.onload = (e: any) => {
         try {
           const data = new Uint8Array(e.target.result);
