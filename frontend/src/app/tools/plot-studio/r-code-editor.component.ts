@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { RPlotSyncService, PlotState } from '../../services/r-plot-sync.service';
-import { RPlotExecutionService } from '../../services/r-plot-execution.service';
 
 @Component({
   selector: 'app-r-code-editor',
@@ -18,17 +17,14 @@ import { RPlotExecutionService } from '../../services/r-plot-execution.service';
         </div>
         <div class="header-actions">
           <input #rImport type="file" accept=".r,.R" class="hidden-file-input" (change)="importRFile($event)">
-          <input #dataImport type="file" accept=".xlsx,.xls,.csv" class="hidden-file-input" (change)="importDataFile($event)">
           <button type="button" class="btn-download" (click)="rImport.click()">Import .R</button>
-          <button type="button" class="btn-download" (click)="dataImport.click()">Choose data</button>
-          <button type="button" class="btn-run" [disabled]="running" (click)="runRCode()">{{ running ? 'Running…' : 'Run R' }}</button>
           <button type="button" class="btn-download" (click)="downloadRFile()">
             Export .R Script
           </button>
         </div>
       </div>
       <div class="source-status" *ngIf="sourceMode">
-        R source mode<span *ngIf="inputName"> · input: {{ inputName }}</span>
+        R source mode · the Data Sheet on the left is the editable input
       </div>
 
       <!-- Syntax Code Area (Clean Editor) -->
@@ -153,15 +149,13 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
   plots: PlotState[] = [];
   activePlotIndex: number = 0;
   sourceMode = false;
-  inputName = '';
-  running = false;
   private subs: Subscription[] = [];
 
   get activePlot(): PlotState | undefined {
     return this.plots[this.activePlotIndex];
   }
 
-  constructor(private rSyncService: RPlotSyncService, private rExecution: RPlotExecutionService) {}
+  constructor(private rSyncService: RPlotSyncService) {}
 
   ngOnInit() {
     this.subs.push(
@@ -174,8 +168,7 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
       this.rSyncService.activePlotIndex$.subscribe(idx => {
         this.activePlotIndex = idx;
       }),
-      this.rSyncService.rSourceMode$.subscribe(mode => { this.sourceMode = mode; this.inputName = this.rSyncService.expectedInputFileName(); }),
-      this.rSyncService.sourceWorkbook$.subscribe(() => { this.inputName = this.rSyncService.expectedInputFileName(); })
+      this.rSyncService.rSourceMode$.subscribe(mode => { this.sourceMode = mode; })
     );
   }
 
@@ -184,8 +177,7 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
   }
 
   onCodeInputChange(newCode: string) {
-    this.rSyncService.setRSourceCode(newCode);
-    this.inputName = this.rSyncService.expectedInputFileName();
+    this.rSyncService.parseRCodeAndUpdateState(newCode);
   }
 
   importRFile(event: Event) {
@@ -193,31 +185,10 @@ export class RCodeEditorComponent implements OnInit, OnDestroy {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      this.rSyncService.setRSourceCode(String(reader.result || ''));
-      this.inputName = this.rSyncService.expectedInputFileName();
+      this.rSyncService.parseRCodeAndUpdateState(String(reader.result || ''));
     };
     reader.readAsText(file);
     (event.target as HTMLInputElement).value = '';
-  }
-
-  async importDataFile(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    await this.rSyncService.setSourceWorkbook(file);
-    this.inputName = this.rSyncService.expectedInputFileName() || file.name;
-    input.value = '';
-  }
-
-  async runRCode() {
-    this.running = true;
-    try {
-      await this.rExecution.runSourceCode();
-    } catch (error: any) {
-      alert(error?.error?.detail || error?.message || 'R could not render this script');
-    } finally {
-      this.running = false;
-    }
   }
 
   copyCode() {

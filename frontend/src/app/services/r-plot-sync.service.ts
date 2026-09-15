@@ -932,9 +932,45 @@ export class RPlotSyncService {
 
   // Parse modified R script
   parseRCodeAndUpdateState(rawCode: string) {
-    // Imported or pasted R code is the authoritative program.  Do not reduce
-    // it to a guessed chart configuration: it will run unchanged on the R
-    // renderer with the selected input workbook.
+    // Keep the imported source intact while using its visible declarations to
+    // seed an editable, temporary canvas model. Canvas changes never rewrite
+    // the original .R file.
     this.setRSourceCode(rawCode);
+    const stateUpdate: Partial<PlotState> = {};
+
+    const titleMatch = rawCode.match(/(?:plot_title|title)\s*=\s*["']([^"']+)["']/i);
+    if (titleMatch?.[1]) stateUpdate.title = titleMatch[1];
+    const drawLabels = [...rawCode.matchAll(/draw_label\(\s*["']([^"']+)["']/g)].map(match => match[1]);
+    if (!stateUpdate.title && drawLabels[0]) stateUpdate.title = drawLabels[0];
+    const subtitleMatch = rawCode.match(/subtitle\s*=\s*["']([^"']+)["']/i);
+    if (subtitleMatch?.[1]) stateUpdate.subtitle = subtitleMatch[1];
+    const xMatch = rawCode.match(/x\s*=\s*["']([^"']+)["']/i);
+    if (xMatch?.[1]) stateUpdate.xLabel = xMatch[1];
+    const yMatch = rawCode.match(/y\s*=\s*["']([^"']+)["']/i);
+    if (yMatch?.[1]) stateUpdate.yLabel = yMatch[1];
+
+    if (rawCode.includes('geom_vline') && rawCode.includes('geom_hline')) stateUpdate.chartType = 'volcano';
+    else if (rawCode.includes('geom_violin')) stateUpdate.chartType = 'violin';
+    else if (rawCode.includes('geom_tile')) stateUpdate.chartType = 'heatmap';
+    else if (rawCode.includes('geom_histogram')) stateUpdate.chartType = 'histogram';
+    else if (rawCode.includes('geom_density')) stateUpdate.chartType = 'density';
+    else if (rawCode.includes('geom_boxplot')) stateUpdate.chartType = 'boxplot';
+    else if (rawCode.includes('geom_bar') || rawCode.includes('geom_col')) stateUpdate.chartType = 'bar';
+    else if (rawCode.includes('geom_smooth') || rawCode.includes('geom_point')) stateUpdate.chartType = 'scatter';
+    else if (rawCode.includes('geom_line')) stateUpdate.chartType = 'line';
+
+    const colorsMatch = rawCode.match(/scale_(?:fill|color)_manual\(values\s*=\s*c\(([^)]+)\)\)/i);
+    if (colorsMatch?.[1]) {
+      const colors = colorsMatch[1].match(/#[0-9A-Fa-f]{3,8}/g) || [];
+      if (colors.length) stateUpdate.palette = colors;
+    }
+    if (!stateUpdate.palette) {
+      const colors = [...new Set(rawCode.match(/#[0-9A-Fa-f]{3,8}/g) || [])];
+      if (colors.length) stateUpdate.palette = colors.slice(0, 6);
+    }
+    const legendMatch = rawCode.match(/legend\.position\s*=\s*["'](top|bottom|left|right|none)["']/i);
+    if (legendMatch?.[1]) stateUpdate.legendPosition = legendMatch[1].toLowerCase() as PlotState['legendPosition'];
+
+    if (Object.keys(stateUpdate).length) this.updateActivePlotState(stateUpdate);
   }
 }
