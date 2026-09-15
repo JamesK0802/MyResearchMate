@@ -81,12 +81,22 @@ describe('Classifier Core Utilities', () => {
     expect(extractWindow(ref, 10, 6, 2, 4)).toBe('ijklmn');
   });
 
-  it('should score read against window using k-mer scoring', () => {
+  it('should score read against window using alignment scoring', () => {
     const window = 'AAAAAAAAAAAAAAAAAAAA';
     // Score should be 1.0 for perfect match
     expect(scoreReadAgainstWindow(window, window, 10)).toBe(1.0);
     // Score should be 0 for unrelated sequence
     expect(scoreReadAgainstWindow('CCCCCCCCCCCCCCCCCCCC', window, 10)).toBe(0.0);
+  });
+
+  it('does not collapse X-separated segments into artificial adjacent evidence', () => {
+    const window = 'AAAACCCC';
+    const segmentScore = Math.max(
+      scoreReadAgainstWindow('AAAA', window, 10),
+      scoreReadAgainstWindow('CCCC', window, 10),
+    );
+    const guardedScore = scoreReadAgainstWindow('AAAAXXXXCCCC', window, 10);
+    expect(guardedScore).toBeCloseTo(segmentScore);
   });
 
   it('should exclude cut-site mutations when exclusionFlank or dynamic exclusion is active', () => {
