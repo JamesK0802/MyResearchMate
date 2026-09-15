@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { experimentId, experimentRoute } from './experiment-route';
+import { experimentId, experimentRoute, planExperimentRoute } from './experiment-route';
 
 describe('linear experiment route', () => {
   const graph = () => [
@@ -12,6 +12,18 @@ describe('linear experiment route', () => {
   ];
   it('waits at unresolved forks rather than listing all branches', () => {
     expect(experimentRoute(graph()).map(s=>s.protocol_node_id)).toEqual(['a']);
+  });
+  it('requires every reachable choice before creation', () => {
+    const steps=graph();
+    expect(planExperimentRoute(steps,{}).fork?.protocol_node_id).toBe('a');
+    expect(planExperimentRoute(steps,{a:'c'}).fork?.protocol_node_id).toBe('d');
+    const plan=planExperimentRoute(steps,{a:'c',d:'f'});
+    expect(plan.fork).toBeUndefined();
+    expect(plan.route.map(s=>s.protocol_node_id)).toEqual(['a','c','d','f']);
+  });
+  it('rejects cycles and broken links before saving an incomplete snapshot', () => {
+    expect(()=>planExperimentRoute([{protocol_node_id:'a',protocol_next_node_ids:['a']}],{})).toThrow('loops');
+    expect(()=>planExperimentRoute([{protocol_node_id:'a',protocol_next_node_ids:['missing']}],{})).toThrow('missing');
   });
   it('keeps one path through reconverging and nested forks after save/reload', () => {
     const steps=graph(); steps[0].branch_selected_node_ids=['c']; steps[3].branch_selected_node_ids=['f'];

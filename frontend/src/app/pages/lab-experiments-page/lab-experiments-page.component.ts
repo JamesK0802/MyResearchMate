@@ -9,7 +9,7 @@ import { NamuNode, NamuTree } from '../../models/namu.model';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
 import { AuthService } from '../../services/auth.service';
-import { experimentId, experimentRoute } from '../../utils/experiment-route';
+import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/experiment-route';
 import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
 
 type ExperimentTab = 'current' | 'completed';
@@ -23,6 +23,8 @@ interface ExperimentStep {
   branch_selected_node_ids?: string[];
   title: string;
   description?: string;
+  instructions?: string[];
+  node_snapshot?: NamuNode;
   status: StepStatus;
   comments?: string[];
   logs?: Array<{ id: string; text: string; created_at: string; kind?: string }>;
@@ -54,14 +56,18 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   selectedExperiment: any = null;
   completionExperiment: any = null;
   completionScore = 4;
-  branchDecision: { experiment: any; step: ExperimentStep } | null = null;
-  branchSelections: string[] = [];
   previewImageUrl: string | null = null;
-  uploadingStepId: string | null = null;
   syncStates: Record<string, 'saved' | 'saving' | 'error'> = {};
   noteDrafts: Record<string, string> = {};
   createForm = this.emptyCreateForm();
   createError = '';
+  pendingCreation:any = null;
+  creationChoices:Record<string,string> = {};
+  creationFork:ExperimentStep | null = null;
+  creationOptions:ExperimentStep[] = [];
+  creationChoice = '';
+  memoComposerOpen = false;
+  memoText = '';
   private saveSubject = new Subject<any>();
   private saveSubscription?: Subscription;
   private pendingSaves = new Map<string, any>();
@@ -147,6 +153,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   private normalizeExperiment(exp: any) {
     const sourceSteps = exp.steps || [];
     exp.steps = sourceSteps.map((step: any, index: number) => ({
+      ...step,
       id: step.id || experimentId(), title: step.title || `Step ${index + 1}`,
       description: step.description || '', status: step.status || (index === 0 ? 'active' : 'pending'),
       comments: step.comments || [], logs: step.logs || [], images: step.images || [],
@@ -158,6 +165,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     }));
     exp.run_notes = exp.run_notes || '';
     exp.samples = exp.samples || [];
+    exp.run_memos = exp.run_memos || [];
     return exp;
   }
 
@@ -184,7 +192,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     if (!this.createForm.title && this.selectedProtocol) this.createForm.title = `${this.selectedProtocol.title} run`;
   }
 
-  openCreatePanel() { this.createForm = this.emptyCreateForm(); this.createError = ''; this.showCreatePanel = true; }
+  openCreatePanel() { this.cancelCreationRoute(); this.createForm = this.emptyCreateForm(); this.createError = ''; this.showCreatePanel = true; }
   closeCreatePanel() { if (!this.creating) this.showCreatePanel = false; }
 
   async createExperiment() {
@@ -198,19 +206,49 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     try {
       const steps = this.buildProtocolSteps({...root, rootNodeId:this.createForm.startNodeId || root.rootNodeId});
       if (!steps.length) throw new Error('This workflow has no reachable steps. Choose another starting point.');
-      await this.notebook.createExperiment({
+      this.pendingCreation = {
         title: this.createForm.title.trim(), description: this.createForm.description.trim(),
         samples: this.createForm.samples.split(',').map(value => value.trim()).filter(Boolean), tags: [], work_type: '',
         protocol_tree_id: protocol.id, protocol_title: protocol.title, protocol_root_id: root.id,
-        protocol_root_name: root.name, protocol_snapshot_updated_at: protocol.updated_at, run_notes: '', steps
-      });
-      this.showCreatePanel = false;
-      this.activeTab = 'current';
-      await this.loadExperiments();
+        protocol_root_name: root.name, protocol_snapshot_updated_at: protocol.updated_at, run_notes: '', run_memos:[], steps
+      };
+      this.creationChoices = {};
+      await this.advanceCreationRoute();
     } catch (error: any) {
       console.error(error);
       this.createError = error?.error?.detail || error?.message || 'Could not create the experiment log.';
     } finally { this.creating = false; this.cdr.detectChanges(); }
+  }
+
+  cancelCreationRoute() {
+    if (this.creating) return;
+    this.pendingCreation = null; this.creationFork = null; this.creationOptions = []; this.creationChoice = ''; this.creationChoices = {};
+  }
+
+  async chooseCreationPath() {
+    if (this.creating || !this.creationFork || !this.creationChoice) return;
+    this.creationChoices[this.creationFork.protocol_node_id!] = this.creationChoice;
+    this.creating = true;
+    try { await this.advanceCreationRoute(); }
+    catch (error:any) { this.createError = error?.error?.detail || error.message || 'Could not create experiment.'; }
+    finally { this.creating = false; this.cdr.detectChanges(); }
+  }
+
+  private async advanceCreationRoute() {
+    const plan = planExperimentRoute<ExperimentStep>(this.pendingCreation.steps, this.creationChoices);
+    if (plan.fork) {
+      this.creationFork = plan.fork; this.creationOptions = plan.options; this.creationChoice = ''; return;
+    }
+    // Persist only the resolved route, with its own independent protocol content.
+    const steps = plan.route.map((step,index) => ({...step,
+      protocol_next_node_ids: plan.route[index+1] ? [plan.route[index+1].protocol_node_id!] : [],
+      protocol_parent_node_ids: index ? [plan.route[index-1].protocol_node_id!] : [],
+      branch_selected_node_ids: [], status:'pending', started_at:null
+    }));
+    await this.notebook.createExperiment({...this.pendingCreation,steps});
+    this.pendingCreation = null; this.creationFork = null;
+    this.showCreatePanel = false; this.activeTab = 'current';
+    await this.loadExperiments();
   }
 
   private buildProtocolSteps(tree: NamuTree): ExperimentStep[] {
@@ -233,6 +271,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
       id: experimentId(), protocol_node_id: node.id, title: node.title || `Step ${index + 1}`,
       protocol_next_node_ids: [...(node.nextNodes || [])], protocol_parent_node_ids: parentIds.get(node.id) || [], branch_selected_node_ids: [],
       description: [node.description, ...(node.steps || []).map(step => `• ${step}`)].filter(Boolean).join('\n'),
+      instructions: [...(node.steps || [])], node_snapshot:JSON.parse(JSON.stringify(node)),
       status: index === 0 ? 'active' : 'pending', comments: [], logs: [], images: [],
       started_at: index === 0 ? new Date().toISOString() : null, completed_at: null, updated_at: new Date().toISOString()
     }));
@@ -251,7 +290,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
-  openExperiment(exp: any) { this.selectedExperiment = exp; this.noteDrafts = {}; }
+  openExperiment(exp: any) { this.selectedExperiment = exp; this.noteDrafts = {}; this.memoComposerOpen=false; this.memoText=''; }
   closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; }
 
   onExperimentChange(exp: any) {
@@ -269,6 +308,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
         protocol_tree_id: exp.protocol_tree_id, protocol_title: exp.protocol_title || '', protocol_root_id: exp.protocol_root_id,
         protocol_root_name: exp.protocol_root_name || '', protocol_snapshot_updated_at: exp.protocol_snapshot_updated_at,
         run_notes: exp.run_notes || '', steps: exp.steps || []
+        ,run_memos: exp.run_memos || []
       });
       exp.updated_at = new Date().toISOString();
       this.syncStates[exp.id] = 'saved';
@@ -282,115 +322,23 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  setStepStatus(exp: any, step: ExperimentStep, status: StepStatus) {
-    if (status === 'completed' && this.nextStep(exp)?.id !== step.id) return;
-    if (status === 'completed' && (step.protocol_next_node_ids?.length || 0) > 1 && !step.branch_selected_node_ids?.length) {
-      this.branchDecision = { experiment: exp, step };
-      this.branchSelections = (step.branch_selected_node_ids || []).slice(0,1);
-      return;
-    }
-    this.applyStepStatus(exp, step, status, step.branch_selected_node_ids?.length ? step.branch_selected_node_ids.slice(0,1) : step.protocol_next_node_ids || []);
+
+  addMemo() {
+    if (!this.selectedExperiment || !this.memoText.trim() || this.activeTab !== 'current') return;
+    this.selectedExperiment.run_memos.push({id:experimentId(),text:this.memoText.trim(),created_at:new Date().toISOString()});
+    this.onExperimentChange(this.selectedExperiment);
+    this.flushPendingSaves();
+    this.memoText=''; this.memoComposerOpen=false;
   }
 
-  private applyStepStatus(exp: any, step: ExperimentStep, status: StepStatus, chosenNextIds: string[]) {
-    const now = new Date().toISOString();
-    step.status = status; step.updated_at = now;
-    if (status === 'active' && !step.started_at) step.started_at = now;
-    step.completed_at = status === 'completed' ? now : null;
-    step.logs = step.logs || [];
-    step.logs.push({ id: experimentId(), text: status === 'completed' ? 'Step completed' : status === 'active' ? 'Step started' : 'Step reopened', created_at: now, kind: 'status' });
-    if (status === 'completed') {
-      step.branch_selected_node_ids = chosenNextIds;
-      if ((step.protocol_next_node_ids?.length || 0) > 1) {
-        const chosen = (exp.steps as ExperimentStep[]).find(item => item.protocol_node_id === chosenNextIds[0]);
-        step.logs.push({id:experimentId(), text:`Path selected: ${chosen?.title || chosenNextIds[0]}`, created_at:now, kind:'branch'});
-      }
-      this.applyBranchSelection(exp, step, chosenNextIds);
-      this.activateReadySteps(exp, now);
-    }
-    this.onExperimentChange(exp);
+  protocolInstructions(step:ExperimentStep):string[] {
+    return step.instructions || (step.description || '').split('\n').map(line=>line.replace(/^•\s*/, '')).filter(Boolean);
   }
 
-  branchOptions(step: ExperimentStep): ExperimentStep[] {
-    const ids = new Set(step.protocol_next_node_ids || []);
-    return (this.branchDecision?.experiment?.steps || []).filter((candidate: ExperimentStep) => ids.has(candidate.protocol_node_id || ''));
-  }
+  legacyEvidence(exp:any):ExperimentStep[] { return (exp.steps || []).filter((s:ExperimentStep) => s.images?.length || s.comments?.length || s.logs?.some(log=>log.kind !== 'status')); }
 
-  toggleBranch(nodeId: string) {
-    this.branchSelections = [nodeId];
-  }
 
-  confirmBranchSelection() {
-    if (!this.branchDecision || this.branchSelections.length !== 1) return;
-    const { experiment, step } = this.branchDecision;
-    this.applyStepStatus(experiment, step, 'completed', this.branchSelections);
-    this.branchDecision = null;
-    this.branchSelections = [];
-  }
-
-  private applyBranchSelection(exp: any, step: ExperimentStep, chosenIds: string[]) {
-    const allNext = step.protocol_next_node_ids || [];
-    if (allNext.length <= 1) return;
-    const chosenReachable = this.reachableNodeIds(exp, chosenIds);
-    const rejectedReachable = this.reachableNodeIds(exp, allNext.filter(id => !chosenIds.includes(id)));
-    for (const candidate of exp.steps as ExperimentStep[]) {
-      const nodeId = candidate.protocol_node_id || '';
-      if (chosenReachable.has(nodeId) && candidate.status === 'skipped') {
-        candidate.status = 'pending';
-        candidate.updated_at = new Date().toISOString();
-      }
-      if (rejectedReachable.has(nodeId) && !chosenReachable.has(nodeId) && candidate.status !== 'completed') {
-        candidate.status = 'skipped';
-        candidate.updated_at = new Date().toISOString();
-      }
-    }
-  }
-
-  private reachableNodeIds(exp: any, startingIds: string[]): Set<string> {
-    const byId = new Map<string, ExperimentStep>((exp.steps || []).map((candidate: ExperimentStep) => [candidate.protocol_node_id || '', candidate]));
-    const found = new Set<string>();
-    const visit = (id: string) => {
-      if (!id || found.has(id)) return;
-      found.add(id);
-      for (const next of byId.get(id)?.protocol_next_node_ids || []) visit(next);
-    };
-    startingIds.forEach(visit);
-    return found;
-  }
-
-  private activateReadySteps(exp: any, now: string) {
-    const next = this.nextStep(exp);
-    if (next && next.status === 'pending') {
-      next.status = 'active'; next.started_at ||= now; next.updated_at = now;
-    }
-  }
-
-  addStepNote(exp: any, step: ExperimentStep) {
-    const text = (this.noteDrafts[step.id] || '').trim();
-    if (!text) return;
-    step.logs = step.logs || [];
-    step.logs.push({ id: experimentId(), text, created_at: new Date().toISOString(), kind: 'note' });
-    this.noteDrafts[step.id] = '';
-    this.onExperimentChange(exp);
-  }
-
-  async uploadStepImage(event: Event, exp: any, step: ExperimentStep) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0]; input.value = '';
-    if (!file) return;
-    this.uploadingStepId = step.id;
-    try {
-      const uploaded = await this.notebook.uploadAsset(file);
-      step.images = step.images || []; step.images.push(uploaded.url);
-      step.logs = step.logs || [];
-      step.logs.push({ id: experimentId(), text: `Attached ${file.name}`, created_at: new Date().toISOString(), kind: 'attachment' });
-      this.onExperimentChange(exp);
-    } catch (error) {
-      console.error(error); alert('Could not attach this image.');
-    } finally { this.uploadingStepId = null; }
-  }
-
-  openCompletion(exp: any) { this.completionExperiment = exp; this.completionScore = 4; }
+  openCompletion(exp: any) { this.completionExperiment = exp; this.completionScore = 0; }
 
   async completeExperiment() {
     if (!this.completionExperiment) return;

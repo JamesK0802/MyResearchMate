@@ -50,6 +50,7 @@ class ExperimentCreate(BaseModel):
     protocol_root_name: str = ""
     protocol_snapshot_updated_at: Optional[str] = None
     run_notes: str = ""
+    run_memos: List[Dict[str, Any]] = Field(default_factory=list)
     steps: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ExperimentStepUpdate(BaseModel):
@@ -74,6 +75,7 @@ class ExperimentUpdate(BaseModel):
     protocol_root_name: Optional[str] = None
     protocol_snapshot_updated_at: Optional[str] = None
     run_notes: Optional[str] = None
+    run_memos: Optional[List[Dict[str, Any]]] = None
 
 class ArchiveRequest(BaseModel):
     success_score: int
@@ -699,6 +701,7 @@ async def create_experiment(exp: ExperimentCreate, current_user: dict = Depends(
         "protocol_root_name": exp.protocol_root_name,
         "protocol_snapshot_updated_at": exp.protocol_snapshot_updated_at,
         "run_notes": exp.run_notes,
+        "run_memos": exp.run_memos,
         "steps": steps,
         "created_at": now,
         "updated_at": now
@@ -782,6 +785,7 @@ async def update_experiment(
     if exp_update.protocol_root_name is not None: data["protocol_root_name"] = exp_update.protocol_root_name
     if exp_update.protocol_snapshot_updated_at is not None: data["protocol_snapshot_updated_at"] = exp_update.protocol_snapshot_updated_at
     if exp_update.run_notes is not None: data["run_notes"] = exp_update.run_notes
+    if exp_update.run_memos is not None: data["run_memos"] = exp_update.run_memos
     if exp_update.steps is not None: 
         # Ensure all steps have IDs and required fields
         for step in exp_update.steps:
