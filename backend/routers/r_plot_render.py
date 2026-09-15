@@ -49,7 +49,10 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_CPU, (60, 60))
     resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+    # R opens package metadata, fonts, and graphics devices concurrently.
+    # 64 is too low for ordinary ggplot2/cowplot workflows; 512 remains a
+    # bounded limit while allowing a normal R Studio-compatible render.
+    resource.setrlimit(resource.RLIMIT_NOFILE, (512, 512))
     if os.geteuid() == 0:
         os.setgid(65534)
         os.setuid(65534)
