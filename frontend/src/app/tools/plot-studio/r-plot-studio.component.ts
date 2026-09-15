@@ -641,6 +641,11 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
+          const workbookSheets: Record<string, Array<Record<string, any>>> = {};
+          workbook.SheetNames.forEach(sheetName => {
+            workbookSheets[sheetName] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) as Array<Record<string, any>>;
+          });
+          this.rSyncService.setWorkbookSheets(workbookSheets);
           const sheetName = workbook.SheetNames[0];
           const json: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
 

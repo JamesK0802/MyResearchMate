@@ -514,6 +514,21 @@ export class RPlotPreviewComponent implements OnInit, OnChanges {
         const catRows = activeData.filter(r => String(r[xCol]) === cat);
 
         if (groups.length > 1 && grpCol) {
+          if (s.stackBars) {
+            const barWidthPx = Math.max(2, categoryWidth * s.barWidth);
+            const x = catCenterX - (barWidthPx / 2);
+            let stacked = 0;
+            groups.forEach((g, gIdx) => {
+              const row = catRows.find(r => String(r[grpCol]) === g);
+              if (!row) return;
+              const value = Number(row[yCol]) || 0;
+              const top = stacked + value;
+              const height = Math.max(0, ((top - stacked) / yCeil) * this.plotHeight);
+              this.renderItems.push({ x, y: this.svgHeight - this.margin.bottom - ((top / yCeil) * this.plotHeight), width: Math.max(2, barWidthPx - 2), height, centerX: x + (barWidthPx / 2), color: palette[gIdx % palette.length] });
+              stacked = top;
+            });
+            return;
+          }
           const subBarWidth = (categoryWidth * s.barWidth) / groups.length;
           const startX = catCenterX - ((subBarWidth * groups.length) / 2);
 

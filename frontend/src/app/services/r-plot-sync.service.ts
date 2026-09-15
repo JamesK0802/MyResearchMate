@@ -93,6 +93,9 @@ export interface PlotState {
   yLabelOffsetY?: number;
   tagOffsetX?: number;
   tagOffsetY?: number;
+  /** A code-imported panel may use a derived table while the Data Sheet keeps the source workbook visible. */
+  dataRows?: Array<Record<string, any>>;
+  stackBars?: boolean;
 }
 
 export interface PanelConfig {
@@ -210,6 +213,7 @@ export class RPlotSyncService {
   private rSourceModeSubject = new BehaviorSubject<boolean>(false);
   private sourceWorkbookSubject = new BehaviorSubject<RSourceWorkbook | null>(null);
   private nativeRenderSubject = new BehaviorSubject<NativeRImage[]>([]);
+  private workbookSheetsSubject = new BehaviorSubject<Record<string, Array<Record<string, any>>>>({});
   private wizardOpenSubject = new BehaviorSubject<boolean>(false);
   private viewModeSubject = new BehaviorSubject<'single' | 'grid'>('single');
 
@@ -253,6 +257,14 @@ export class RPlotSyncService {
   get rCode(): string { return this.rCodeSubject.value; }
   get rSourceMode(): boolean { return this.rSourceModeSubject.value; }
   get sourceWorkbook(): RSourceWorkbook | null { return this.sourceWorkbookSubject.value; }
+  get workbookSheets(): Record<string, Array<Record<string, any>>> { return this.workbookSheetsSubject.value; }
+
+  setWorkbookSheets(sheets: Record<string, Array<Record<string, any>>>) {
+    this.workbookSheetsSubject.next(sheets);
+    if (this.rSourceMode && this.rCode.includes('p_summary_panel') && this.rCode.includes('p_concordance_panel')) {
+      this.importMutationConsistencyFigure();
+    }
+  }
 
   setRSourceCode(code: string) {
     this.rSourceModeSubject.next(true);
@@ -930,12 +942,60 @@ export class RPlotSyncService {
     this.rCodeSubject.next(code);
   }
 
+  /** Build editable panels for the supplied mutation-consistency R template.
+   * The code itself remains the source file; this only mirrors its declared
+   * data transformations and cowplot panel structure in the canvas. */
+  private importMutationConsistencyFigure(): boolean {
+    const summary = this.workbookSheets['Mutation_Summary'];
+    const groups = this.workbookSheets['Mutation_Groups'];
+    if (!summary?.length || !groups?.length) return false;
+
+    const palette = ['#2CA25F', '#3182BD', '#F28E2B', '#DE4B3E'];
+    const classColumns: Array<[string, string]> = [
+      ['no_indel_pct', 'No indel'], ['substitution_pct', 'Substitution'],
+      ['in_frame_pct', 'In-frame indel'], ['out_of_frame_pct', 'Out-of-frame indel']
+    ];
+    const summaryRows = (gene: string) => summary
+      .filter(row => String(row['gene']).trim().toUpperCase() === gene)
+      .flatMap(row => classColumns.map(([column, mutation_class]) => ({
+        sample_label: String(row['source_type']) === 'single_reference' ? 'Single-reference' : 'Pooled-assigned',
+        mutation_class, percent: Number(row[column]) || 0
+      })));
+
+    const signatures = new Map<string, Record<string, any>>();
+    groups.forEach(row => {
+      const gene = String(row['gene'] || '').trim().toUpperCase();
+      const size = Number(row['indel_size_bp']);
+      const signature = size === 0 && String(row['mutation_class']) === 'No indel'
+        ? 'WT' : (size > 0 && row['group_sequence'] ? `+${size}(${row['group_sequence']})` : `${size} bp`);
+      const key = `${gene}:${signature}:${row['mutation_class']}`;
+      const current = signatures.get(key) || { gene, group_signature: signature, mutation_class: row['mutation_class'] };
+      current[String(row['source_type'])] = Number(row['percent']) || 0;
+      signatures.set(key, current);
+    });
+    const concordanceRows = (gene: string) => [...signatures.values()]
+      .filter(row => row['gene'] === gene && Number.isFinite(row['single_reference']) && Number.isFinite(row['pooled_assigned']));
+
+    const base = { ...this.activePlot, palette, theme: 'classic' as const, legendPosition: 'bottom' as const, figureWidthIn: 6.4, figureHeightIn: 4.6 };
+    const panels: PlotState[] = [
+      { ...base, id: 'mutation-cpc', figureTag: 'A1', title: 'CPC', subtitle: 'Mutation-class composition', chartType: 'bar', xColumn: 'sample_label', yColumn: 'percent', groupColumn: 'mutation_class', xLabel: '', yLabel: 'Reads (%)', yMin: 0, yMax: 100, stackBars: true, dataRows: summaryRows('CPC') },
+      { ...base, id: 'mutation-try', figureTag: 'A2', title: 'TRY', subtitle: 'Mutation-class composition', chartType: 'bar', xColumn: 'sample_label', yColumn: 'percent', groupColumn: 'mutation_class', xLabel: '', yLabel: '', yMin: 0, yMax: 100, stackBars: true, dataRows: summaryRows('TRY') },
+      { ...base, id: 'concordance-cpc', figureTag: 'B1', title: 'CPC', subtitle: 'Sequence-defined mutation signatures', chartType: 'scatter', xColumn: 'single_reference', yColumn: 'pooled_assigned', groupColumn: 'mutation_class', labelColumn: 'group_signature', xLabel: 'Single-reference frequency (%)', yLabel: 'Pooled-assigned frequency (%)', yMin: 0, yMax: 50, dataRows: concordanceRows('CPC') },
+      { ...base, id: 'concordance-try', figureTag: 'B2', title: 'TRY', subtitle: 'Sequence-defined mutation signatures', chartType: 'scatter', xColumn: 'single_reference', yColumn: 'pooled_assigned', groupColumn: 'mutation_class', labelColumn: 'group_signature', xLabel: 'Single-reference frequency (%)', yLabel: 'Pooled-assigned frequency (%)', yMin: 0, yMax: 50, dataRows: concordanceRows('TRY') }
+    ];
+    this.plotsSubject.next(panels);
+    this.activePlotIndexSubject.next(0);
+    this.viewModeSubject.next('grid');
+    return true;
+  }
+
   // Parse modified R script
   parseRCodeAndUpdateState(rawCode: string) {
     // Keep the imported source intact while using its visible declarations to
     // seed an editable, temporary canvas model. Canvas changes never rewrite
     // the original .R file.
     this.setRSourceCode(rawCode);
+    if (rawCode.includes('p_summary_panel') && rawCode.includes('p_concordance_panel') && this.importMutationConsistencyFigure()) return;
     const stateUpdate: Partial<PlotState> = {};
 
     const titleMatch = rawCode.match(/(?:plot_title|title)\s*=\s*["']([^"']+)["']/i);

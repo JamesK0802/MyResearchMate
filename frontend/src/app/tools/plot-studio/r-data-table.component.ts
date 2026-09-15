@@ -588,6 +588,11 @@ export class RDataTableComponent implements OnInit {
         this.operationProgress.update(progressId, { detail: 'Parsing spreadsheet rows…', percent: 72 });
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
+        const workbookSheets: Record<string, Array<Record<string, any>>> = {};
+        workbook.SheetNames.forEach(sheetName => {
+          workbookSheets[sheetName] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) as Array<Record<string, any>>;
+        });
+        this.rSyncService.setWorkbookSheets(workbookSheets);
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });

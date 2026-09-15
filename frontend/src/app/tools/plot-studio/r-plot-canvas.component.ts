@@ -716,7 +716,7 @@ interface PlotHelpCard extends PlotExample {
 
             <!-- SVG Preview of this Panel -->
             <div class="cell-preview-wrap" (click)="selectPlotTab(pIdx)">
-              <app-r-plot-preview [plotState]="p" [data]="data"></app-r-plot-preview>
+              <app-r-plot-preview [plotState]="p" [data]="p.dataRows || data"></app-r-plot-preview>
             </div>
           </div>
 
@@ -2302,7 +2302,9 @@ export class RPlotCanvasComponent implements OnInit {
     // Keep the on-screen artboard in the same aspect ratio as the exported R figure.
     this.svgHeight = Math.max(300, Math.min(760, Math.round(this.svgWidth * this.figureHeightIn / this.figureWidthIn)));
 
-    const activeData = (this.data && this.data.length > 0)
+    const activeData = (s.dataRows && s.dataRows.length > 0)
+      ? s.dataRows
+      : (this.data && this.data.length > 0)
       ? this.data
       : [
           { Sample: 'Group A', Value: 12 },
@@ -2445,6 +2447,24 @@ export class RPlotCanvasComponent implements OnInit {
         const catRows = activeData.filter(r => String(r[xCol]) === cat);
 
         if (groups.length > 1 && grpCol) {
+          if (s.stackBars) {
+            const barWidthPx = Math.max(2, categoryWidth * s.barWidth);
+            const x = catCenterX - (barWidthPx / 2);
+            let stacked = 0;
+            groups.forEach((g, gIdx) => {
+              const row = catRows.find(r => String(r[grpCol]) === g);
+              if (!row) return;
+              const value = Number(row[yCol]) || 0;
+              const top = stacked + value;
+              this.renderItems.push({
+                x, y: this.valueToY(top), width: Math.max(2, barWidthPx - 2),
+                height: Math.max(0, this.valueToY(stacked) - this.valueToY(top)),
+                centerX: x + (barWidthPx / 2), color: palette[gIdx % palette.length]
+              });
+              stacked = top;
+            });
+            return;
+          }
           const subBarWidth = (categoryWidth * s.barWidth) / groups.length;
           const startX = catCenterX - ((subBarWidth * groups.length) / 2);
 
