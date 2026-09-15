@@ -6,19 +6,28 @@ import { FormsModule } from '@angular/forms';
   selector:'app-my-data-list-controls', standalone:true, imports:[CommonModule, FormsModule],
   template:`
     <div class="controls">
-      <div class="tabs" role="tablist" aria-label="Saved data filter">
+      <div *ngIf="tabs.length" class="tabs" role="tablist" aria-label="Saved data filter">
         <button *ngFor="let tab of tabs" role="tab" [attr.aria-selected]="activeTab === tab.value" [class.active]="activeTab === tab.value" (click)="tabChange.emit(tab.value)">{{tab.label}}</button>
       </div>
-      <div class="actions">
+      <div class="actions" *ngIf="searchable || sortOptions.length || createLabel">
         <input *ngIf="searchable" type="search" [ngModel]="query" (ngModelChange)="queryChange.emit($event)" placeholder="Search" aria-label="Search saved data">
-        <label><select [ngModel]="sort" (ngModelChange)="sortChange.emit($event)" aria-label="Sort saved data"><option *ngFor="let option of sortOptions" [value]="option.value">{{option.label}}</option></select></label>
+        <label *ngIf="sortOptions.length"><select [ngModel]="sort" (ngModelChange)="sortChange.emit($event)" aria-label="Sort saved data"><option *ngFor="let option of sortOptions" [value]="option.value">{{option.label}}</option></select></label>
         <button *ngIf="createLabel" class="create" (click)="create.emit()">{{createLabel}}</button>
       </div>
     </div>`,
   styles:[`
-    .controls .actions select,.controls .actions .create{height:42px;min-height:42px;box-sizing:border-box;margin:0;align-self:center}.controls .actions label{margin:0;align-self:center}
-    @media(max-width:720px){.controls .actions{display:grid;grid-template-columns:minmax(0,1fr) auto}.controls .actions>input{grid-column:1/-1;width:100%;max-width:none}.controls .actions>label{min-width:0}.controls .actions select{width:100%;max-width:none;font-size:.85rem}.controls .actions .create{min-width:72px;white-space:nowrap}.controls .actions>label:only-child{grid-column:1/-1}}
-    :host{display:block;margin-bottom:20px}.controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.tabs{display:flex;border-bottom:1px solid var(--color-border);gap:4px}.tabs button{border:0;border-bottom:2px solid transparent;background:transparent;padding:12px;color:var(--color-text-secondary);font:inherit;cursor:pointer}.tabs button.active{color:var(--color-primary);border-color:var(--color-primary);font-weight:700}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.actions label{display:flex;gap:8px;align-items:center;font-size:.85rem}.actions input,.actions select{min-width:0;max-width:180px;padding:10px;border:1px solid var(--color-border);border-radius:8px;background:white;font:inherit}.create{padding:11px;border:0;border-radius:8px;background:var(--color-primary);color:white;font-weight:700;cursor:pointer}@media(max-width:720px){.controls,.tabs,.actions{width:100%}.tabs button{flex:1;padding:10px 6px;font-size:.8rem}.actions>*{flex:1}.actions input{max-width:100%;width:100px}.actions select{width:100%;max-width:100%}.create{min-height:42px}}
+    :host{display:block;margin-bottom:var(--space-4)}
+    .controls{display:flex;flex-direction:column;gap:12px}
+    .tabs{display:flex;border-bottom:1px solid var(--color-border)}
+    .tabs button{flex:1;min-width:0;padding:10px var(--space-6);border:0;border-bottom:2px solid transparent;background:none;font-family:var(--font-sans);font-weight:var(--fw-semi);font-size:var(--text-base);color:var(--color-text-secondary);cursor:pointer}
+    .tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}
+    .actions{display:flex;gap:8px;align-items:center}
+    .actions label{flex:1;min-width:0;margin:0}
+    .actions input,.actions select,.create{box-sizing:border-box;height:40px;min-height:40px;margin:0;padding:8px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-family:var(--font-sans);font-size:var(--text-sm);line-height:1.2}
+    .actions input{flex:1;min-width:0;background:var(--color-surface)}
+    .actions select{width:100%;background:var(--color-surface)}
+    .create{border:0;background:var(--color-primary);color:white;font-weight:var(--fw-bold);cursor:pointer;white-space:nowrap}
+    @media(max-width:600px){:host{margin-bottom:12px}.tabs button{font-size:.72rem;line-height:1.15;padding:9px 4px}.actions{flex-wrap:wrap}.actions input{flex-basis:100%;width:100%}.actions input,.actions select,.create{height:36px;min-height:36px;font-size:.76rem}.create{min-width:72px}}
   `]
 })
 export class MyDataListControlsComponent {

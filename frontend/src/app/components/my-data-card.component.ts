@@ -13,11 +13,9 @@ export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'a
       <button *ngIf="showPin" type="button" class="pin" [class.pinned]="pinned" (click)="pin.emit($event)" [attr.aria-label]="pinned ? 'Unpin from top' : 'Pin to top'">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Zm3 11h2v7l-1-1-1 1v-7Z"></path></svg>
       </button>
-      <div class="heading">
-        <div class="title-wrap">
-          <div class="badges" *ngIf="badges.length"><span *ngFor="let badge of badges" [class]="'badge ' + (badge.tone || 'owner')">{{ badge.label }}</span></div>
-          <h2>{{ title || 'Untitled' }}</h2>
-        </div>
+      <div class="heading" [class.has-pin]="showPin">
+        <h2>{{ title || 'Untitled' }}</h2>
+        <div class="badges" *ngIf="badges.length"><span *ngFor="let badge of badges" [class]="'badge ' + (badge.tone || 'owner')">{{ badge.label }}</span></div>
         <span *ngIf="syncLabel" class="sync" [class.error]="syncError">{{ syncLabel }}</span>
       </div>
       <p *ngIf="description" class="description">{{ description }}</p>
@@ -45,25 +43,25 @@ export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'a
     .pin { position:absolute; z-index:1; top:var(--space-4); right:var(--space-4); width:24px; height:24px; padding:4px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-text-tertiary); opacity:.65; cursor:pointer; }
     .pin svg { display:block; width:16px; height:16px; transform:rotate(35deg); }
     .pin.pinned { color:var(--color-primary); background:var(--color-primary-subtle); opacity:1; }
-    .heading { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding-right:26px; }
-    .title-wrap { min-width:0; }
-    h2 { margin:7px 0 0; overflow:hidden; color:var(--color-text-primary); font-size:var(--text-lg); line-height:var(--lh-tight); text-overflow:ellipsis; white-space:nowrap; }
-    .badges { display:flex; flex-wrap:wrap; gap:5px; }
+    .heading { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:var(--space-3); align-items:center; }
+    .heading.has-pin { padding-right:24px; }
+    h2 { min-width:0; margin:0; overflow:hidden; color:var(--color-text-primary); font-size:var(--text-lg); line-height:var(--lh-tight); text-overflow:ellipsis; white-space:nowrap; }
+    .badges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; flex-shrink:0; max-width:45%; }
     .badge { display:inline-flex; padding:3px 8px; border:1px solid; border-radius:999px; font-size:.61rem; font-weight:900; letter-spacing:.04em; }
     .badge.owner,.badge.active { border-color:var(--color-primary-border); background:var(--color-primary-subtle); color:var(--color-primary); }
     .badge.shared { border-color:#bfdbfe; background:#dbeafe; color:#1e40af; }
     .badge.completed { border-color:#cbd5e1; background:#e2e8f0; color:#475569; }
     .sync { flex:none; color:#15803d; font-size:.68rem; font-weight:800; }.sync.error{color:#dc2626}
     .description { min-height:42px; margin:11px 0; display:-webkit-box; overflow:hidden; color:var(--color-text-secondary); font-size:.82rem; line-height:1.55; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-    .meta { display:flex; flex-wrap:wrap; gap:7px 16px; margin:12px 0; color:var(--color-text-secondary); font-size:var(--text-sm); font-weight:var(--fw-medium); }
+    .meta { display:flex; flex-wrap:wrap; gap:7px 16px; margin:0 0 var(--space-5); color:var(--color-text-secondary); font-size:var(--text-sm); font-weight:var(--fw-medium); }
     .content { display:block; }
     .actions { display:flex; gap:var(--space-2); margin-top:auto; padding-top:var(--space-5); }
-    .actions button { min-height:40px; border-radius:var(--radius-md); font:inherit; font-weight:var(--fw-bold); cursor:pointer; }
-    .primary { flex:1; padding:9px 12px; border:0; background:var(--color-primary); color:#fff; }
+    .actions button { min-height:40px; border-radius:var(--radius-md); font-family:var(--font-sans); font-size:var(--text-base); line-height:1.2; font-weight:var(--fw-bold); cursor:pointer; }
+    .primary { min-width:0; flex:1; padding:9px 12px; border:0; background:var(--color-primary); color:#fff; }
     .secondary { padding:8px 11px; border:1px solid #86c99f; background:#f0fdf4; color:#15803d; }
     .icon { display:grid; place-items:center; flex:0 0 40px; width:40px; height:40px; padding:9px; box-sizing:border-box; border-radius:var(--radius-md); }
     .icon svg { width:18px; height:18px; }.share{border:1px solid var(--color-border-light);background:var(--color-surface-alt);color:var(--color-text-secondary)}.delete{border:1px solid var(--color-error-border);background:var(--color-error-bg);color:#ef4444}.readonly{border:1px solid var(--color-border-light);background:var(--color-surface-alt);font-size:.85rem}
-    @media(max-width:600px){.data-card{padding:13px 14px;border-radius:12px}.data-card:hover{transform:none}.description{min-height:0}.actions{gap:6px;padding-top:10px}.primary,.secondary{font-size:.76rem}.icon{width:36px;height:36px;flex-basis:36px;min-height:36px!important}}
+    @media(max-width:600px){.data-card{padding:13px 14px;border-radius:12px}.data-card:hover{transform:none}.description{min-height:0}.actions{gap:6px;padding-top:10px}.heading{gap:7px;margin-bottom:8px}h2{font-size:1rem}.badge{font-size:.58rem;padding:2px 6px}.meta{font-size:.7rem;gap:5px 11px;margin-bottom:3px}.actions button.primary,.actions button.secondary{font-size:.76rem;min-height:36px;line-height:1.2;padding:7px 9px}.icon{width:36px;height:36px;flex-basis:36px;min-height:36px!important}}
   `]
 })
 export class MyDataCardComponent {

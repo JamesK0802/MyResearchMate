@@ -110,6 +110,10 @@ export const routes: Routes = [
     loadComponent: () => import('./tools/plot-studio/r-plot-studio.component').then(m => m.RPlotStudioComponent)
   },
   {
+    path: 'tools/pdf-editor',
+    loadComponent: () => import('./tools/pdf-editor/pdf-editor.component').then(m => m.PdfEditorComponent)
+  },
+  {
     path: 'auth/callback',
     loadComponent: () => import('./pages/login-callback/login-callback.component').then(m => m.LoginCallbackComponent)
   },

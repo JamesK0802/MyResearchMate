@@ -1,3 +1,6 @@
+import { MyDataCardComponent } from '../../components/my-data-card.component';
+import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
+import { MyDataPageComponent } from '../../components/my-data-page.component';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -10,32 +13,21 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
 @Component({
   selector: 'app-plot-projects-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
+  imports: [MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent],
   template: `
-    <main class="my-data-container">
+    <app-my-data-page>
       <app-my-data-header title="R-Plot Studio"></app-my-data-header>
-      <div class="tabs-nav">
-        <button [class.active]="activeTab === 'all'" (click)="setTab('all')">All Data</button>
-        <button [class.active]="activeTab === 'my'" (click)="setTab('my')">My Data</button>
-        <button [class.active]="activeTab === 'shared'" (click)="setTab('shared')">Shared with Me</button>
-      </div>
+      <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]" [activeTab]="activeTab" (tabChange)="setTab($event)"></app-my-data-list-controls>
 
       <div *ngIf="loading" class="loading-spinner"><div class="spinner"></div><p>Loading R-Plot Studio projects...</p></div>
-      <div *ngIf="!loading && projects.length" class="results-grid">
-        <article *ngFor="let project of projects" class="result-card" [class.shared-card]="project.is_shared">
-          <div class="card-body">
-            <div class="card-top"><h3 class="result-title">{{ project.title }}</h3><div class="card-badges"><span *ngIf="isOwner(project)" class="badge owner">OWNER</span><span *ngIf="project.is_shared" class="badge shared">SHARED</span></div></div>
-            <div class="result-meta"><span>📅 {{ (project.updated_at || project.created_at) | date:'mediumDate' }}</span><span>📈 {{ getPlotCount(project) }} Plot{{ getPlotCount(project) === 1 ? '' : 's' }}</span></div>
-            <div *ngIf="project.is_shared && !isOwner(project)" class="sharing-info">Shared by: {{ project.shared_by_name || 'Lab member' }}</div>
-            <div *ngIf="project.is_shared && isOwner(project)" class="sharing-info">Shared with: {{ (project.shared_with_labs || []).join(', ') }}</div>
-          </div>
-          <div class="card-actions">
-            <button class="btn-load" (click)="open(project)">Open Plot</button>
-            <button *ngIf="isOwner(project)" class="btn-share" (click)="openShare(project)" title="Manage Sharing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-svg-icon"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
-            <button *ngIf="isOwner(project)" class="btn-delete" (click)="remove(project)" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-svg-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
-          </div>
-        </article>
-      </div>
+      <app-my-data-grid *ngIf="!loading && projects.length">
+        <app-my-data-card *ngFor="let project of projects" [title]="project.title"
+          [badges]="getCardBadges(project)" [meta]="['📅 ' + ((project.updated_at || project.created_at) | date:'mediumDate'), '📈 ' + getPlotCount(project) + ' Plot' + (getPlotCount(project) === 1 ? '' : 's')]"
+          [shared]="!!project.is_shared" primaryLabel="Open Plot" [showShare]="isOwner(project)" [showDelete]="isOwner(project)"
+          (open)="open(project)" (share)="openShare(project)" (remove)="remove(project)">
+          <div card-content *ngIf="project.is_shared" class="sharing-info">{{isOwner(project) ? 'Shared with: ' + (project.shared_with_labs || []).join(', ') : 'Shared by: ' + (project.shared_by_name || 'Lab member')}}</div>
+        </app-my-data-card>
+      </app-my-data-grid>
       <div *ngIf="!loading && !projects.length" class="empty-state"><div class="empty-icon">📁</div><h3>No R-Plot Studio projects found</h3><p>Save an R-Plot Studio project to keep its data, layout, and R script together.</p><button *ngIf="activeTab !== 'shared'" class="btn-primary" (click)="createNew()">Open R-Plot Studio</button></div>
 
       <div *ngIf="sharingProject" class="modal-overlay" (click)="closeShare()">
@@ -57,7 +49,7 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
           <div class="modal-footer"><button class="btn-cancel" (click)="closeShare()">Cancel</button><button class="btn-save-share" (click)="saveShare()">Update Sharing</button></div>
         </div>
       </div>
-    </main>
+    </app-my-data-page>
   `,
   styles: [`
     .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
@@ -78,6 +70,9 @@ export class PlotProjectsPageComponent implements OnInit {
   async load() { this.loading = true; this.cdr.detectChanges(); try { this.projects = this.auth.isDemo ? [] : await this.projectService.getProjects(this.activeTab); } catch (error) { console.error('Failed to load plot projects', error); this.projects = []; } finally { this.loading = false; this.cdr.detectChanges(); } }
   setTab(tab: 'all' | 'my' | 'shared') { this.activeTab = tab; void this.load(); }
   isOwner(project: PlotProjectRecord) { return String(project.owner_user_id) === String(this.auth.currentProfile?.id); }
+  getCardBadges(project: PlotProjectRecord): import('../../components/my-data-card.component').MyDataCardBadge[] {
+    return [...(this.isOwner(project) ? [{label:'OWNER', tone:'owner' as const}] : []), ...(project.is_shared ? [{label:'SHARED', tone:'shared' as const}] : [])];
+  }
   getPlotCount(project: PlotProjectRecord) { return project.project_json?.plots?.length || 1; }
   createNew() { void this.router.navigate(['/tools/plot-generator']); } open(project: PlotProjectRecord) { this.projectService.queueOpen(project); void this.router.navigate(['/tools/plot-generator']); }
   async remove(project: PlotProjectRecord) { if (!confirm(`Delete "${project.title}"?`)) return; await this.projectService.delete(project.id); this.projects = this.projects.filter(item => item.id !== project.id); this.cdr.detectChanges(); }

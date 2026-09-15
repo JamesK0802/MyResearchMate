@@ -1,3 +1,4 @@
+import { MyDataPageComponent } from '../../components/my-data-page.component';
 import { Component, OnInit, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -16,9 +17,9 @@ import { MyDataGridComponent, MyDataListControlsComponent } from '../../componen
 @Component({
   selector: 'app-my-data',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
+  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
   template: `
-    <div class="my-data-container">
+    <app-my-data-page>
 
       <app-my-data-header [title]="pageTitle"></app-my-data-header>
 
@@ -114,8 +115,7 @@ import { MyDataGridComponent, MyDataListControlsComponent } from '../../componen
           </div>
         </div>
       </div>
-    </div>
-  `,
+    </app-my-data-page>`,
   styles: [`
     .my-data-container { padding: var(--space-6) var(--space-6) var(--space-8); max-width: var(--page-max-width); margin: 0 auto; min-height: 80vh; }
 

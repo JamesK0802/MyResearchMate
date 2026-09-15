@@ -22,6 +22,7 @@
             <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">Solution Protocol</a>
             <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
             <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="dropdown-item">Photo Comparison</a>
+            <a routerLink="/tools/pdf-editor" routerLinkActive="active" class="dropdown-item">PDF Editor</a>
             <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="dropdown-item">External Tools</a>
           </div>
         </div>
@@ -148,6 +149,7 @@
           <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
           <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
           <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo Comparison</a>
+          <a routerLink="/tools/pdf-editor" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">PDF Editor</a>
           <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">External Tools</a>
         </div>
       </div>

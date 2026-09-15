@@ -1,3 +1,4 @@
+import { MyDataPageComponent } from '../../components/my-data-page.component';
 import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,7 +10,7 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
 @Component({
   selector: 'app-lab-notes-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, MyDataHeaderComponent],
+  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent],
   templateUrl: './lab-notes-page.component.html',
   styleUrl: './lab-notes-page.component.css'
 })
