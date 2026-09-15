@@ -1,18 +1,36 @@
-<div class="pdf-editor-app app-page" (dragover)="onDragOverRoot($event)" (drop)="onFileDrop($event)">
+<div class="pdf-editor-app" (dragover)="onDragOverRoot($event)" (drop)="onFileDrop($event)">
+
   <!-- ═══ TOP NAVBAR / CONTROLS ═══ -->
   <header class="editor-header">
     <div class="header-left">
+      <!-- Mobile Pages Drawer Button -->
+      <button type="button" class="mobile-sidebar-toggle" (click)="toggleMobileSidebar()" title="Toggle Thumbnails Drawer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon-xs"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="16" y2="10"></line><line x1="8" y1="14" x2="12" y2="14"></line></svg>
+        <span class="mobile-toggle-badge">{{ pages.length }}</span>
+      </button>
+
       <div class="title-block">
-        <span class="app-badge app-badge-green">TOOL</span>
+        <span class="app-badge app-badge-green">PDF</span>
         <h1 class="document-title" [title]="fileName">{{ fileName }}</h1>
       </div>
-      <label class="app-btn app-btn-secondary app-btn-sm upload-btn">
-        <span>📂 Open PDF</span>
-        <input type="file" accept="application/pdf" (change)="onFileSelected($event)" style="display: none;" />
-      </label>
-      <button type="button" class="app-btn app-btn-ghost app-btn-sm" (click)="loadSampleDocument()" title="Load Sample Protocol PDF">
-        📄 Sample Doc
-      </button>
+
+      <div class="doc-actions-group">
+        <!-- Open (New / Replace) -->
+        <label class="app-btn app-btn-secondary app-btn-xs upload-btn" title="Open PDF, Word (.docx), or Images (New Document)">
+          <span>📂 Open</span>
+          <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onOpenFilesSelected($event)" style="display: none;" />
+        </label>
+
+        <!-- Merge / Append -->
+        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add / Merge PDF, Word (.docx), or Images to current document">
+          <span>＋ Merge</span>
+          <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
+        </label>
+
+        <button type="button" class="app-btn app-btn-ghost app-btn-xs desktop-only" (click)="loadSampleDocument()" title="Load Sample Protocol PDF">
+          Sample
+        </button>
+      </div>
     </div>
 
     <!-- Mode Switcher: View / Organize vs Single Page Edit -->
@@ -28,7 +46,7 @@
         </button>
       </div>
 
-      <!-- Undo / Redo & Zoom -->
+      <!-- Undo / Redo & Zoom & Full-Page Fit Controls -->
       <div class="history-zoom-group">
         <button type="button" class="icon-tool-btn" (click)="undo()" [disabled]="!canUndo" title="Undo (Ctrl+Z)">↶</button>
         <button type="button" class="icon-tool-btn" (click)="redo()" [disabled]="!canRedo" title="Redo (Ctrl+Y)">↷</button>
@@ -36,13 +54,15 @@
         <button type="button" class="icon-tool-btn" (click)="setZoom(zoom - 0.15)" title="Zoom Out">−</button>
         <span class="zoom-text">{{ (zoom * 100).toFixed(0) }}%</span>
         <button type="button" class="icon-tool-btn" (click)="setZoom(zoom + 0.15)" title="Zoom In">+</button>
-        <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="setZoom(1.0)" title="Reset Zoom">100%</button>
+        <div class="v-divider"></div>
+        <button type="button" class="fit-btn" (click)="fitToWidth()" title="Fit to screen width (Full Width)">↔ Width</button>
+        <button type="button" class="fit-btn desktop-only" (click)="fitToPage()" title="Fit entire page in view">⛶ Page</button>
       </div>
     </div>
 
     <!-- Export Action -->
     <div class="header-right">
-      <button type="button" class="app-btn app-btn-primary export-btn" (click)="exportPdf()" [disabled]="isExporting || pages.length === 0">
+      <button type="button" class="app-btn app-btn-primary app-btn-sm export-btn" (click)="exportPdf()" [disabled]="isExporting || pages.length === 0">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         <span>{{ isExporting ? 'Exporting…' : 'Export PDF' }}</span>
       </button>
@@ -52,16 +72,22 @@
   <!-- ═══ MAIN WORKSPACE BODY ═══ -->
   <div class="editor-workspace">
 
-    <!-- LEFT SIDEBAR: THUMBNAIL REORDER STRIP -->
-    <aside class="thumbnail-sidebar" aria-label="Page Thumbnails">
+    <!-- Mobile Drawer Backdrop -->
+    <div class="sidebar-backdrop" *ngIf="isMobileSidebarOpen" (click)="closeMobileSidebar()"></div>
+
+    <!-- LEFT SIDEBAR: THUMBNAIL REORDER STRIP (COLLAPSIBLE ON MOBILE) -->
+    <aside class="thumbnail-sidebar" [class.mobile-open]="isMobileSidebarOpen" aria-label="Page Thumbnails">
       <div class="sidebar-header">
         <div class="sidebar-title">
           <strong>Pages</strong>
           <span class="page-count-badge">{{ pages.length }}</span>
         </div>
-        <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="addBlankPage()" title="Add Blank Page">
-          ＋ Blank
-        </button>
+        <div class="sidebar-header-btns">
+          <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="addBlankPage()" title="Add Blank Page">
+            ＋ Blank
+          </button>
+          <button type="button" class="mobile-close-sidebar" (click)="closeMobileSidebar()" title="Close Pages Drawer">✕</button>
+        </div>
       </div>
 
       <div class="thumbnail-list">
@@ -80,6 +106,7 @@
 
           <div class="thumb-top">
             <span class="thumb-page-num">{{ p.displayNumber }}</span>
+            <span class="thumb-source-tag" *ngIf="p.sourceType && p.sourceType !== 'pdf'">{{ p.sourceType }}</span>
             <div class="thumb-actions">
               <button type="button" class="thumb-action-btn" (click)="$event.stopPropagation(); rotatePage(i, 90)" title="Rotate 90°">↻</button>
               <button type="button" class="thumb-action-btn" (click)="$event.stopPropagation(); duplicatePage(i)" title="Duplicate">⧉</button>
@@ -99,19 +126,25 @@
       </div>
     </aside>
 
-    <!-- RIGHT MAIN CONTENT AREA -->
+    <!-- RIGHT MAIN CONTENT AREA (100% FULL PAGE) -->
     <main class="editor-main-area">
 
       <!-- ─── MODE 1: ORGANIZE / VIEW ALL GRID ─── -->
       <section *ngIf="activeMode === 'view'" class="organize-view-container">
         <div class="organize-banner">
           <div>
-            <h2>Document Overview</h2>
-            <p>Drag pages to reorder them, rotate or duplicate pages, or <strong>double-click any page</strong> to edit its contents.</p>
+            <h2>Document Overview ({{ pages.length }} Pages)</h2>
+            <p>Drag pages to reorder, rotate, or duplicate. <strong>Double-click any page to edit.</strong></p>
           </div>
-          <button type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="addBlankPage()">
-            ＋ Add Blank Page
-          </button>
+          <div class="organize-actions">
+            <label class="app-btn app-btn-secondary app-btn-xs upload-btn">
+              <span>＋ Merge File</span>
+              <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
+            </label>
+            <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="addBlankPage()">
+              ＋ Blank Sheet
+            </button>
+          </div>
         </div>
 
         <div class="organize-grid">
@@ -142,7 +175,7 @@
             </div>
 
             <div class="grid-card-footer">
-              <span class="grid-card-size">{{ p.width }} × {{ p.height }} pt</span>
+              <span class="grid-card-size">{{ p.sourceType || 'pdf' | uppercase }}</span>
               <button type="button" class="app-btn app-btn-primary app-btn-xs" (click)="openEditModeForPage(i)">
                 ✏ Edit Page
               </button>
@@ -183,7 +216,7 @@
             </button>
             <button type="button" class="tool-btn" [class.active]="activeTool === 'rect'" (click)="setTool('rect')" title="Rectangle Box (R)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-              <span>Rectangle</span>
+              <span>Rect</span>
             </button>
             <button type="button" class="tool-btn" [class.active]="activeTool === 'circle'" (click)="setTool('circle')" title="Circle / Ellipse (C)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><circle cx="12" cy="12" r="10"></circle></svg>
@@ -203,7 +236,7 @@
             </button>
             <button type="button" class="tool-btn" (click)="setTool('signature')" title="Insert Signature">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
-              <span>Signature</span>
+              <span>Sign</span>
             </button>
           </div>
 
@@ -240,26 +273,26 @@
                     *ngIf="selectedAnnotationId"
                     (click)="deleteSelectedAnnotation()"
                     title="Delete Selected Element (Del)">
-              🗑 Delete Element
+              🗑 Delete
             </button>
           </div>
         </div>
 
         <!-- SELECTED TEXT EDIT INPUT (If active selected annotation is text) -->
         <div class="selected-text-bar" *ngIf="selectedAnnotation && selectedAnnotation.type === 'text'">
-          <label>Edit Text Content:</label>
+          <label>Text:</label>
           <input class="app-input" [(ngModel)]="selectedAnnotation.text" (ngModelChange)="renderAnnotationCanvas()" placeholder="Enter text..." />
           <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.bold" (click)="selectedAnnotation.bold = !selectedAnnotation.bold; renderAnnotationCanvas()">B</button>
           <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.italic" (click)="selectedAnnotation.italic = !selectedAnnotation.italic; renderAnnotationCanvas()">I</button>
         </div>
 
-        <!-- STAGE / CANVAS VIEWPORT -->
-        <div class="canvas-viewport" aria-label="PDF Page Canvas Viewport">
+        <!-- STAGE / CANVAS VIEWPORT (FULL-PAGE, AUTO-FITTED) -->
+        <div #canvasViewport class="canvas-viewport" aria-label="PDF Page Canvas Viewport">
           <div class="page-paper-shadow" *ngIf="activePage"
                [style.width.px]="activePage.width * zoom"
                [style.height.px]="activePage.height * zoom">
 
-            <!-- Background PDF Render -->
+            <!-- Background PDF / Docx / Image Render -->
             <canvas #pageCanvas class="base-pdf-canvas"></canvas>
 
             <!-- Overlay Annotation & Interaction Canvas -->
@@ -271,20 +304,20 @@
           </div>
 
           <div *ngIf="!activePage" class="empty-page-state">
-            <p>No page selected. Choose a page from the left sidebar.</p>
+            <p>No page selected. Choose a page from the drawer or list.</p>
           </div>
         </div>
 
         <!-- PAGE NAVIGATION FOOTER -->
         <footer class="canvas-footer">
           <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="selectPage(activePageIndex - 1)" [disabled]="activePageIndex <= 0">
-            ◀ Previous Page
+            ◀ Prev
           </button>
-          <span class="page-indicator">
-            Page <strong>{{ activePageIndex + 1 }}</strong> of {{ pages.length }}
-          </span>
+          <button type="button" class="page-nav-badge" (click)="toggleMobileSidebar()">
+            Page <strong>{{ activePageIndex + 1 }}</strong> / {{ pages.length }}
+          </button>
           <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="selectPage(activePageIndex + 1)" [disabled]="activePageIndex >= pages.length - 1">
-            Next Page ▶
+            Next ▶
           </button>
         </footer>
       </section>
@@ -301,7 +334,7 @@
       <div class="app-modal-header">
         <div>
           <h2>Draw Your Signature</h2>
-          <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 4px 0 0;">Sign with your mouse or touch screen below.</p>
+          <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 4px 0 0;">Sign with your mouse or finger below.</p>
         </div>
         <button class="app-modal-close" (click)="closeSignatureModal()">✕</button>
       </div>

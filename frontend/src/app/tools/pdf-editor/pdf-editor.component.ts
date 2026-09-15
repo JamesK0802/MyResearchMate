@@ -1,16 +1,35 @@
-import { Component, OnInit, ElementRef, ViewChild, HostListener, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  ElementRef,
+  ViewChild,
+  HostListener,
+  ChangeDetectorRef,
+  AfterViewInit
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PDFDocument, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Ensure worker is configured
+// Configure PDF.js worker (CDN fallback with local asset)
 if (typeof window !== 'undefined') {
   const v = pdfjsLib.version || '4.10.38';
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${v}/build/pdf.worker.min.mjs`;
 }
 
-export type ToolType = 'select' | 'text' | 'pen' | 'highlight' | 'rect' | 'circle' | 'line' | 'arrow' | 'whiteout' | 'image' | 'signature';
+export type ToolType =
+  | 'select'
+  | 'text'
+  | 'pen'
+  | 'highlight'
+  | 'rect'
+  | 'circle'
+  | 'line'
+  | 'arrow'
+  | 'whiteout'
+  | 'image'
+  | 'signature';
 
 export interface Point {
   x: number;
@@ -20,7 +39,7 @@ export interface Point {
 export interface AnnotationItem {
   id: string;
   type: ToolType;
-  x: number;          // relative 0..1 percentage or normalized coordinate
+  x: number;
   y: number;
   width: number;
   height: number;
@@ -51,6 +70,17 @@ export interface PdfPageItem {
   aspectRatio: number;
   annotations: AnnotationItem[];
   isCustomBlank?: boolean;
+  sourceDocId?: string;
+  sourceType?: 'pdf' | 'docx' | 'image' | 'blank';
+  sourceFileName?: string;
+  imageBackgroundUrl?: string;
+}
+
+interface SourcePdfEntry {
+  fileName: string;
+  pdfBytes: Uint8Array;
+  pdfJsDoc: any;
+  pdfDocInstance?: PDFDocument;
 }
 
 @Component({
@@ -60,9 +90,10 @@ export interface PdfPageItem {
   templateUrl: './pdf-editor.component.html',
   styleUrl: './pdf-editor.component.css'
 })
-export class PdfEditorComponent implements OnInit {
+export class PdfEditorComponent implements OnInit, AfterViewInit {
   @ViewChild('pageCanvas') pageCanvasRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('annotationCanvas') annotationCanvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('canvasViewport') canvasViewportRef!: ElementRef<HTMLDivElement>;
   @ViewChild('imageInput') imageInputRef!: ElementRef<HTMLInputElement>;
   @ViewChild('signatureCanvas') signatureCanvasRef!: ElementRef<HTMLCanvasElement>;
 
@@ -75,11 +106,13 @@ export class PdfEditorComponent implements OnInit {
   isExporting: boolean = false;
   loadingMessage: string = '';
 
-  // Original PDF bytes
-  private originalPdfBytes: ArrayBuffer | null = null;
-  private pdfJsDoc: any = null;
+  // Multi-document Source PDF Store
+  private sourcePdfDocs: Map<string, SourcePdfEntry> = new Map();
 
-  // View / Edit Settings
+  // Mobile Drawer State
+  isMobileSidebarOpen: boolean = false;
+
+  // View / Edit Settings & Zoom
   zoom: number = 1.0;
   activeTool: ToolType = 'select';
   strokeColor: string = '#2563eb';
@@ -112,8 +145,13 @@ export class PdfEditorComponent implements OnInit {
   constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
-    // Start with a clean sample document if no file loaded
     this.loadSampleDocument();
+  }
+
+  ngAfterViewInit() {
+    setTimeout(() => {
+      this.fitToWidth();
+    }, 120);
   }
 
   get activePage(): PdfPageItem | undefined {
@@ -134,40 +172,85 @@ export class PdfEditorComponent implements OnInit {
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
-  // FILE LOADING & INITIALIZATION
+  // MOBILE DRAWER CONTROLS
   // ═════════════════════════════════════════════════════════════════════════════
 
-  onFileSelected(event: Event) {
+  toggleMobileSidebar() {
+    this.isMobileSidebarOpen = !this.isMobileSidebarOpen;
+  }
+
+  closeMobileSidebar() {
+    this.isMobileSidebarOpen = false;
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // FULL PAGE AUTO-FIT ZOOM
+  // ═════════════════════════════════════════════════════════════════════════════
+
+  fitToWidth() {
+    if (!this.activePage || !this.canvasViewportRef) return;
+    const container = this.canvasViewportRef.nativeElement;
+    const isMobile = window.innerWidth <= 768;
+    const padding = isMobile ? 8 : 24;
+    const availableWidth = Math.max(260, container.clientWidth - padding);
+    const targetZoom = availableWidth / this.activePage.width;
+    this.zoom = Math.max(0.2, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+    this.renderActivePage();
+  }
+
+  fitToPage() {
+    if (!this.activePage || !this.canvasViewportRef) return;
+    const container = this.canvasViewportRef.nativeElement;
+    const isMobile = window.innerWidth <= 768;
+    const paddingX = isMobile ? 8 : 24;
+    const paddingY = isMobile ? 12 : 36;
+    const availableWidth = Math.max(260, container.clientWidth - paddingX);
+    const availableHeight = Math.max(260, container.clientHeight - paddingY);
+    const scaleX = availableWidth / this.activePage.width;
+    const scaleY = availableHeight / this.activePage.height;
+    const targetZoom = Math.min(scaleX, scaleY);
+    this.zoom = Math.max(0.2, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+    this.renderActivePage();
+  }
+
+  setZoom(val: number) {
+    this.zoom = Math.max(0.25, Math.min(3.0, Math.round(val * 100) / 100));
+    this.renderActivePage();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize() {
+    if (this.activeMode === 'edit' && window.innerWidth <= 768) {
+      this.fitToWidth();
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // FILE INGESTION (PDF, Word .docx, Images) - OPEN & MERGE
+  // ═════════════════════════════════════════════════════════════════════════════
+
+  onOpenFilesSelected(event: Event) {
     const input = event.target as HTMLInputElement;
-    if (input.files && input.files[0]) {
-      const file = input.files[0];
-      this.fileName = file.name;
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const buffer = e.target?.result as ArrayBuffer;
-        if (buffer) {
-          await this.loadPdfFromBuffer(buffer);
-        }
-      };
-      reader.readAsArrayBuffer(file);
+    if (input.files && input.files.length > 0) {
+      this.handleFileList(Array.from(input.files), false);
+      input.value = '';
+    }
+  }
+
+  onMergeFilesSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.handleFileList(Array.from(input.files), true);
+      input.value = '';
     }
   }
 
   onFileDrop(event: DragEvent) {
     event.preventDefault();
-    if (event.dataTransfer?.files && event.dataTransfer.files[0]) {
-      const file = event.dataTransfer.files[0];
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        this.fileName = file.name;
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const buffer = e.target?.result as ArrayBuffer;
-          if (buffer) {
-            await this.loadPdfFromBuffer(buffer);
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      }
+    if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+      const files = Array.from(event.dataTransfer.files);
+      const append = this.pages.length > 0;
+      this.handleFileList(files, append);
     }
   }
 
@@ -175,27 +258,69 @@ export class PdfEditorComponent implements OnInit {
     event.preventDefault();
   }
 
-  async loadPdfFromBuffer(buffer: ArrayBuffer) {
+  private async handleFileList(files: File[], append: boolean) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isFirst = i === 0;
+      const shouldAppend = append || !isFirst;
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        await this.importDocxFile(file, shouldAppend);
+      } else if (lowerName.endsWith('.pdf') || file.type === 'application/pdf') {
+        await this.importPdfFile(file, shouldAppend);
+      } else if (file.type.startsWith('image/')) {
+        await this.importImageFile(file, shouldAppend);
+      } else {
+        alert(`Unsupported file format: ${file.name}. Please select PDF, Word (.docx), or Image files.`);
+      }
+    }
+  }
+
+  // Import PDF
+  async importPdfFile(file: File, append: boolean = false) {
     this.isLoading = true;
-    this.loadingMessage = 'Rendering PDF pages…';
+    this.loadingMessage = `Loading ${file.name}…`;
     this.cdr.detectChanges();
 
     try {
-      this.originalPdfBytes = buffer.slice(0);
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
-      this.pdfJsDoc = await loadingTask.promise;
-      const numPages = this.pdfJsDoc.numPages;
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      const docId = `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const loadingTask = pdfjsLib.getDocument({ data: uint8 });
+      const pdfJsDoc = await loadingTask.promise;
 
-      const newPages: PdfPageItem[] = [];
-      for (let i = 1; i <= numPages; i++) {
-        this.loadingMessage = `Rendering page ${i} of ${numPages}…`;
-        this.cdr.detectChanges();
+      this.sourcePdfDocs.set(docId, {
+        fileName: file.name,
+        pdfBytes: uint8,
+        pdfJsDoc
+      });
 
-        const page = await this.pdfJsDoc.getPage(i);
+      if (!append) {
+        this.pages = [];
+        this.sourcePdfDocs.clear();
+        this.sourcePdfDocs.set(docId, {
+          fileName: file.name,
+          pdfBytes: uint8,
+          pdfJsDoc
+        });
+        this.fileName = file.name;
+      } else {
+        if (this.pages.length === 0) {
+          this.fileName = file.name;
+        } else {
+          this.fileName = this.fileName.replace(/\.pdf$/i, '') + '_merged.pdf';
+        }
+      }
+
+      const baseIndex = this.pages.length;
+      for (let i = 1; i <= pdfJsDoc.numPages; i++) {
+        const page = await pdfJsDoc.getPage(i);
         const viewport = page.getViewport({ scale: 1.0 });
 
         // Generate thumbnail
-        const thumbViewport = page.getViewport({ scale: 0.35 });
+        const thumbScale = 140 / viewport.width;
+        const thumbViewport = page.getViewport({ scale: thumbScale });
         const thumbCanvas = document.createElement('canvas');
         thumbCanvas.width = thumbViewport.width;
         thumbCanvas.height = thumbViewport.height;
@@ -204,44 +329,224 @@ export class PdfEditorComponent implements OnInit {
           await page.render({ canvasContext: thumbCtx, viewport: thumbViewport }).promise;
         }
 
-        newPages.push({
-          id: `page-${i}-${Date.now()}`,
+        const pageItem: PdfPageItem = {
+          id: `${docId}_p${i}_${Date.now()}`,
           originalPageIndex: i - 1,
-          displayNumber: i,
+          displayNumber: baseIndex + i,
           rotation: 0,
           thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.8),
           width: viewport.width,
           height: viewport.height,
           aspectRatio: viewport.width / viewport.height,
+          sourceDocId: docId,
+          sourceType: 'pdf',
+          sourceFileName: file.name,
           annotations: []
-        });
+        };
+        this.pages.push(pageItem);
       }
 
-      this.pages = newPages;
-      this.activePageIndex = 0;
-      this.activeMode = 'edit';
+      this.reindexPages();
+      if (!append && this.pages.length > 0) {
+        this.activePageIndex = 0;
+      }
       this.saveHistory();
-      await this.renderActivePage();
+      this.activeMode = 'edit';
+      setTimeout(() => this.fitToWidth(), 50);
     } catch (err: any) {
       console.error('Failed to load PDF:', err);
-      alert('Could not open this PDF file. Please ensure it is a valid, unencrypted PDF.');
+      alert(`Could not open ${file.name}. Please ensure it is an unencrypted PDF.`);
     } finally {
       this.isLoading = false;
       this.cdr.detectChanges();
     }
   }
 
+  // Import Word .docx
+  async importDocxFile(file: File, append: boolean = false) {
+    this.isLoading = true;
+    this.loadingMessage = `Converting ${file.name} to PDF pages…`;
+    this.cdr.detectChanges();
+
+    try {
+      const { renderAsync: renderDocxAsync } = await import('docx-preview');
+      const html2canvas = (await import('html2canvas')).default;
+      const arrayBuffer = await file.arrayBuffer();
+
+      const tempContainer = document.createElement('div');
+      tempContainer.style.width = '794px'; // A4 standard width at 96 DPI
+      tempContainer.style.position = 'fixed';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '0';
+      tempContainer.style.background = '#ffffff';
+      tempContainer.style.zIndex = '-1000';
+      document.body.appendChild(tempContainer);
+
+      await renderDocxAsync(arrayBuffer, tempContainer, undefined, {
+        inWrapper: true,
+        breakPages: true,
+        ignoreWidth: false,
+        ignoreHeight: false
+      });
+
+      // Find rendered pages
+      let pageElements = Array.from(tempContainer.querySelectorAll<HTMLElement>('section.docx'));
+      if (pageElements.length === 0) {
+        const wrappers = Array.from(tempContainer.querySelectorAll<HTMLElement>('.docx-wrapper > *'));
+        pageElements = wrappers.length > 0 ? wrappers : [tempContainer];
+      }
+
+      if (!append) {
+        this.pages = [];
+        this.sourcePdfDocs.clear();
+        this.fileName = file.name.replace(/\.docx$/i, '.pdf');
+      } else {
+        if (this.pages.length === 0) {
+          this.fileName = file.name.replace(/\.docx$/i, '.pdf');
+        } else {
+          this.fileName = this.fileName.replace(/\.pdf$/i, '') + '_merged.pdf';
+        }
+      }
+
+      const baseIndex = this.pages.length;
+      for (let i = 0; i < pageElements.length; i++) {
+        this.loadingMessage = `Rendering Word page ${i + 1} of ${pageElements.length}…`;
+        this.cdr.detectChanges();
+
+        const sec = pageElements[i];
+        const canvas = await html2canvas(sec, {
+          scale: 1.5,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+        // Standard A4 dimensions in PDF points
+        const w = 595.28;
+        const h = 841.89;
+
+        const newPage: PdfPageItem = {
+          id: `docx_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+          originalPageIndex: -1,
+          displayNumber: baseIndex + i + 1,
+          rotation: 0,
+          thumbnailUrl: dataUrl,
+          imageBackgroundUrl: dataUrl,
+          width: w,
+          height: h,
+          aspectRatio: w / h,
+          sourceType: 'docx',
+          sourceFileName: file.name,
+          annotations: []
+        };
+        this.pages.push(newPage);
+      }
+
+      document.body.removeChild(tempContainer);
+
+      this.reindexPages();
+      if (!append && this.pages.length > 0) {
+        this.activePageIndex = 0;
+      }
+      this.saveHistory();
+      this.activeMode = 'edit';
+      setTimeout(() => this.fitToWidth(), 50);
+    } catch (err: any) {
+      console.error('Failed to convert DOCX:', err);
+      alert(`Could not convert Word document ${file.name}: ${err?.message || 'Unknown error'}`);
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Import Image (.png, .jpg, .jpeg) as a page
+  async importImageFile(file: File, append: boolean = false) {
+    this.isLoading = true;
+    this.loadingMessage = `Adding image ${file.name}…`;
+    this.cdr.detectChanges();
+
+    try {
+      const dataUrl = await this.readFileAsDataUrl(file);
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+
+      const w = 595.28;
+      const h = 841.89;
+
+      // Generate thumbnail
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 160;
+      thumbCanvas.height = 226;
+      const ctx = thumbCanvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 160, 226);
+
+      const scale = Math.min(160 / img.width, 226 / img.height);
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.drawImage(img, (160 - dw) / 2, (226 - dh) / 2, dw, dh);
+      const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.8);
+
+      if (!append) {
+        this.pages = [];
+        this.sourcePdfDocs.clear();
+        this.fileName = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
+      } else {
+        if (this.pages.length === 0) {
+          this.fileName = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
+        } else {
+          this.fileName = this.fileName.replace(/\.pdf$/i, '') + '_merged.pdf';
+        }
+      }
+
+      const newPage: PdfPageItem = {
+        id: `img_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        originalPageIndex: -1,
+        displayNumber: this.pages.length + 1,
+        rotation: 0,
+        thumbnailUrl: thumbUrl,
+        imageBackgroundUrl: dataUrl,
+        width: w,
+        height: h,
+        aspectRatio: w / h,
+        sourceType: 'image',
+        sourceFileName: file.name,
+        annotations: []
+      };
+      this.pages.push(newPage);
+      this.reindexPages();
+      if (!append) {
+        this.activePageIndex = 0;
+      }
+      this.saveHistory();
+      this.activeMode = 'edit';
+      setTimeout(() => this.fitToWidth(), 50);
+    } catch (err: any) {
+      console.error('Failed to import image:', err);
+      alert(`Could not load image ${file.name}`);
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Load Sample Document
   async loadSampleDocument() {
     this.isLoading = true;
     this.loadingMessage = 'Generating sample research protocol…';
     this.cdr.detectChanges();
 
     try {
-      // Create a clean 3-page research protocol PDF with pdf-lib
       const sampleDoc = await PDFDocument.create();
 
       // Page 1: Protocol Overview
-      const page1 = sampleDoc.addPage([595, 842]); // A4
+      const page1 = sampleDoc.addPage([595, 842]);
       const { width, height } = page1.getSize();
 
       // Page 2: Methods & Procedures
@@ -250,165 +555,124 @@ export class PdfEditorComponent implements OnInit {
       // Page 3: Data & Results
       const page3 = sampleDoc.addPage([595, 842]);
 
-      // We render crisp canvas representations for the sample
-      const bytes = await sampleDoc.save();
-      this.fileName = 'Sample_Research_Protocol.pdf';
-      await this.loadPdfFromBuffer(bytes.buffer as ArrayBuffer);
+      const pdfBytes = await sampleDoc.save();
+      const docId = 'sample_protocol';
+      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBytes) });
+      const pdfJsDoc = await loadingTask.promise;
 
-      // Add sample annotations on page 1
-      if (this.pages[0]) {
-        this.pages[0].annotations.push({
-          id: 'ann-title',
-          type: 'text',
-          x: 40,
-          y: 60,
-          width: 515,
-          height: 50,
-          text: 'CRISPR-Cas9 Editing Protocol v3.2',
-          fontSize: 26,
-          fontFamily: 'Inter, sans-serif',
-          color: '#1e3a8a',
-          bold: true
+      this.sourcePdfDocs.clear();
+      this.sourcePdfDocs.set(docId, {
+        fileName: 'Sample_Research_Protocol.pdf',
+        pdfBytes: new Uint8Array(pdfBytes),
+        pdfJsDoc
+      });
+
+      this.fileName = 'Sample_Research_Protocol.pdf';
+      this.pages = [];
+
+      for (let i = 1; i <= 3; i++) {
+        const page = await pdfJsDoc.getPage(i);
+        const viewport = page.getViewport({ scale: 0.35 });
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = viewport.width;
+        thumbCanvas.height = viewport.height;
+        const thumbCtx = thumbCanvas.getContext('2d');
+
+        // Draw clean placeholder preview
+        if (thumbCtx) {
+          thumbCtx.fillStyle = '#ffffff';
+          thumbCtx.fillRect(0, 0, viewport.width, viewport.height);
+          thumbCtx.fillStyle = '#166534';
+          thumbCtx.fillRect(20, 20, viewport.width - 40, 16);
+          thumbCtx.fillStyle = '#e2e8f0';
+          thumbCtx.fillRect(20, 50, viewport.width - 60, 8);
+          thumbCtx.fillRect(20, 65, viewport.width - 40, 8);
+          thumbCtx.fillRect(20, 80, viewport.width - 80, 8);
+        }
+
+        this.pages.push({
+          id: `sample_p${i}`,
+          originalPageIndex: i - 1,
+          displayNumber: i,
+          rotation: 0,
+          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.8),
+          width: 595,
+          height: 842,
+          aspectRatio: 595 / 842,
+          sourceDocId: docId,
+          sourceType: 'pdf',
+          sourceFileName: 'Sample_Research_Protocol.pdf',
+          annotations: []
         });
-        this.pages[0].annotations.push({
-          id: 'ann-desc',
-          type: 'text',
-          x: 40,
-          y: 120,
-          width: 515,
-          height: 60,
-          text: 'Standard operating procedure for high-efficiency targeted gene cleavage in Arabidopsis thaliana cells. Read all safety precautions before starting.',
-          fontSize: 14,
-          fontFamily: 'Inter, sans-serif',
-          color: '#475569'
-        });
-        this.pages[0].annotations.push({
-          id: 'ann-badge',
-          type: 'rect',
-          x: 40,
-          y: 200,
-          width: 140,
-          height: 32,
-          strokeColor: '#16a34a',
-          strokeWidth: 2,
-          fillColor: '#dcfce7',
-          fillOpacity: 0.8
-        });
-        this.pages[0].annotations.push({
-          id: 'ann-badge-text',
-          type: 'text',
-          x: 48,
-          y: 206,
-          width: 124,
-          height: 20,
-          text: '✓ VERIFIED STEP',
-          fontSize: 12,
-          fontFamily: 'Inter, sans-serif',
-          color: '#15803d',
-          bold: true
-        });
-        await this.renderActivePage();
       }
-    } catch (e) {
-      console.error('Failed to create sample:', e);
+
+      this.activePageIndex = 0;
+      this.activeMode = 'edit';
+      this.saveHistory();
+      setTimeout(() => this.fitToWidth(), 50);
+    } catch (err) {
+      console.error('Failed to load sample doc:', err);
     } finally {
       this.isLoading = false;
       this.cdr.detectChanges();
     }
   }
 
-  async addBlankPage() {
+  // ═════════════════════════════════════════════════════════════════════════════
+  // PAGE MANAGEMENT: ADD, DELETE, ROTATE, REORDER, DUPLICATE
+  // ═════════════════════════════════════════════════════════════════════════════
+
+  addBlankPage(insertIndex?: number) {
+    const targetIndex = insertIndex !== undefined ? insertIndex : this.pages.length;
+    const blankThumb = this.createBlankThumbnail(595, 842);
+
     const newPage: PdfPageItem = {
-      id: `page-blank-${Date.now()}`,
+      id: `blank-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       originalPageIndex: -1,
-      displayNumber: this.pages.length + 1,
+      displayNumber: targetIndex + 1,
       rotation: 0,
-      thumbnailUrl: this.createBlankThumbnail(),
-      width: 595, // Standard A4
+      thumbnailUrl: blankThumb,
+      width: 595,
       height: 842,
       aspectRatio: 595 / 842,
-      annotations: [],
-      isCustomBlank: true
+      isCustomBlank: true,
+      sourceType: 'blank',
+      annotations: []
     };
-    this.pages.push(newPage);
-    this.recalculateDisplayNumbers();
-    this.saveHistory();
-    this.selectPage(this.pages.length - 1);
-  }
 
-  private createBlankThumbnail(): string {
-    const canvas = document.createElement('canvas');
-    canvas.width = 150;
-    canvas.height = 212;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 150, 212);
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.strokeRect(0, 0, 150, 212);
-    }
-    return canvas.toDataURL('image/jpeg');
-  }
-
-  // ═════════════════════════════════════════════════════════════════════════════
-  // PAGE MANAGEMENT & REORDERING
-  // ═════════════════════════════════════════════════════════════════════════════
-
-  selectPage(index: number) {
-    if (index < 0 || index >= this.pages.length) return;
-    this.activePageIndex = index;
-    this.selectedAnnotationId = null;
-    this.renderActivePage();
-  }
-
-  openEditModeForPage(index: number) {
-    this.selectPage(index);
-    this.activeMode = 'edit';
-  }
-
-  recalculateDisplayNumbers() {
-    this.pages.forEach((p, idx) => {
-      p.displayNumber = idx + 1;
-    });
-  }
-
-  rotatePage(index: number, angle: number = 90) {
-    if (index < 0 || index >= this.pages.length) return;
-    const page = this.pages[index];
-    page.rotation = (page.rotation + angle) % 360;
-    // Swap width & height if 90 or 270
-    if (angle % 180 !== 0) {
-      const temp = page.width;
-      page.width = page.height;
-      page.height = temp;
-      page.aspectRatio = page.width / page.height;
-    }
+    this.pages.splice(targetIndex, 0, newPage);
+    this.reindexPages();
+    this.activePageIndex = targetIndex;
     this.saveHistory();
     this.renderActivePage();
   }
 
   duplicatePage(index: number) {
-    if (index < 0 || index >= this.pages.length) return;
-    const source = this.pages[index];
-    const duplicated: PdfPageItem = {
-      ...source,
-      id: `page-dup-${Date.now()}`,
-      annotations: JSON.parse(JSON.stringify(source.annotations))
+    const p = this.pages[index];
+    if (!p) return;
+
+    const clonedAnnotations = JSON.parse(JSON.stringify(p.annotations));
+    const newPage: PdfPageItem = {
+      ...p,
+      id: `page-dup-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      displayNumber: index + 2,
+      annotations: clonedAnnotations
     };
-    this.pages.splice(index + 1, 0, duplicated);
-    this.recalculateDisplayNumbers();
+
+    this.pages.splice(index + 1, 0, newPage);
+    this.reindexPages();
+    this.activePageIndex = index + 1;
     this.saveHistory();
-    this.selectPage(index + 1);
+    this.renderActivePage();
   }
 
   deletePage(index: number) {
     if (this.pages.length <= 1) {
-      alert('The document must have at least one page.');
+      alert('The document must contain at least one page.');
       return;
     }
-    if (!confirm(`Delete page ${index + 1}?`)) return;
     this.pages.splice(index, 1);
-    this.recalculateDisplayNumbers();
+    this.reindexPages();
     if (this.activePageIndex >= this.pages.length) {
       this.activePageIndex = this.pages.length - 1;
     }
@@ -416,14 +680,25 @@ export class PdfEditorComponent implements OnInit {
     this.renderActivePage();
   }
 
+  rotatePage(index: number, degreesToAdd: number = 90) {
+    const p = this.pages[index];
+    if (!p) return;
+    p.rotation = (p.rotation + degreesToAdd) % 360;
+    this.saveHistory();
+    if (this.activePageIndex === index) {
+      this.renderActivePage();
+    }
+  }
+
   movePageUp(index: number) {
     if (index <= 0) return;
     const temp = this.pages[index];
     this.pages[index] = this.pages[index - 1];
     this.pages[index - 1] = temp;
-    this.recalculateDisplayNumbers();
+    this.reindexPages();
+    this.activePageIndex = index - 1;
     this.saveHistory();
-    this.selectPage(index - 1);
+    this.renderActivePage();
   }
 
   movePageDown(index: number) {
@@ -431,24 +706,50 @@ export class PdfEditorComponent implements OnInit {
     const temp = this.pages[index];
     this.pages[index] = this.pages[index + 1];
     this.pages[index + 1] = temp;
-    this.recalculateDisplayNumbers();
+    this.reindexPages();
+    this.activePageIndex = index + 1;
     this.saveHistory();
-    this.selectPage(index + 1);
+    this.renderActivePage();
   }
 
-  // HTML5 Drag & Drop reordering
+  reindexPages() {
+    for (let i = 0; i < this.pages.length; i++) {
+      this.pages[i].displayNumber = i + 1;
+    }
+  }
+
+  private createBlankThumbnail(width: number, height: number): string {
+    const c = document.createElement('canvas');
+    c.width = 120;
+    c.height = Math.round(120 * (height / width));
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, 0, c.width, c.height);
+    }
+    return c.toDataURL('image/jpeg', 0.8);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // DRAG AND DROP PAGE REORDERING
+  // ═════════════════════════════════════════════════════════════════════════════
+
   onDragStart(event: DragEvent, index: number) {
     this.draggedPageIndex = index;
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', String(index));
+      event.dataTransfer.setData('text/plain', `${index}`);
     }
   }
 
   onDragOver(event: DragEvent, index: number) {
     event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    this.dragOverPageIndex = index;
+    if (this.draggedPageIndex !== null && this.draggedPageIndex !== index) {
+      this.dragOverPageIndex = index;
+    }
   }
 
   onDragLeave(index: number) {
@@ -457,17 +758,21 @@ export class PdfEditorComponent implements OnInit {
     }
   }
 
-  onDrop(event: DragEvent, targetIndex: number) {
+  onDrop(event: DragEvent, dropIndex: number) {
     event.preventDefault();
-    if (this.draggedPageIndex !== null && this.draggedPageIndex !== targetIndex) {
-      const movedItem = this.pages.splice(this.draggedPageIndex, 1)[0];
-      this.pages.splice(targetIndex, 0, movedItem);
-      this.recalculateDisplayNumbers();
-      this.saveHistory();
-      this.selectPage(targetIndex);
+    if (this.draggedPageIndex === null || this.draggedPageIndex === dropIndex) {
+      this.dragOverPageIndex = null;
+      return;
     }
+
+    const item = this.pages.splice(this.draggedPageIndex, 1)[0];
+    this.pages.splice(dropIndex, 0, item);
+    this.reindexPages();
+    this.activePageIndex = dropIndex;
     this.draggedPageIndex = null;
     this.dragOverPageIndex = null;
+    this.saveHistory();
+    this.renderActivePage();
   }
 
   onDragEnd() {
@@ -476,71 +781,98 @@ export class PdfEditorComponent implements OnInit {
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
-  // EDITING & ANNOTATION CANVAS
+  // MODE & PAGE SELECTION
   // ═════════════════════════════════════════════════════════════════════════════
-
-  setTool(tool: ToolType) {
-    this.activeTool = tool;
-    this.selectedAnnotationId = null;
-    if (tool === 'image') {
-      this.imageInputRef?.nativeElement.click();
-    } else if (tool === 'signature') {
-      this.openSignatureModal();
-    }
-  }
 
   setMode(mode: 'view' | 'edit') {
     this.activeMode = mode;
+    this.selectedAnnotationId = null;
     if (mode === 'edit') {
+      setTimeout(() => this.renderActivePage(), 30);
+    }
+  }
+
+  selectPage(index: number) {
+    if (index < 0 || index >= this.pages.length) return;
+    this.activePageIndex = index;
+    this.selectedAnnotationId = null;
+    this.closeMobileSidebar();
+    if (this.activeMode === 'edit') {
       this.renderActivePage();
     }
   }
 
-  setZoom(val: number) {
-    this.zoom = Math.min(3.0, Math.max(0.4, val));
-    this.renderActivePage();
+  openEditModeForPage(index: number) {
+    this.activePageIndex = index;
+    this.setMode('edit');
+    this.closeMobileSidebar();
   }
 
-  async renderActivePage() {
-    if (!this.activePage || !this.pageCanvasRef) return;
+  // ═════════════════════════════════════════════════════════════════════════════
+  // CANVAS RENDERING
+  // ═════════════════════════════════════════════════════════════════════════════
 
-    const page = this.activePage;
+  async renderActivePage() {
+    if (this.activeMode !== 'edit' || !this.activePage) return;
+    await this.renderBasePdfPage(this.activePageIndex);
+  }
+
+  private async renderBasePdfPage(pageIndex: number) {
+    const page = this.pages[pageIndex];
+    if (!page || !this.pageCanvasRef) return;
+
     const canvas = this.pageCanvasRef.nativeElement;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas dimensions according to page and zoom
-    const renderScale = 1.5; // High resolution
-    const displayWidth = page.width * this.zoom;
-    const displayHeight = page.height * this.zoom;
+    const dpr = window.devicePixelRatio || 1;
+    const renderScale = this.zoom * dpr;
 
-    canvas.width = page.width * renderScale;
-    canvas.height = page.height * renderScale;
-    canvas.style.width = `${displayWidth}px`;
-    canvas.style.height = `${displayHeight}px`;
+    canvas.width = Math.round(page.width * renderScale);
+    canvas.height = Math.round(page.height * renderScale);
+    canvas.style.width = `${page.width * this.zoom}px`;
+    canvas.style.height = `${page.height * this.zoom}px`;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // If blank page
-    if (page.isCustomBlank || page.originalPageIndex < 0 || !this.pdfJsDoc) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-      // Render base PDF page using pdfjs-dist
-      try {
-        const pdfPage = await this.pdfJsDoc.getPage(page.originalPageIndex + 1);
-        const viewport = pdfPage.getViewport({
-          scale: renderScale,
-          rotation: page.rotation
-        });
-        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
-      } catch (err) {
-        console.warn('PDF.js render fallback:', err);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // 1. If it's a PDF vector page
+    if (page.sourceType === 'pdf' && page.sourceDocId) {
+      const docEntry = this.sourcePdfDocs.get(page.sourceDocId);
+      if (docEntry && docEntry.pdfJsDoc && page.originalPageIndex >= 0) {
+        try {
+          const pdfPage = await docEntry.pdfJsDoc.getPage(page.originalPageIndex + 1);
+          const viewport = pdfPage.getViewport({
+            scale: renderScale,
+            rotation: page.rotation
+          });
+          await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+          this.renderAnnotationCanvas();
+          this.cdr.detectChanges();
+          return;
+        } catch (err) {
+          console.warn('PDF.js render error:', err);
+        }
       }
     }
 
+    // 2. If it's a Word .docx or Image page
+    if (page.imageBackgroundUrl) {
+      try {
+        const img = new Image();
+        img.src = page.imageBackgroundUrl;
+        await new Promise((res) => { img.onload = res; img.onerror = res; });
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        this.renderAnnotationCanvas();
+        this.cdr.detectChanges();
+        return;
+      } catch (err) {
+        console.warn('Image page render error:', err);
+      }
+    }
+
+    // 3. Default Blank
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     this.renderAnnotationCanvas();
     this.cdr.detectChanges();
   }
@@ -552,9 +884,11 @@ export class PdfEditorComponent implements OnInit {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const renderScale = 1.5;
-    canvas.width = page.width * renderScale;
-    canvas.height = page.height * renderScale;
+    const dpr = window.devicePixelRatio || 1;
+    const renderScale = this.zoom * dpr;
+
+    canvas.width = Math.round(page.width * renderScale);
+    canvas.height = Math.round(page.height * renderScale);
     canvas.style.width = `${page.width * this.zoom}px`;
     canvas.style.height = `${page.height * this.zoom}px`;
 
@@ -569,7 +903,7 @@ export class PdfEditorComponent implements OnInit {
 
     // Render preview shape while drawing
     if (this.previewShape) {
-      this.drawSingleAnnotation(ctx, this.previewShape, true);
+      this.drawSingleAnnotation(ctx, this.previewShape, false);
     }
 
     ctx.restore();
@@ -578,217 +912,231 @@ export class PdfEditorComponent implements OnInit {
   private drawSingleAnnotation(ctx: CanvasRenderingContext2D, ann: AnnotationItem, isSelected: boolean) {
     ctx.save();
 
-    if (ann.type === 'pen' || ann.type === 'highlight') {
-      if (ann.points && ann.points.length > 0) {
+    switch (ann.type) {
+      case 'pen':
+      case 'highlight': {
+        if (!ann.points || ann.points.length < 2) break;
         ctx.beginPath();
-        ctx.strokeStyle = ann.strokeColor || '#2563eb';
+        ctx.strokeStyle = ann.strokeColor || this.strokeColor;
         ctx.lineWidth = ann.strokeWidth || 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.globalAlpha = ann.type === 'highlight' ? 0.35 : (ann.strokeOpacity || 1);
+        ctx.globalAlpha = ann.strokeOpacity ?? (ann.type === 'highlight' ? 0.35 : 1.0);
 
         ctx.moveTo(ann.points[0].x, ann.points[0].y);
         for (let i = 1; i < ann.points.length; i++) {
           ctx.lineTo(ann.points[i].x, ann.points[i].y);
         }
         ctx.stroke();
+        break;
       }
-    } else if (ann.type === 'rect') {
-      ctx.beginPath();
-      ctx.rect(ann.x, ann.y, ann.width, ann.height);
-      if (ann.fillColor) {
-        ctx.fillStyle = ann.fillColor;
-        ctx.globalAlpha = ann.fillOpacity || 0.2;
-        ctx.fill();
-      }
-      ctx.globalAlpha = ann.strokeOpacity || 1;
-      ctx.strokeStyle = ann.strokeColor || '#2563eb';
-      ctx.lineWidth = ann.strokeWidth || 2;
-      ctx.stroke();
-    } else if (ann.type === 'circle') {
-      ctx.beginPath();
-      const radiusX = Math.abs(ann.width) / 2;
-      const radiusY = Math.abs(ann.height) / 2;
-      const centerX = ann.x + radiusX;
-      const centerY = ann.y + radiusY;
-      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-      if (ann.fillColor) {
-        ctx.fillStyle = ann.fillColor;
-        ctx.globalAlpha = ann.fillOpacity || 0.2;
-        ctx.fill();
-      }
-      ctx.globalAlpha = ann.strokeOpacity || 1;
-      ctx.strokeStyle = ann.strokeColor || '#2563eb';
-      ctx.lineWidth = ann.strokeWidth || 2;
-      ctx.stroke();
-    } else if (ann.type === 'line' || ann.type === 'arrow') {
-      ctx.beginPath();
-      ctx.moveTo(ann.x, ann.y);
-      ctx.lineTo(ann.x + ann.width, ann.y + ann.height);
-      ctx.strokeStyle = ann.strokeColor || '#2563eb';
-      ctx.lineWidth = ann.strokeWidth || 3;
-      ctx.globalAlpha = ann.strokeOpacity || 1;
-      ctx.stroke();
 
-      if (ann.type === 'arrow') {
-        const angle = Math.atan2(ann.height, ann.width);
-        const headLen = 12;
-        const endX = ann.x + ann.width;
-        const endY = ann.y + ann.height;
+      case 'rect': {
+        ctx.strokeStyle = ann.strokeColor || this.strokeColor;
+        ctx.lineWidth = ann.strokeWidth || 2;
+        ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
+        break;
+      }
+
+      case 'circle': {
+        ctx.strokeStyle = ann.strokeColor || this.strokeColor;
+        ctx.lineWidth = ann.strokeWidth || 2;
         ctx.beginPath();
-        ctx.moveTo(endX, endY);
-        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fillStyle = ann.strokeColor || '#2563eb';
-        ctx.fill();
+        const rx = Math.abs(ann.width) / 2;
+        const ry = Math.abs(ann.height) / 2;
+        const cx = ann.x + rx;
+        const cy = ann.y + ry;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
       }
-    } else if (ann.type === 'whiteout') {
-      // Solid white block
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(ann.x, ann.y, ann.width, ann.height);
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
-      ctx.setLineDash([]);
-    } else if (ann.type === 'text') {
-      if (ann.backgroundColor) {
-        ctx.fillStyle = ann.backgroundColor;
-        ctx.fillRect(ann.x, ann.y, ann.width, ann.height);
-      }
-      ctx.font = `${ann.bold ? 'bold ' : ''}${ann.italic ? 'italic ' : ''}${ann.fontSize || 16}px ${ann.fontFamily || 'Inter, sans-serif'}`;
-      ctx.fillStyle = ann.color || '#0f172a';
-      ctx.textBaseline = 'top';
 
-      // Multiline text wrapping
-      const lines = (ann.text || '').split('\n');
-      let currentY = ann.y + 4;
-      const lineHeight = (ann.fontSize || 16) * 1.3;
-      for (const line of lines) {
-        ctx.fillText(line, ann.x + 4, currentY);
-        currentY += lineHeight;
+      case 'arrow': {
+        ctx.strokeStyle = ann.strokeColor || this.strokeColor;
+        ctx.fillStyle = ann.strokeColor || this.strokeColor;
+        ctx.lineWidth = ann.strokeWidth || 3;
+        const fromX = ann.x;
+        const fromY = ann.y;
+        const toX = ann.x + ann.width;
+        const toY = ann.y + ann.height;
+        this.drawArrow(ctx, fromX, fromY, toX, toY);
+        break;
       }
-    } else if (ann.type === 'image' && ann.imageUrl) {
-      const img = new Image();
-      img.src = ann.imageUrl;
-      if (img.complete) {
-        ctx.drawImage(img, ann.x, ann.y, ann.width, ann.height);
-      } else {
-        img.onload = () => this.renderAnnotationCanvas();
+
+      case 'whiteout': {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ann.x, ann.y, ann.width, ann.height);
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
+        break;
+      }
+
+      case 'text': {
+        ctx.fillStyle = ann.color || this.textColor;
+        const fontStyle = `${ann.italic ? 'italic ' : ''}${ann.bold ? 'bold ' : ''}`;
+        const fontSize = ann.fontSize || 18;
+        ctx.font = `${fontStyle}${fontSize}px ${ann.fontFamily || 'Inter, sans-serif'}`;
+        ctx.textBaseline = 'top';
+
+        if (ann.text) {
+          const lines = ann.text.split('\n');
+          let offsetY = ann.y;
+          for (const line of lines) {
+            ctx.fillText(line, ann.x, offsetY);
+            offsetY += fontSize * 1.3;
+          }
+        }
+        break;
+      }
+
+      case 'image':
+      case 'signature': {
+        if (ann.imageUrl) {
+          const img = new Image();
+          img.src = ann.imageUrl;
+          if (img.complete) {
+            ctx.drawImage(img, ann.x, ann.y, ann.width, ann.height);
+          } else {
+            img.onload = () => this.renderAnnotationCanvas();
+          }
+        }
+        break;
       }
     }
 
-    // Selection border & handles
+    // Draw selection box if selected
     if (isSelected) {
       ctx.strokeStyle = '#2563eb';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
-      const padding = 3;
-      ctx.strokeRect(ann.x - padding, ann.y - padding, ann.width + padding * 2, ann.height + padding * 2);
-      ctx.setLineDash([]);
-
-      // Corner resize handle
+      ctx.strokeRect(ann.x - 3, ann.y - 3, ann.width + 6, ann.height + 6);
       ctx.fillStyle = '#2563eb';
-      ctx.fillRect(ann.x + ann.width - 4, ann.y + ann.height - 4, 8, 8);
+      ctx.fillRect(ann.x - 5, ann.y - 5, 6, 6);
+      ctx.fillRect(ann.x + ann.width - 1, ann.y - 5, 6, 6);
+      ctx.fillRect(ann.x - 5, ann.y + ann.height - 1, 6, 6);
+      ctx.fillRect(ann.x + ann.width - 1, ann.y + ann.height - 1, 6, 6);
     }
 
     ctx.restore();
   }
 
-  // Pointer Canvas Interactions
+  private drawArrow(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number) {
+    const headLen = 14;
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // ANNOTATION INTERACTION & POINTER EVENTS
+  // ═════════════════════════════════════════════════════════════════════════════
+
+  setTool(tool: ToolType) {
+    this.activeTool = tool;
+    this.selectedAnnotationId = null;
+
+    if (tool === 'image') {
+      if (this.imageInputRef) {
+        this.imageInputRef.nativeElement.click();
+      }
+    } else if (tool === 'signature') {
+      this.openSignatureModal();
+    }
+  }
+
   onPointerDownCanvas(event: PointerEvent) {
-    if (!this.activePage) return;
-    const coords = this.getCanvasCoords(event);
+    if (!this.activePage || !this.annotationCanvasRef) return;
+    const canvas = this.annotationCanvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+    const scale = this.activePage.width / rect.width;
+
+    const x = (event.clientX - rect.left) * scale;
+    const y = (event.clientY - rect.top) * scale;
 
     if (this.activeTool === 'select') {
-      // Check if clicking existing annotation
-      const hit = this.findAnnotationAt(coords.x, coords.y);
-      this.selectedAnnotationId = hit ? hit.id : null;
-      if (hit) {
-        this.isDrawing = true;
-        this.drawStartX = coords.x - hit.x;
-        this.drawStartY = coords.y - hit.y;
-      }
+      const clicked = this.findAnnotationAt(x, y);
+      this.selectedAnnotationId = clicked ? clicked.id : null;
       this.renderAnnotationCanvas();
       return;
     }
 
     this.isDrawing = true;
-    this.drawStartX = coords.x;
-    this.drawStartY = coords.y;
+    this.drawStartX = x;
+    this.drawStartY = y;
 
     if (this.activeTool === 'pen' || this.activeTool === 'highlight') {
-      this.currentPoints = [{ x: coords.x, y: coords.y }];
-      this.previewShape = {
-        id: `ann-${Date.now()}`,
-        type: this.activeTool,
-        x: coords.x,
-        y: coords.y,
-        width: 0,
-        height: 0,
-        points: this.currentPoints,
-        strokeColor: this.activeTool === 'highlight' ? '#fde047' : this.strokeColor,
-        strokeWidth: this.activeTool === 'highlight' ? 18 : this.strokeWidth,
-        strokeOpacity: this.activeTool === 'highlight' ? 0.4 : 1.0
-      };
+      this.currentPoints = [{ x, y }];
     } else if (this.activeTool === 'text') {
       const newText: AnnotationItem = {
-        id: `ann-text-${Date.now()}`,
+        id: `text-${Date.now()}`,
         type: 'text',
-        x: coords.x,
-        y: coords.y,
-        width: 220,
-        height: 42,
-        text: 'Click here to edit text',
+        x,
+        y,
+        width: 180,
+        height: 30,
+        text: 'Type text here...',
         fontSize: this.fontSize,
         fontFamily: this.fontFamily,
-        color: this.textColor,
-        bold: false
+        color: this.strokeColor,
+        bold: false,
+        italic: false
       };
       this.activePage.annotations.push(newText);
       this.selectedAnnotationId = newText.id;
       this.isDrawing = false;
-      this.activeTool = 'select';
       this.saveHistory();
       this.renderAnnotationCanvas();
-    } else if (['rect', 'circle', 'line', 'arrow', 'whiteout'].includes(this.activeTool)) {
-      this.previewShape = {
-        id: `ann-${Date.now()}`,
-        type: this.activeTool,
-        x: coords.x,
-        y: coords.y,
-        width: 1,
-        height: 1,
-        strokeColor: this.activeTool === 'whiteout' ? '#cbd5e1' : this.strokeColor,
-        strokeWidth: this.activeTool === 'whiteout' ? 1 : this.strokeWidth,
-        fillColor: this.activeTool === 'whiteout' ? '#ffffff' : this.fillColor,
-        fillOpacity: this.activeTool === 'whiteout' ? 1.0 : 0.2
-      };
     }
   }
 
   onPointerMoveCanvas(event: PointerEvent) {
-    if (!this.isDrawing || !this.activePage) return;
-    const coords = this.getCanvasCoords(event);
+    if (!this.isDrawing || !this.activePage || !this.annotationCanvasRef) return;
+    const canvas = this.annotationCanvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+    const scale = this.activePage.width / rect.width;
 
-    if (this.activeTool === 'select' && this.selectedAnnotation) {
-      // Dragging selected annotation
-      this.selectedAnnotation.x = Math.max(0, coords.x - this.drawStartX);
-      this.selectedAnnotation.y = Math.max(0, coords.y - this.drawStartY);
-      this.renderAnnotationCanvas();
-      return;
-    }
+    const x = (event.clientX - rect.left) * scale;
+    const y = (event.clientY - rect.top) * scale;
 
     if (this.activeTool === 'pen' || this.activeTool === 'highlight') {
-      this.currentPoints.push({ x: coords.x, y: coords.y });
-      if (this.previewShape) {
-        this.previewShape.points = [...this.currentPoints];
-      }
+      this.currentPoints.push({ x, y });
+      this.previewShape = {
+        id: 'preview',
+        type: this.activeTool,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        points: [...this.currentPoints],
+        strokeColor: this.strokeColor,
+        strokeWidth: this.activeTool === 'highlight' ? 14 : this.strokeWidth,
+        strokeOpacity: this.activeTool === 'highlight' ? 0.35 : 1.0
+      };
       this.renderAnnotationCanvas();
-    } else if (this.previewShape) {
-      this.previewShape.width = coords.x - this.drawStartX;
-      this.previewShape.height = coords.y - this.drawStartY;
+    } else if (['rect', 'circle', 'arrow', 'whiteout'].includes(this.activeTool)) {
+      const w = x - this.drawStartX;
+      const h = y - this.drawStartY;
+      this.previewShape = {
+        id: 'preview',
+        type: this.activeTool,
+        x: this.activeTool === 'arrow' ? this.drawStartX : Math.min(this.drawStartX, x),
+        y: this.activeTool === 'arrow' ? this.drawStartY : Math.min(this.drawStartY, y),
+        width: this.activeTool === 'arrow' ? w : Math.abs(w),
+        height: this.activeTool === 'arrow' ? h : Math.abs(h),
+        strokeColor: this.strokeColor,
+        strokeWidth: this.strokeWidth
+      };
       this.renderAnnotationCanvas();
     }
   }
@@ -798,51 +1146,46 @@ export class PdfEditorComponent implements OnInit {
     this.isDrawing = false;
 
     if (this.previewShape) {
-      // Normalize width & height if negative (except line/arrow)
-      if (['rect', 'circle', 'whiteout'].includes(this.previewShape.type)) {
-        if (this.previewShape.width < 0) {
-          this.previewShape.x += this.previewShape.width;
-          this.previewShape.width = Math.abs(this.previewShape.width);
+      if (this.activeTool === 'pen' || this.activeTool === 'highlight') {
+        if (this.currentPoints.length > 1) {
+          const newAnn: AnnotationItem = {
+            id: `draw-${Date.now()}`,
+            type: this.activeTool,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            points: [...this.currentPoints],
+            strokeColor: this.strokeColor,
+            strokeWidth: this.activeTool === 'highlight' ? 14 : this.strokeWidth,
+            strokeOpacity: this.activeTool === 'highlight' ? 0.35 : 1.0
+          };
+          this.activePage.annotations.push(newAnn);
         }
-        if (this.previewShape.height < 0) {
-          this.previewShape.y += this.previewShape.height;
-          this.previewShape.height = Math.abs(this.previewShape.height);
+      } else {
+        if (Math.abs(this.previewShape.width) > 3 || Math.abs(this.previewShape.height) > 3) {
+          this.activePage.annotations.push({
+            ...this.previewShape,
+            id: `shape-${Date.now()}`
+          });
         }
-      }
-
-      // Only save if meaningful size
-      if (this.previewShape.type === 'pen' || this.previewShape.type === 'highlight' || (Math.abs(this.previewShape.width) > 4 || Math.abs(this.previewShape.height) > 4)) {
-        this.activePage.annotations.push({ ...this.previewShape });
-        this.selectedAnnotationId = this.previewShape.id;
-        this.saveHistory();
       }
       this.previewShape = null;
+      this.currentPoints = [];
+      this.saveHistory();
+      this.renderAnnotationCanvas();
     }
-
-    this.renderAnnotationCanvas();
   }
 
-  private getCanvasCoords(event: PointerEvent): Point {
-    const canvas = this.annotationCanvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / this.zoom;
-    const y = (event.clientY - rect.top) / this.zoom;
-    return { x, y };
-  }
-
-  private findAnnotationAt(x: number, y: number): AnnotationItem | null {
-    if (!this.activePage) return null;
-    // Reverse search so topmost element is clicked first
+  private findAnnotationAt(x: number, y: number): AnnotationItem | undefined {
+    if (!this.activePage) return undefined;
     for (let i = this.activePage.annotations.length - 1; i >= 0; i--) {
       const ann = this.activePage.annotations[i];
-      if (x >= ann.x && x <= ann.x + ann.width && y >= ann.y && y <= ann.y + ann.height) {
-        return ann;
-      }
-      if (ann.points && ann.points.some(p => Math.hypot(p.x - x, p.y - y) < 12)) {
+      if (x >= ann.x - 5 && x <= ann.x + ann.width + 5 && y >= ann.y - 5 && y <= ann.y + ann.height + 5) {
         return ann;
       }
     }
-    return null;
+    return undefined;
   }
 
   deleteSelectedAnnotation() {
@@ -853,85 +1196,75 @@ export class PdfEditorComponent implements OnInit {
     this.renderAnnotationCanvas();
   }
 
+  // ═════════════════════════════════════════════════════════════════════════════
+  // IMAGE & SIGNATURE STAMP INSERTION
+  // ═════════════════════════════════════════════════════════════════════════════
+
   onImageInserted(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0] && this.activePage) {
       const file = input.files[0];
       const reader = new FileReader();
       reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 200;
-          let w = img.width;
-          let h = img.height;
-          if (w > maxDim || h > maxDim) {
-            const scale = maxDim / Math.max(w, h);
-            w *= scale;
-            h *= scale;
-          }
-          const imageAnn: AnnotationItem = {
-            id: `ann-img-${Date.now()}`,
+        const url = e.target?.result as string;
+        if (url && this.activePage) {
+          const newImg: AnnotationItem = {
+            id: `stamp-${Date.now()}`,
             type: 'image',
-            x: 80,
-            y: 80,
-            width: w,
-            height: h,
-            imageUrl: dataUrl
+            x: 50,
+            y: 50,
+            width: 160,
+            height: 160,
+            imageUrl: url
           };
-          this.activePage?.annotations.push(imageAnn);
-          this.selectedAnnotationId = imageAnn.id;
-          this.activeTool = 'select';
+          this.activePage.annotations.push(newImg);
+          this.selectedAnnotationId = newImg.id;
           this.saveHistory();
           this.renderAnnotationCanvas();
-        };
-        img.src = dataUrl;
+        }
       };
       reader.readAsDataURL(file);
+      input.value = '';
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // SIGNATURE MODAL
-  // ═════════════════════════════════════════════════════════════════════════════
-
   openSignatureModal() {
     this.showSignatureModal = true;
-    setTimeout(() => this.initSignaturePad(), 50);
+    setTimeout(() => {
+      if (this.signatureCanvasRef) {
+        const c = this.signatureCanvasRef.nativeElement;
+        const ctx = c.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, c.width, c.height);
+        }
+      }
+    }, 50);
   }
 
   closeSignatureModal() {
     this.showSignatureModal = false;
   }
 
-  initSignaturePad() {
-    const canvas = this.signatureCanvasRef?.nativeElement;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-    }
-  }
-
   onSignPointerDown(event: PointerEvent) {
+    this.isSigning = true;
     const canvas = this.signatureCanvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    this.isSigning = true;
+    const rect = canvas.getBoundingClientRect();
     ctx.beginPath();
     ctx.moveTo(event.clientX - rect.left, event.clientY - rect.top);
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
   }
 
   onSignPointerMove(event: PointerEvent) {
     if (!this.isSigning) return;
     const canvas = this.signatureCanvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
     ctx.lineTo(event.clientX - rect.left, event.clientY - rect.top);
     ctx.stroke();
   }
@@ -941,26 +1274,32 @@ export class PdfEditorComponent implements OnInit {
   }
 
   clearSignature() {
-    this.initSignaturePad();
+    if (!this.signatureCanvasRef) return;
+    const canvas = this.signatureCanvasRef.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
   }
 
   applySignature() {
-    const canvas = this.signatureCanvasRef?.nativeElement;
-    if (!canvas || !this.activePage) return;
-    const sigUrl = canvas.toDataURL('image/png');
-    const sigAnn: AnnotationItem = {
-      id: `ann-sig-${Date.now()}`,
-      type: 'image',
+    if (!this.signatureCanvasRef || !this.activePage) return;
+    const canvas = this.signatureCanvasRef.nativeElement;
+    const sigDataUrl = canvas.toDataURL('image/png');
+
+    const newSig: AnnotationItem = {
+      id: `sig-${Date.now()}`,
+      type: 'signature',
       x: 100,
-      y: 150,
+      y: 200,
       width: 180,
       height: 70,
-      imageUrl: sigUrl
+      imageUrl: sigDataUrl
     };
-    this.activePage.annotations.push(sigAnn);
-    this.selectedAnnotationId = sigAnn.id;
-    this.activeTool = 'select';
-    this.closeSignatureModal();
+    this.activePage.annotations.push(newSig);
+    this.selectedAnnotationId = newSig.id;
+    this.showSignatureModal = false;
     this.saveHistory();
     this.renderAnnotationCanvas();
   }
@@ -970,52 +1309,30 @@ export class PdfEditorComponent implements OnInit {
   // ═════════════════════════════════════════════════════════════════════════════
 
   saveHistory() {
-    const state = JSON.stringify({
-      pages: this.pages.map(p => ({
-        id: p.id,
-        originalPageIndex: p.originalPageIndex,
-        displayNumber: p.displayNumber,
-        rotation: p.rotation,
-        width: p.width,
-        height: p.height,
-        aspectRatio: p.aspectRatio,
-        annotations: p.annotations,
-        isCustomBlank: p.isCustomBlank
-      })),
-      activePageIndex: this.activePageIndex
-    });
-
-    // Remove any redo steps ahead
-    this.history = this.history.slice(0, this.historyIndex + 1);
-    this.history.push(state);
+    const snapshot = JSON.stringify(this.pages);
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1);
+    }
+    this.history.push(snapshot);
+    if (this.history.length > 30) this.history.shift();
     this.historyIndex = this.history.length - 1;
   }
 
   undo() {
-    if (!this.canUndo) return;
-    this.historyIndex--;
-    this.restoreHistoryState(this.history[this.historyIndex]);
+    if (this.canUndo) {
+      this.historyIndex--;
+      this.pages = JSON.parse(this.history[this.historyIndex]);
+      this.selectedAnnotationId = null;
+      this.renderActivePage();
+    }
   }
 
   redo() {
-    if (!this.canRedo) return;
-    this.historyIndex++;
-    this.restoreHistoryState(this.history[this.historyIndex]);
-  }
-
-  private restoreHistoryState(stateStr: string) {
-    try {
-      const data = JSON.parse(stateStr);
-      // Preserve existing thumbnail URLs
-      const thumbMap = new Map(this.pages.map(p => [p.id, p.thumbnailUrl]));
-      this.pages = data.pages.map((p: any) => ({
-        ...p,
-        thumbnailUrl: thumbMap.get(p.id) || this.createBlankThumbnail()
-      }));
-      this.activePageIndex = Math.min(data.activePageIndex, this.pages.length - 1);
+    if (this.canRedo) {
+      this.historyIndex++;
+      this.pages = JSON.parse(this.history[this.historyIndex]);
+      this.selectedAnnotationId = null;
       this.renderActivePage();
-    } catch (e) {
-      console.error('Failed to restore history state:', e);
     }
   }
 
@@ -1039,32 +1356,57 @@ export class PdfEditorComponent implements OnInit {
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
-  // EXPORT / DOWNLOAD PDF
+  // EXPORT / DOWNLOAD PDF (MULTI-DOC MERGE SUPPORT)
   // ═════════════════════════════════════════════════════════════════════════════
 
   async exportPdf() {
     if (this.pages.length === 0) return;
     this.isExporting = true;
-    this.loadingMessage = 'Assembling and exporting modified PDF…';
+    this.loadingMessage = 'Assembling and exporting merged PDF…';
     this.cdr.detectChanges();
 
     try {
       const outputDoc = await PDFDocument.create();
 
-      // If we have an original PDF document, load it for copying pages
-      let sourceDoc: PDFDocument | null = null;
-      if (this.originalPdfBytes) {
-        sourceDoc = await PDFDocument.load(this.originalPdfBytes, { ignoreEncryption: true });
+      // Pre-load all source PDFDocument instances
+      for (const [docId, entry] of this.sourcePdfDocs.entries()) {
+        if (!entry.pdfDocInstance) {
+          entry.pdfDocInstance = await PDFDocument.load(entry.pdfBytes, { ignoreEncryption: true });
+        }
       }
 
       for (let i = 0; i < this.pages.length; i++) {
         const pageItem = this.pages[i];
         let outPage: any;
 
-        if (!pageItem.isCustomBlank && sourceDoc && pageItem.originalPageIndex >= 0) {
-          const [copiedPage] = await outputDoc.copyPages(sourceDoc, [pageItem.originalPageIndex]);
-          outPage = outputDoc.addPage(copiedPage);
+        // 1. If page originates from a PDF
+        if (pageItem.sourceType === 'pdf' && pageItem.sourceDocId && pageItem.originalPageIndex >= 0) {
+          const entry = this.sourcePdfDocs.get(pageItem.sourceDocId);
+          if (entry && entry.pdfDocInstance) {
+            const [copiedPage] = await outputDoc.copyPages(entry.pdfDocInstance, [pageItem.originalPageIndex]);
+            outPage = outputDoc.addPage(copiedPage);
+          } else {
+            outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
+          }
+        } else if (pageItem.imageBackgroundUrl) {
+          // 2. If page originates from Word .docx or Image
+          outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
+          const imgUrl = pageItem.imageBackgroundUrl;
+          let embeddedImg: any;
+          if (imgUrl.startsWith('data:image/png')) {
+            embeddedImg = await outputDoc.embedPng(imgUrl);
+          } else {
+            embeddedImg = await outputDoc.embedJpg(imgUrl);
+          }
+          const { width: pWidth, height: pHeight } = outPage.getSize();
+          outPage.drawImage(embeddedImg, {
+            x: 0,
+            y: 0,
+            width: pWidth,
+            height: pHeight
+          });
         } else {
+          // 3. Blank page
           outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
         }
 
@@ -1074,7 +1416,7 @@ export class PdfEditorComponent implements OnInit {
           outPage.setRotation(degrees((currentRotation + pageItem.rotation) % 360));
         }
 
-        // If there are annotations, render them to an overlay image and embed
+        // Render annotations overlay
         if (pageItem.annotations && pageItem.annotations.length > 0) {
           const overlayDataUrl = await this.renderAnnotationLayerToImage(pageItem);
           if (overlayDataUrl) {
@@ -1096,7 +1438,7 @@ export class PdfEditorComponent implements OnInit {
 
       const downloadLink = document.createElement('a');
       downloadLink.href = downloadUrl;
-      const exportName = this.fileName.replace(/\.pdf$/i, '') + '_edited.pdf';
+      const exportName = this.fileName.replace(/\.pdf$/i, '') + '_exported.pdf';
       downloadLink.download = exportName;
       document.body.appendChild(downloadLink);
       downloadLink.click();
@@ -1105,7 +1447,7 @@ export class PdfEditorComponent implements OnInit {
 
     } catch (err: any) {
       console.error('Failed to export PDF:', err);
-      alert('An error occurred during PDF export. Please try again.');
+      alert('An error occurred during PDF export: ' + (err?.message || 'Unknown error'));
     } finally {
       this.isExporting = false;
       this.cdr.detectChanges();
@@ -1113,22 +1455,26 @@ export class PdfEditorComponent implements OnInit {
   }
 
   private async renderAnnotationLayerToImage(page: PdfPageItem): Promise<string | null> {
+    if (!page.annotations || page.annotations.length === 0) return null;
     const canvas = document.createElement('canvas');
-    const scale = 2.0; // High resolution output
-    canvas.width = page.width * scale;
-    canvas.height = page.height * scale;
+    canvas.width = Math.round(page.width * 2);
+    canvas.height = Math.round(page.height * 2);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.save();
-    ctx.scale(scale, scale);
-
-    // Render annotations onto transparent canvas
+    ctx.scale(2, 2);
     for (const ann of page.annotations) {
       this.drawSingleAnnotation(ctx, ann, false);
     }
-    ctx.restore();
-
     return canvas.toDataURL('image/png');
+  }
+
+  private readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 }
