@@ -41,7 +41,7 @@ interface PlotHelpCard extends PlotExample {
   template: `
     <div class="r-plot-canvas-container">
       <!-- Top Multi-Plot Tabs & View Mode Bar -->
-      <div class="plot-tabs-bar">
+      <div class="plot-tabs-bar" *ngIf="!renderedSvg">
         <div class="tabs-list">
           <div
             *ngFor="let p of plots; let pIdx = index"
@@ -83,7 +83,7 @@ interface PlotHelpCard extends PlotExample {
       </div>
 
       <!-- Canvas Inspector Toolbar (for Active Plot) -->
-      <div class="canvas-toolbar" *ngIf="viewMode === 'single'">
+      <div class="canvas-toolbar" *ngIf="viewMode === 'single' && !renderedSvg">
         <div class="toolbar-controls">
           <!-- Chart Type -->
           <div class="ctrl-group type-menu-wrap">
@@ -177,7 +177,7 @@ interface PlotHelpCard extends PlotExample {
       </div>
 
       <!-- Publication controls: a focused modal keeps the canvas workspace uncluttered. -->
-      <div class="customize-backdrop" *ngIf="viewMode === 'single' && showInspector" (click)="showInspector = false">
+      <div class="customize-backdrop" *ngIf="viewMode === 'single' && showInspector && !renderedSvg" (click)="showInspector = false">
       <section class="customize-modal" role="dialog" aria-modal="true" aria-label="Customize plot" (click)="$event.stopPropagation()">
         <header class="customize-modal-header">
           <div><span class="eyebrow">FIGURE SETTINGS</span><h2>Customize plot</h2><p>Adjust the figure as a whole, then use the canvas to position and resize individual text elements.</p></div>
@@ -320,7 +320,7 @@ interface PlotHelpCard extends PlotExample {
           <img [src]="renderedSvg" alt="R-generated editable figure">
         </div>
 
-        <div class="figure-composer" *ngIf="composition">
+        <div class="figure-composer" *ngIf="composition && !renderedSvg">
           <div *ngFor="let label of composition.labels" class="figure-label" [style.left.%]="label.x * 100" [style.bottom.%]="label.y * 100" [style.font-size.px]="label.size" [style.color]="label.color" [style.font-weight]="label.bold ? 700 : 400">{{ label.text }}</div>
           <div *ngFor="let panel of composition.panels" class="figure-panel" [style.left.%]="panel.x * 100" [style.bottom.%]="panel.y * 100" [style.width.%]="panel.width * 100" [style.height.%]="panel.height * 100">
             <app-r-plot-preview [plotState]="plotFor(panel.id)" [data]="plotFor(panel.id).dataRows || data"></app-r-plot-preview>
