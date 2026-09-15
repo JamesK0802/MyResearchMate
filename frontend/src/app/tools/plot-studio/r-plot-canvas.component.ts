@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
-import { RPlotSyncService, PlotState, PlotType, PlotExample } from '../../services/r-plot-sync.service';
+import { RPlotSyncService, PlotState, PlotType, PlotExample, FigureComposition } from '../../services/r-plot-sync.service';
 import { RPlotPreviewComponent } from './r-plot-preview.component';
 
 interface InlineTextEditorState {
@@ -316,9 +316,17 @@ interface PlotHelpCard extends PlotExample {
         (mouseleave)="endPan()"
         [class.panning]="isPanning">
 
+        <div class="figure-composer" *ngIf="composition">
+          <div *ngFor="let label of composition.labels" class="figure-label" [style.left.%]="label.x * 100" [style.bottom.%]="label.y * 100" [style.font-size.px]="label.size" [style.color]="label.color" [style.font-weight]="label.bold ? 700 : 400">{{ label.text }}</div>
+          <div *ngFor="let panel of composition.panels" class="figure-panel" [style.left.%]="panel.x * 100" [style.bottom.%]="panel.y * 100" [style.width.%]="panel.width * 100" [style.height.%]="panel.height * 100">
+            <app-r-plot-preview [plotState]="plotFor(panel.id)" [data]="plotFor(panel.id).dataRows || data"></app-r-plot-preview>
+          </div>
+        </div>
+
         <!-- Rendered SVG Plot -->
         <div
           class="svg-container"
+          [class.composer-hidden]="composition"
           #svgContainer
           [style.transform]="'scale(' + zoomScale + ') translate(' + panX + 'px, ' + panY + 'px)'"
           [style.transform-origin]="'center center'">
@@ -1369,6 +1377,11 @@ interface PlotHelpCard extends PlotExample {
     .canvas-viewport.dark .svg-container {
       background: #0f172a;
     }
+    .svg-container.composer-hidden { display: none; }
+    .figure-composer { position: relative; width: min(100%, 1100px); aspect-ratio: 12.8 / 9.8; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,.08); overflow: hidden; }
+    .figure-panel { position: absolute; min-width: 0; min-height: 0; }
+    .figure-panel app-r-plot-preview { display: block; width: 100%; height: 100%; }
+    .figure-label { position: absolute; transform: translateY(100%); white-space: nowrap; font-family: Inter, sans-serif; line-height: 1.1; }
 
 
     .paper-svg {
@@ -1730,6 +1743,7 @@ export class RPlotCanvasComponent implements OnInit {
   viewMode: 'single' | 'grid' = 'single';
   data: Array<Record<string, any>> = [];
   columns: string[] = [];
+  composition: FigureComposition | null = null;
 
   showInspector = false;
   previewSvgMarkup: SafeHtml = '';
@@ -1810,8 +1824,11 @@ export class RPlotCanvasComponent implements OnInit {
     this.rSyncService.viewMode$.subscribe(mode => {
       this.viewMode = mode;
     });
+    this.rSyncService.composition$.subscribe(composition => this.composition = composition);
 
   }
+
+  plotFor(id: string): PlotState { return this.plots.find(plot => plot.id === id) || this.activePlot; }
 
   get activePlot(): PlotState {
     const list = this.plots;
@@ -2510,8 +2527,9 @@ export class RPlotCanvasComponent implements OnInit {
 
           this.renderItems.push({
             x, y, width: barWidthPx, height, centerX: catCenterX, color: palette[0], errorYMin: errYMin, errorYMax: errYMax
-          });
-        }
+    });
+    this.rSyncService.composition$.subscribe(composition => this.composition = composition);
+  }
       });
     } else if (s.chartType === 'boxplot') {
       const quantile = (values: number[], percentile: number) => {

@@ -119,6 +119,10 @@ export interface NativeRImage {
   name: string;
   data_url: string;
 }
+export interface FigureComposition {
+  panels: Array<{ id: string; x: number; y: number; width: number; height: number }>;
+  labels: Array<{ text: string; x: number; y: number; size: number; color: string; bold?: boolean }>;
+}
 
 export interface PlotProjectDocument {
   version: 1;
@@ -214,6 +218,7 @@ export class RPlotSyncService {
   private sourceWorkbookSubject = new BehaviorSubject<RSourceWorkbook | null>(null);
   private nativeRenderSubject = new BehaviorSubject<NativeRImage[]>([]);
   private workbookSheetsSubject = new BehaviorSubject<Record<string, Array<Record<string, any>>>>({});
+  private compositionSubject = new BehaviorSubject<FigureComposition | null>(null);
   private wizardOpenSubject = new BehaviorSubject<boolean>(false);
   private viewModeSubject = new BehaviorSubject<'single' | 'grid'>('single');
 
@@ -227,6 +232,7 @@ export class RPlotSyncService {
   rSourceMode$ = this.rSourceModeSubject.asObservable();
   sourceWorkbook$ = this.sourceWorkbookSubject.asObservable();
   nativeRender$ = this.nativeRenderSubject.asObservable();
+  composition$ = this.compositionSubject.asObservable();
   wizardOpen$ = this.wizardOpenSubject.asObservable();
   viewMode$ = this.viewModeSubject.asObservable();
 
@@ -985,7 +991,21 @@ export class RPlotSyncService {
     ];
     this.plotsSubject.next(panels);
     this.activePlotIndexSubject.next(0);
-    this.viewModeSubject.next('grid');
+    this.viewModeSubject.next('single');
+    this.compositionSubject.next({
+      panels: [
+        { id: 'mutation-cpc', x: .170, y: .570, width: .29, height: .275 }, { id: 'mutation-try', x: .540, y: .570, width: .29, height: .275 },
+        { id: 'concordance-cpc', x: .140, y: .105, width: .35, height: .375 }, { id: 'concordance-try', x: .510, y: .105, width: .35, height: .375 }
+      ],
+      labels: [
+        { text: 'Pooled analysis preserves reference-specific mutation outputs', x: .14, y: .975, size: 14, color: '#171717', bold: true },
+        { text: 'Comparison of single-reference analyses with CPC- and TRY-assigned reads recovered from a pooled dataset', x: .14, y: .943, size: 9.4, color: '#5E5E5E' },
+        { text: 'A  |  Mutation-class composition', x: .14, y: .895, size: 11.5, color: '#1A1A1A', bold: true },
+        { text: 'Single-reference and pooled-assigned reads show comparable class distributions', x: .14, y: .868, size: 9.2, color: '#5C5C5C' },
+        { text: 'B  |  Sequence-defined mutation signatures', x: .14, y: .540, size: 11.5, color: '#1A1A1A', bold: true },
+        { text: 'Points near the identity line indicate agreement after pooled assignment', x: .14, y: .515, size: 9.2, color: '#5C5C5C' }
+      ]
+    });
     return true;
   }
 
