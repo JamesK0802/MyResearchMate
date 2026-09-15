@@ -2841,6 +2841,17 @@ select.form-control {
   color: #166534;
 }
 
+.dropdown-nested-links {
+  margin: 0 8px 6px 22px;
+  padding-left: 8px;
+  border-left: 1px solid var(--color-border-light);
+}
+
+.dropdown-nested-links .dropdown-item {
+  padding: 8px 10px;
+  font-size: .8rem;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Login & Profile Button Styles
 ═══════════════════════════════════════════════════════════════════ */

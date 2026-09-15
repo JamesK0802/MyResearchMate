@@ -14,11 +14,13 @@
           <span class="nav-tab" style="cursor: pointer;">Tools ▾</span>
           <div class="dropdown-content">
             <a routerLink="/crispr" routerLinkActive="active" class="dropdown-item">Crispr Analysis</a>
+            <div class="dropdown-nested-links">
+              <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
+            </div>
             <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="dropdown-item">Tree Protocol</a>
             <a routerLink="/tools/plot-generator" routerLinkActive="active" class="dropdown-item">R-Plot Studio</a>
             <a routerLink="/tools/pcr" routerLinkActive="active" class="dropdown-item">Solution Protocol</a>
             <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
-            <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
             <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="dropdown-item">Photo Comparison</a>
             <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="dropdown-item">External Tools</a>
           </div>
@@ -46,13 +48,17 @@
           <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
           <div class="dropdown-content">
             <a routerLink="/crispr/my-data" routerLinkActive="active" class="dropdown-item">Crispr Analysis</a>
+            <div class="dropdown-nested-links">
+              <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
+            </div>
             <a routerLink="/data/protocol-trees" routerLinkActive="active" class="dropdown-item">Tree Protocol</a>
+            <div class="dropdown-nested-links">
+              <a routerLink="/data/experiment-logs" routerLinkActive="active" class="dropdown-item">Experiment Logs</a>
+            </div>
             <a routerLink="/data/plot-projects" routerLinkActive="active" class="dropdown-item">R-Plot Studio</a>
             <a routerLink="/data/pcr-protocols" routerLinkActive="active" class="dropdown-item">Solution Protocol</a>
             <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
-            <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="dropdown-item">Sequence Viewer</a>
             <a routerLink="/data/memos" routerLinkActive="active" class="dropdown-item">Memo</a>
-            <a routerLink="/data/experiment-logs" routerLinkActive="active" class="dropdown-item">Experiment Logs</a>
           </div>
         </div>
 
@@ -133,6 +139,7 @@
         <div class="drawer-section-content" *ngIf="isMobileSectionOpen('tools')">
           <a routerLink="/crispr/analysis" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
           <div class="drawer-nested-links">
+            <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
             <a routerLink="/crispr/benchmark" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">Benchmark</a>
             <a routerLink="/crispr/result-viewer" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">Result Viewer</a>
             <a *ngIf="auth.isLoggedIn" routerLink="/crispr/my-data" routerLinkActive="active" class="drawer-link" [class.locked]="analysisState.isAnalysisRunning" (click)="closeMobileCrisprLink($event)">My Data</a>
@@ -140,7 +147,6 @@
           <a routerLink="/tools/protocol-builder" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
           <a routerLink="/tools/plot-generator" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
           <a routerLink="/tools/pcr" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
-          <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
           <a routerLink="/tools/sample-photo-compare" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Photo Comparison</a>
           <a *ngIf="auth.isLoggedIn" routerLink="/tools/directory" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">External Tools</a>
         </div>
@@ -152,12 +158,16 @@
         </button>
         <div class="drawer-section-content" *ngIf="isMobileSectionOpen('data')">
           <a routerLink="/crispr/my-data" class="drawer-link" (click)="isMobileMenuOpen = false">Crispr Analysis</a>
+          <div class="drawer-nested-links">
+            <a routerLink="/tools/sequence-viewer" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
+          </div>
           <a routerLink="/data/protocol-trees" class="drawer-link" (click)="isMobileMenuOpen = false">Tree Protocol</a>
+          <div class="drawer-nested-links">
+            <a routerLink="/data/experiment-logs" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Logs</a>
+          </div>
           <a routerLink="/data/plot-projects" class="drawer-link" (click)="isMobileMenuOpen = false">R-Plot Studio</a>
           <a routerLink="/data/pcr-protocols" class="drawer-link" (click)="isMobileMenuOpen = false">Solution Protocol</a>
-          <a routerLink="/tools/sequence-viewer" class="drawer-link" (click)="isMobileMenuOpen = false">Sequence Viewer</a>
           <a routerLink="/data/memos" class="drawer-link" (click)="isMobileMenuOpen = false">Memo</a>
-          <a routerLink="/data/experiment-logs" class="drawer-link" (click)="isMobileMenuOpen = false">Experiment Logs</a>
         </div>
       </div>
 
