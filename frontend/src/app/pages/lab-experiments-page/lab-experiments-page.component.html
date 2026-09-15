@@ -24,8 +24,8 @@
     <app-my-data-card *ngFor="let exp of displayExperiments"
       [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="!!exp._shared"
       [syncLabel]="syncStates[exp.id] === 'error' ? 'Save failed' : ''" [syncError]="syncStates[exp.id] === 'error'"
-      primaryLabel="Open" [secondaryLabel]="activeTab === 'current' ? 'Complete' : ''" [showDelete]="!exp._shared"
-      (open)="openExperiment(exp)" (secondary)="openCompletion(exp)" (remove)="deleteExperiment(exp)">
+      primaryLabel="Open" [showShare]="!exp._shared" [showDelete]="!exp._shared"
+      (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">
       <div card-content><p class="card-protocol">{{exp.protocol_root_name || exp.protocol_title}}</p></div>
     </app-my-data-card>
   </app-my-data-grid>
@@ -38,25 +38,36 @@
     <div class="detail-body">
       <div class="log-toolbar"><small>{{formatDate(selectedExperiment.created_at)}}</small><button *ngIf="activeTab === 'current'" class="primary-action" (click)="openCompletion(selectedExperiment)">Complete</button></div>
       <p *ngIf="selectedExperiment.samples?.length" class="sample-summary">{{selectedExperiment.samples.join(', ')}}</p>
-      <div class="memo-heading"><h3>Memos</h3><button *ngIf="activeTab === 'current' && !memoComposerOpen" class="add-memo" aria-label="Add memo" (click)="memoComposerOpen = true">+</button></div>
-      <section *ngIf="memoComposerOpen" class="memo-composer">
-        <textarea [(ngModel)]="memoText" rows="4" aria-label="Memo" placeholder="Observation, change, result…"></textarea>
-        <div class="form-actions"><button class="secondary-action" (click)="memoComposerOpen=false; memoText=''">Cancel</button><button class="primary-action" [disabled]="!memoText.trim()" (click)="addMemo()">Save</button></div>
-      </section>
-      <article *ngFor="let memo of selectedExperiment.run_memos" class="memo-entry"><small>{{formatDate(memo.created_at)}}</small><p>{{memo.text}}</p></article>
-      <article *ngIf="selectedExperiment.description" class="memo-entry"><small>Earlier context</small><p>{{selectedExperiment.description}}</p></article>
-      <article *ngIf="selectedExperiment.run_notes" class="memo-entry"><small>Earlier observations</small><p>{{selectedExperiment.run_notes}}</p></article>
-      <p *ngIf="syncStates[selectedExperiment.id] === 'error'" class="create-error" role="alert">Could not save. <button (click)="onExperimentChange(selectedExperiment)">Retry</button></p>
-
-      <details class="saved-protocol">
-        <summary>Protocol · {{selectedExperiment.protocol_root_name || selectedExperiment.protocol_title || 'Saved copy'}}</summary>
-        <p class="snapshot-note">Saved when this experiment was created. Independent of Tree Protocol edits.</p>
-        <article *ngFor="let step of routeSteps(selectedExperiment); let index=index" class="protocol-step">
-          <h3><span>{{index+1}}</span>{{step.title}}</h3>
-          <p *ngIf="step.node_snapshot?.description">{{step.node_snapshot?.description}}</p>
-          <ol><li *ngFor="let instruction of protocolInstructions(step)">{{instruction}}</li></ol>
-          <details *ngIf="step.node_snapshot?.leaves?.length"><summary>Protocol notes</summary><article *ngFor="let leaf of step.node_snapshot?.leaves"><h4>{{leaf.title}}</h4><p>{{leaf.content}}</p></article></details>
+      <nav class="node-navigation" aria-label="Protocol node pages">
+        <button (click)="turnNode(-1)" [disabled]="nodeIndex === 0" aria-label="Previous node">‹</button>
+        <span>{{nodeIndex + 1}} / {{routeSteps(selectedExperiment).length}}</span>
+        <button (click)="turnNode(1)" [disabled]="nodeIndex >= routeSteps(selectedExperiment).length-1" aria-label="Next node">›</button>
+      </nav>
+      <div #nodePages class="node-pages" (scroll)="onNodeScroll()">
+        <article *ngFor="let step of routeSteps(selectedExperiment); let index=index" class="node-page">
+          <h3>{{index+1}}. {{step.title}}</h3>
+          <div class="memo-heading"><span>Memos</span><button *ngIf="activeTab === 'current' && !(memoComposerOpen && nodeIndex === index)" class="add-memo" aria-label="Add memo" (click)="memoText=noteDrafts[step.id] || ''; memoComposerOpen=true">+</button></div>
+          <section *ngIf="memoComposerOpen && nodeIndex === index" class="memo-composer">
+            <textarea [(ngModel)]="memoText" (ngModelChange)="noteDrafts[step.id]=$event" rows="3" aria-label="Memo" placeholder="Observation, change, result…"></textarea>
+            <div class="form-actions"><button class="secondary-action" (click)="memoComposerOpen=false">Cancel</button><button class="primary-action" [disabled]="!memoText.trim()" (click)="addMemo()">Save</button></div>
+          </section>
+          <article *ngFor="let memo of nodeMemos(selectedExperiment,step)" class="memo-entry"><small>{{formatDate(memo.created_at)}}</small><p>{{memo.text}}</p></article>
+          <ng-container *ngFor="let log of step.logs"><article *ngIf="log.kind !== 'status'" class="memo-entry"><small>{{formatDate(log.created_at)}}</small><p>{{log.text}}</p></article></ng-container>
+          <article *ngFor="let comment of step.comments" class="memo-entry"><p>{{comment}}</p></article>
+          <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>
+          <details class="node-instructions"><summary>Steps</summary>
+            <p *ngIf="step.node_snapshot?.description">{{step.node_snapshot?.description}}</p>
+            <ol><li *ngFor="let instruction of protocolInstructions(step)">{{instruction}}</li></ol>
+          </details>
+          <section *ngIf="step.node_snapshot?.leaves?.length" class="protocol-notes">
+            <h4>Protocol notes</h4><article *ngFor="let leaf of step.node_snapshot?.leaves"><h4>{{leaf.title}}</h4><p>{{leaf.content}}</p></article>
+          </section>
         </article>
+      </div>
+      <p *ngIf="syncStates[selectedExperiment.id] === 'error'" class="create-error" role="alert">Could not save. <button (click)="onExperimentChange(selectedExperiment)">Retry</button></p>
+      <details *ngIf="earlierMemos(selectedExperiment).length || selectedExperiment.description || selectedExperiment.run_notes" class="saved-protocol"><summary>Earlier experiment memos</summary>
+        <article *ngFor="let memo of earlierMemos(selectedExperiment)" class="memo-entry"><small>{{formatDate(memo.created_at)}}</small><p>{{memo.text}}</p></article>
+        <p>{{selectedExperiment.description}}</p><p>{{selectedExperiment.run_notes}}</p>
       </details>
       <details *ngIf="legacyEvidence(selectedExperiment).length" class="saved-protocol"><summary>Earlier step notes &amp; images</summary>
         <article *ngFor="let step of legacyEvidence(selectedExperiment)" class="memo-entry"><h4>{{step.title}}</h4><ng-container *ngFor="let log of step.logs"><p *ngIf="log.kind !== 'status'"><small>{{formatDate(log.created_at)}}</small><br>{{log.text}}</p></ng-container><p *ngFor="let comment of step.comments">{{comment}}</p>
@@ -67,6 +78,18 @@
   </section>
 </div>
 
+<div *ngIf="sharingExperiment" class="modal-backdrop">
+  <section class="completion-modal" role="dialog" aria-modal="true" aria-label="Share experiment">
+    <h2>Share {{sharingExperiment.title}}</h2>
+    <p *ngIf="sharingBusy">Loading…</p>
+    <p *ngIf="sharingError" role="alert" class="create-error">{{sharingError}}</p>
+    <div class="branch-options" *ngIf="!sharingBusy">
+      <label *ngFor="let lab of sharingLabs"><input type="checkbox" [checked]="sharingLabIds.includes(''+lab.id)" [disabled]="!!lab.archive_deletion_at || !!sharingError" (change)="toggleSharingLab(''+lab.id)"><span>{{lab.name || lab.lab_name}}{{lab.archive_deletion_at ? ' — unavailable' : ''}}</span></label>
+    </div>
+    <p *ngIf="!sharingBusy && !sharingError && !sharingLabs.length">No labs available to share with.</p>
+    <div class="form-actions"><button class="secondary-action" [disabled]="sharingBusy" (click)="sharingExperiment=null">Cancel</button><button class="primary-action" [disabled]="sharingBusy || !!sharingError" (click)="saveSharing()">Save</button></div>
+  </section>
+</div>
 <div *ngIf="completionExperiment" class="modal-backdrop">
   <section class="completion-modal" role="dialog" aria-modal="true" aria-label="Complete experiment">
     <h2>Complete {{completionExperiment.title}}?</h2><p>The log will move to Completed.</p>

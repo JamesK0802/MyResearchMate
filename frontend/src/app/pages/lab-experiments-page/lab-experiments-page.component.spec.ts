@@ -3,21 +3,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { LabExperimentsPageComponent } from './lab-experiments-page.component';
 
 describe('experiment creation snapshot', () => {
-  it('saves a run-level memo without modifying protocol steps', () => {
+  it('saves a memo on its node without modifying protocol steps', () => {
     const notebook = {updateExperiment:vi.fn().mockResolvedValue({})};
-    const page = new LabExperimentsPageComponent(notebook as any, {} as any, {} as any, {detectChanges(){}} as any);
+    const page = new LabExperimentsPageComponent(notebook as any, {} as any, {} as any, {detectChanges(){}} as any, {} as any);
     page.selectedExperiment={id:'run',title:'Run',steps:[{id:'snapshot',title:'Original step'}],run_memos:[]};
     page.memoText='Observed a colour change';
     page.addMemo();
     expect(notebook.updateExperiment).toHaveBeenCalledWith('run',expect.objectContaining({
-      run_memos:[expect.objectContaining({text:'Observed a colour change'})],
+      run_memos:[expect.objectContaining({node_id:'snapshot',text:'Observed a colour change'})],
       steps:[{id:'snapshot',title:'Original step'}]
     }));
     expect(page.memoComposerOpen).toBe(false);
   });
+  it('preserves existing individual shares when lab sharing changes', async () => {
+    const notebook={getWorkflowShares:vi.fn().mockResolvedValue({lab_ids:['lab-1'],user_ids:['42']}), updateWorkflowShares:vi.fn().mockResolvedValue({})};
+    const page=new LabExperimentsPageComponent(notebook as any,{} as any,{} as any,{detectChanges(){}} as any,{getMyLabs:vi.fn().mockResolvedValue([{id:'lab-1'},{id:'lab-2'}])} as any);
+    await page.openSharing({id:'run'});
+    page.toggleSharingLab('lab-2');
+    await page.saveSharing();
+    expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],['42']);
+  });
   it('does not create until paths are chosen and does not share content with the source tree', async () => {
     const notebook = { createExperiment:vi.fn().mockResolvedValue({}) };
-    const page = new LabExperimentsPageComponent(notebook as any, {} as any, {} as any, {detectChanges(){}} as any);
+    const page = new LabExperimentsPageComponent(notebook as any, {} as any, {} as any, {detectChanges(){}} as any, {} as any);
     page.loadExperiments = vi.fn().mockResolvedValue(undefined);
     const record = (page as any).demoProtocol();
     page.protocols=[record];

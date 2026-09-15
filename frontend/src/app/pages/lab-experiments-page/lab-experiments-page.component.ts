@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription } from 'rxjs';
@@ -9,6 +9,7 @@ import { NamuNode, NamuTree } from '../../models/namu.model';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
 import { AuthService } from '../../services/auth.service';
+import { LabService } from '../../services/lab.service';
 import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/experiment-route';
 import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
 
@@ -68,6 +69,14 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   creationChoice = '';
   memoComposerOpen = false;
   memoText = '';
+  nodeIndex = 0;
+  @ViewChild('nodePages') nodePages?: ElementRef<HTMLElement>;
+  sharingExperiment:any = null;
+  sharingLabs:any[] = [];
+  sharingLabIds:string[] = [];
+  sharingUserIds:string[] = [];
+  sharingBusy = false;
+  sharingError = '';
   private saveSubject = new Subject<any>();
   private saveSubscription?: Subscription;
   private pendingSaves = new Map<string, any>();
@@ -77,7 +86,8 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     private notebook: LabNotebookService,
     private protocolService: ProtocolTreeService,
     public auth: AuthService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private labs: LabService
   ) {}
 
   async ngOnInit() {
@@ -290,7 +300,54 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
-  openExperiment(exp: any) { this.selectedExperiment = exp; this.noteDrafts = {}; this.memoComposerOpen=false; this.memoText=''; }
+  openExperiment(exp: any) {
+    this.selectedExperiment = exp; this.noteDrafts = {}; this.memoComposerOpen=false; this.memoText='';
+    const steps=this.routeSteps(exp);
+    let remembered='';
+    try { remembered=localStorage.getItem(this.positionKey(exp)) || ''; } catch {}
+    this.nodeIndex=Math.max(0,steps.findIndex(step=>step.id === remembered));
+    this.cdr.detectChanges();
+    if (this.nodePages) this.nodePages.nativeElement.scrollLeft=this.nodeIndex*this.nodePages.nativeElement.clientWidth;
+  }
+
+  private positionKey(exp:any) { return `experiment-page:${this.auth.currentProfile?.id || 'local'}:${exp.id}`; }
+  nodeMemos(exp:any,step:ExperimentStep) { return (exp.run_memos || []).filter((memo:any)=>memo.node_id === step.id); }
+  earlierMemos(exp:any) { return (exp.run_memos || []).filter((memo:any)=>!memo.node_id); }
+  onNodeScroll() {
+    const element=this.nodePages?.nativeElement;
+    if (!element || !element.clientWidth || !this.selectedExperiment) return;
+    const index=Math.min(this.routeSteps(this.selectedExperiment).length-1,Math.max(0,Math.round(element.scrollLeft/element.clientWidth)));
+    if (index !== this.nodeIndex) { this.nodeIndex=index; this.memoComposerOpen=false; }
+    const step=this.routeSteps(this.selectedExperiment)[index];
+    if (step) { try { localStorage.setItem(this.positionKey(this.selectedExperiment),step.id); } catch {} }
+  }
+  turnNode(delta:number) {
+    const element=this.nodePages?.nativeElement;
+    if (!element || !this.selectedExperiment) return;
+    const index=Math.max(0,Math.min(this.routeSteps(this.selectedExperiment).length-1,this.nodeIndex+delta));
+    element.scrollTo({left:index*element.clientWidth,behavior:'smooth'});
+  }
+
+  async openSharing(exp:any) {
+    if (exp._shared) return;
+    if (this.auth.isDemo) { this.auth.notifyDemoUnavailable('Sharing experiment logs'); return; }
+    this.sharingExperiment=exp; this.sharingBusy=true; this.sharingError='';
+    try {
+      const [labs,shares]=await Promise.all([this.labs.getMyLabs(),this.notebook.getWorkflowShares(exp.id)]);
+      this.sharingLabs=labs; this.sharingLabIds=[...shares.lab_ids]; this.sharingUserIds=[...shares.user_ids];
+    } catch { this.sharingError='Could not load sharing settings. Close and try again.'; }
+    finally {this.sharingBusy=false; this.cdr.detectChanges();}
+  }
+  toggleSharingLab(id:string) { this.sharingLabIds=this.sharingLabIds.includes(id) ? this.sharingLabIds.filter(item=>item!==id) : [...this.sharingLabIds,id]; }
+  async saveSharing() {
+    if (!this.sharingExperiment || this.sharingBusy || this.sharingError) return;
+    this.sharingBusy=true;
+    try {
+      await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingUserIds);
+      this.sharingExperiment=null;
+    } catch { this.sharingError='Could not save sharing settings. Close and try again.'; }
+    finally {this.sharingBusy=false;this.cdr.detectChanges();}
+  }
   closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; }
 
   onExperimentChange(exp: any) {
@@ -325,9 +382,12 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
 
   addMemo() {
     if (!this.selectedExperiment || !this.memoText.trim() || this.activeTab !== 'current') return;
-    this.selectedExperiment.run_memos.push({id:experimentId(),text:this.memoText.trim(),created_at:new Date().toISOString()});
+    const step=this.routeSteps(this.selectedExperiment)[this.nodeIndex];
+    if (!step) return;
+    this.selectedExperiment.run_memos.push({id:experimentId(),node_id:step.id,text:this.memoText.trim(),created_at:new Date().toISOString()});
     this.onExperimentChange(this.selectedExperiment);
     this.flushPendingSaves();
+    this.noteDrafts[step.id]='';
     this.memoText=''; this.memoComposerOpen=false;
   }
 
@@ -335,7 +395,10 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     return step.instructions || (step.description || '').split('\n').map(line=>line.replace(/^•\s*/, '')).filter(Boolean);
   }
 
-  legacyEvidence(exp:any):ExperimentStep[] { return (exp.steps || []).filter((s:ExperimentStep) => s.images?.length || s.comments?.length || s.logs?.some(log=>log.kind !== 'status')); }
+  legacyEvidence(exp:any):ExperimentStep[] {
+    const visibleIds=new Set(this.routeSteps(exp).map(s=>s.id));
+    return (exp.steps || []).filter((s:ExperimentStep) => !visibleIds.has(s.id) && (s.images?.length || s.comments?.length || s.logs?.some(log=>log.kind !== 'status')));
+  }
 
 
   openCompletion(exp: any) { this.completionExperiment = exp; this.completionScore = 0; }
