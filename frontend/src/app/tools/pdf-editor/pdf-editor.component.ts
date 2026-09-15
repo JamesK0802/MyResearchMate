@@ -130,6 +130,17 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   drawStartY: number = 0;
   previewShape: AnnotationItem | null = null;
 
+  // Interactive Resizing & Dragging State
+  isResizing: boolean = false;
+  resizeHandle: 'tl' | 'tr' | 'bl' | 'br' | null = null;
+  isDraggingAnnotation: boolean = false;
+  origAnnX: number = 0;
+  origAnnY: number = 0;
+  origAnnWidth: number = 0;
+  origAnnHeight: number = 0;
+  dragStartX: number = 0;
+  dragStartY: number = 0;
+
   // Drag & Drop Reordering State
   draggedPageIndex: number | null = null;
   dragOverPageIndex: number | null = null;
@@ -318,23 +329,30 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         const page = await pdfJsDoc.getPage(i);
         const viewport = page.getViewport({ scale: 1.0 });
 
-        // Generate thumbnail
-        const thumbScale = 140 / viewport.width;
-        const thumbViewport = page.getViewport({ scale: thumbScale });
+        // Generate clean proportional thumbnail (140x198 standard A4 ratio)
         const thumbCanvas = document.createElement('canvas');
-        thumbCanvas.width = thumbViewport.width;
-        thumbCanvas.height = thumbViewport.height;
-        const thumbCtx = thumbCanvas.getContext('2d');
-        if (thumbCtx) {
-          await page.render({ canvasContext: thumbCtx, viewport: thumbViewport }).promise;
-        }
+        thumbCanvas.width = 140;
+        thumbCanvas.height = 198;
+        const thumbCtx = thumbCanvas.getContext('2d')!;
+        thumbCtx.fillStyle = '#ffffff';
+        thumbCtx.fillRect(0, 0, 140, 198);
+
+        const thumbScale = Math.min(140 / viewport.width, 198 / viewport.height);
+        const thumbViewport = page.getViewport({ scale: thumbScale });
+        const offX = (140 - thumbViewport.width) / 2;
+        const offY = (198 - thumbViewport.height) / 2;
+
+        thumbCtx.save();
+        thumbCtx.translate(offX, offY);
+        await page.render({ canvasContext: thumbCtx, viewport: thumbViewport }).promise;
+        thumbCtx.restore();
 
         const pageItem: PdfPageItem = {
           id: `${docId}_p${i}_${Date.now()}`,
           originalPageIndex: i - 1,
           displayNumber: baseIndex + i,
           rotation: 0,
-          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.8),
+          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.85),
           width: viewport.width,
           height: viewport.height,
           aspectRatio: viewport.width / viewport.height,
@@ -362,7 +380,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     }
   }
 
-  // Import Word .docx
+  // Import Word .docx with Multi-Page Slicing (Prevents single squished page!)
   async importDocxFile(file: File, append: boolean = false) {
     this.isLoading = true;
     this.loadingMessage = `Converting ${file.name} to PDF pages…`;
@@ -374,7 +392,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       const arrayBuffer = await file.arrayBuffer();
 
       const tempContainer = document.createElement('div');
-      tempContainer.style.width = '794px'; // A4 standard width at 96 DPI
+      tempContainer.style.width = '794px'; // Standard A4 width at 96 DPI
       tempContainer.style.position = 'fixed';
       tempContainer.style.left = '-9999px';
       tempContainer.style.top = '0';
@@ -389,12 +407,18 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         ignoreHeight: false
       });
 
-      // Find rendered pages
-      let pageElements = Array.from(tempContainer.querySelectorAll<HTMLElement>('section.docx'));
-      if (pageElements.length === 0) {
-        const wrappers = Array.from(tempContainer.querySelectorAll<HTMLElement>('.docx-wrapper > *'));
-        pageElements = wrappers.length > 0 ? wrappers : [tempContainer];
-      }
+      this.loadingMessage = `Rendering ${file.name} pages…`;
+      this.cdr.detectChanges();
+
+      // Capture full rendered docx into high-res canvas
+      const fullCanvas = await html2canvas(tempContainer, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      document.body.removeChild(tempContainer);
 
       if (!append) {
         this.pages = [];
@@ -408,42 +432,61 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         }
       }
 
+      // Calculate A4 page slices (ratio 1 : 1.4142)
+      const a4Ratio = 841.89 / 595.28; // ~1.41426
+      const pagePixelHeight = Math.round(fullCanvas.width * a4Ratio);
+      const totalDocxPages = Math.max(1, Math.ceil(fullCanvas.height / pagePixelHeight));
       const baseIndex = this.pages.length;
-      for (let i = 0; i < pageElements.length; i++) {
-        this.loadingMessage = `Rendering Word page ${i + 1} of ${pageElements.length}…`;
+
+      for (let p = 0; p < totalDocxPages; p++) {
+        this.loadingMessage = `Processing Word page ${p + 1} of ${totalDocxPages}…`;
         this.cdr.detectChanges();
 
-        const sec = pageElements[i];
-        const canvas = await html2canvas(sec, {
-          scale: 1.5,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff'
-        });
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // 1. Create page canvas with exact A4 proportions
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = fullCanvas.width;
+        pageCanvas.height = pagePixelHeight;
+        const pctx = pageCanvas.getContext('2d')!;
+        pctx.fillStyle = '#ffffff';
+        pctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
 
-        // Standard A4 dimensions in PDF points
-        const w = 595.28;
-        const h = 841.89;
+        const sourceY = p * pagePixelHeight;
+        const sourceH = Math.min(pagePixelHeight, fullCanvas.height - sourceY);
+
+        pctx.drawImage(
+          fullCanvas,
+          0, sourceY, fullCanvas.width, sourceH,
+          0, 0, fullCanvas.width, sourceH
+        );
+
+        const pageDataUrl = pageCanvas.toDataURL('image/jpeg', 0.92);
+
+        // 2. Generate clean thumbnail (140x198, zero letterboxing)
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = 140;
+        thumbCanvas.height = 198;
+        const tctx = thumbCanvas.getContext('2d')!;
+        tctx.fillStyle = '#ffffff';
+        tctx.fillRect(0, 0, 140, 198);
+        tctx.drawImage(pageCanvas, 0, 0, 140, 198);
+        const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.85);
 
         const newPage: PdfPageItem = {
-          id: `docx_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+          id: `docx_${Date.now()}_${p}_${Math.random().toString(36).substring(2, 6)}`,
           originalPageIndex: -1,
-          displayNumber: baseIndex + i + 1,
+          displayNumber: baseIndex + p + 1,
           rotation: 0,
-          thumbnailUrl: dataUrl,
-          imageBackgroundUrl: dataUrl,
-          width: w,
-          height: h,
-          aspectRatio: w / h,
+          thumbnailUrl: thumbUrl,
+          imageBackgroundUrl: pageDataUrl,
+          width: 595.28,
+          height: 841.89,
+          aspectRatio: 595.28 / 841.89,
           sourceType: 'docx',
           sourceFileName: file.name,
           annotations: []
         };
         this.pages.push(newPage);
       }
-
-      document.body.removeChild(tempContainer);
 
       this.reindexPages();
       if (!append && this.pages.length > 0) {
@@ -479,19 +522,19 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       const w = 595.28;
       const h = 841.89;
 
-      // Generate thumbnail
+      // Generate clean thumbnail (140x198, zero letterboxing)
       const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.width = 160;
-      thumbCanvas.height = 226;
+      thumbCanvas.width = 140;
+      thumbCanvas.height = 198;
       const ctx = thumbCanvas.getContext('2d')!;
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 160, 226);
+      ctx.fillRect(0, 0, 140, 198);
 
-      const scale = Math.min(160 / img.width, 226 / img.height);
+      const scale = Math.min(140 / img.width, 198 / img.height);
       const dw = img.width * scale;
       const dh = img.height * scale;
-      ctx.drawImage(img, (160 - dw) / 2, (226 - dh) / 2, dw, dh);
-      const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.8);
+      ctx.drawImage(img, (140 - dw) / 2, (198 - dh) / 2, dw, dh);
+      const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.85);
 
       if (!append) {
         this.pages = [];
@@ -544,16 +587,9 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
     try {
       const sampleDoc = await PDFDocument.create();
-
-      // Page 1: Protocol Overview
-      const page1 = sampleDoc.addPage([595, 842]);
-      const { width, height } = page1.getSize();
-
-      // Page 2: Methods & Procedures
-      const page2 = sampleDoc.addPage([595, 842]);
-
-      // Page 3: Data & Results
-      const page3 = sampleDoc.addPage([595, 842]);
+      sampleDoc.addPage([595, 842]);
+      sampleDoc.addPage([595, 842]);
+      sampleDoc.addPage([595, 842]);
 
       const pdfBytes = await sampleDoc.save();
       const docId = 'sample_protocol';
@@ -571,23 +607,32 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       this.pages = [];
 
       for (let i = 1; i <= 3; i++) {
-        const page = await pdfJsDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 0.35 });
         const thumbCanvas = document.createElement('canvas');
-        thumbCanvas.width = viewport.width;
-        thumbCanvas.height = viewport.height;
-        const thumbCtx = thumbCanvas.getContext('2d');
+        thumbCanvas.width = 140;
+        thumbCanvas.height = 198;
+        const thumbCtx = thumbCanvas.getContext('2d')!;
 
-        // Draw clean placeholder preview
-        if (thumbCtx) {
-          thumbCtx.fillStyle = '#ffffff';
-          thumbCtx.fillRect(0, 0, viewport.width, viewport.height);
-          thumbCtx.fillStyle = '#166534';
-          thumbCtx.fillRect(20, 20, viewport.width - 40, 16);
-          thumbCtx.fillStyle = '#e2e8f0';
-          thumbCtx.fillRect(20, 50, viewport.width - 60, 8);
-          thumbCtx.fillRect(20, 65, viewport.width - 40, 8);
-          thumbCtx.fillRect(20, 80, viewport.width - 80, 8);
+        // Fill edge-to-edge clean white background
+        thumbCtx.fillStyle = '#ffffff';
+        thumbCtx.fillRect(0, 0, 140, 198);
+
+        // Document placeholder header and lines
+        thumbCtx.fillStyle = '#166534';
+        thumbCtx.fillRect(14, 16, 112, 12);
+        thumbCtx.fillStyle = '#cbd5e1';
+        thumbCtx.fillRect(14, 36, 95, 6);
+        thumbCtx.fillRect(14, 48, 112, 6);
+        thumbCtx.fillRect(14, 60, 80, 6);
+
+        if (i === 2) {
+          thumbCtx.fillStyle = '#94a3b8';
+          thumbCtx.fillRect(14, 80, 50, 40);
+          thumbCtx.fillRect(74, 80, 50, 40);
+        } else if (i === 3) {
+          thumbCtx.fillStyle = '#22c55e';
+          thumbCtx.fillRect(14, 80, 112, 8);
+          thumbCtx.fillStyle = '#cbd5e1';
+          thumbCtx.fillRect(14, 96, 100, 6);
         }
 
         this.pages.push({
@@ -595,7 +640,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
           originalPageIndex: i - 1,
           displayNumber: i,
           rotation: 0,
-          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.8),
+          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.85),
           width: 595,
           height: 842,
           aspectRatio: 595 / 842,
@@ -720,8 +765,8 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   private createBlankThumbnail(width: number, height: number): string {
     const c = document.createElement('canvas');
-    c.width = 120;
-    c.height = Math.round(120 * (height / width));
+    c.width = 140;
+    c.height = 198;
     const ctx = c.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#ffffff';
@@ -730,7 +775,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       ctx.lineWidth = 1;
       ctx.strokeRect(0, 0, c.width, c.height);
     }
-    return c.toDataURL('image/jpeg', 0.8);
+    return c.toDataURL('image/jpeg', 0.85);
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1005,17 +1050,38 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       }
     }
 
-    // Draw selection box if selected
+    // Draw Selection Box & 4 Visible Touch Corner Resize Handles
     if (isSelected) {
       ctx.strokeStyle = '#2563eb';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(ann.x - 3, ann.y - 3, ann.width + 6, ann.height + 6);
+      ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
+      ctx.setLineDash([]);
+
+      // 4 Corner Handles
+      const handleRadius = 6;
+      const corners = [
+        { x: ann.x, y: ann.y },                          // tl
+        { x: ann.x + ann.width, y: ann.y },              // tr
+        { x: ann.x, y: ann.y + ann.height },             // bl
+        { x: ann.x + ann.width, y: ann.y + ann.height }  // br
+      ];
+
+      for (const pt of corners) {
+        ctx.beginPath();
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.arc(pt.x, pt.y, handleRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Bottom-right prominent accent for intuitive scaling
       ctx.fillStyle = '#2563eb';
-      ctx.fillRect(ann.x - 5, ann.y - 5, 6, 6);
-      ctx.fillRect(ann.x + ann.width - 1, ann.y - 5, 6, 6);
-      ctx.fillRect(ann.x - 5, ann.y + ann.height - 1, 6, 6);
-      ctx.fillRect(ann.x + ann.width - 1, ann.y + ann.height - 1, 6, 6);
+      ctx.beginPath();
+      ctx.arc(ann.x + ann.width, ann.y + ann.height, handleRadius - 2, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
@@ -1039,7 +1105,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
-  // ANNOTATION INTERACTION & POINTER EVENTS
+  // ANNOTATION INTERACTION & POINTER EVENTS (TOUCH RESIZE + MOVE)
   // ═════════════════════════════════════════════════════════════════════════════
 
   setTool(tool: ToolType) {
@@ -1065,12 +1131,46 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     const y = (event.clientY - rect.top) * scale;
 
     if (this.activeTool === 'select') {
+      // 1. Check if user tapped a corner handle of the selected annotation
+      if (this.selectedAnnotation) {
+        const ann = this.selectedAnnotation;
+        const hitRadius = 18; // generous touch target in pt units
+        if (Math.hypot(x - (ann.x + ann.width), y - (ann.y + ann.height)) <= hitRadius) {
+          this.startResizing('br', x, y, ann);
+          return;
+        } else if (Math.hypot(x - ann.x, y - (ann.y + ann.height)) <= hitRadius) {
+          this.startResizing('bl', x, y, ann);
+          return;
+        } else if (Math.hypot(x - (ann.x + ann.width), y - ann.y) <= hitRadius) {
+          this.startResizing('tr', x, y, ann);
+          return;
+        } else if (Math.hypot(x - ann.x, y - ann.y) <= hitRadius) {
+          this.startResizing('tl', x, y, ann);
+          return;
+        }
+      }
+
+      // 2. Check if user tapped an existing annotation to select and drag
       const clicked = this.findAnnotationAt(x, y);
-      this.selectedAnnotationId = clicked ? clicked.id : null;
-      this.renderAnnotationCanvas();
-      return;
+      if (clicked) {
+        this.selectedAnnotationId = clicked.id;
+        this.isDraggingAnnotation = true;
+        this.dragStartX = x;
+        this.dragStartY = y;
+        this.origAnnX = clicked.x;
+        this.origAnnY = clicked.y;
+        this.origAnnWidth = clicked.width;
+        this.origAnnHeight = clicked.height;
+        this.renderAnnotationCanvas();
+        return;
+      } else {
+        this.selectedAnnotationId = null;
+        this.renderAnnotationCanvas();
+        return;
+      }
     }
 
+    // Drawing tools
     this.isDrawing = true;
     this.drawStartX = x;
     this.drawStartY = y;
@@ -1100,14 +1200,68 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     }
   }
 
+  private startResizing(handle: 'tl' | 'tr' | 'bl' | 'br', x: number, y: number, ann: AnnotationItem) {
+    this.isResizing = true;
+    this.resizeHandle = handle;
+    this.dragStartX = x;
+    this.dragStartY = y;
+    this.origAnnX = ann.x;
+    this.origAnnY = ann.y;
+    this.origAnnWidth = ann.width;
+    this.origAnnHeight = ann.height;
+  }
+
   onPointerMoveCanvas(event: PointerEvent) {
-    if (!this.isDrawing || !this.activePage || !this.annotationCanvasRef) return;
+    if (!this.activePage || !this.annotationCanvasRef) return;
     const canvas = this.annotationCanvasRef.nativeElement;
     const rect = canvas.getBoundingClientRect();
     const scale = this.activePage.width / rect.width;
 
     const x = (event.clientX - rect.left) * scale;
     const y = (event.clientY - rect.top) * scale;
+
+    // 1. Resizing with touch corner handle
+    if (this.isResizing && this.selectedAnnotation) {
+      const ann = this.selectedAnnotation;
+      const dx = x - this.dragStartX;
+      const dy = y - this.dragStartY;
+
+      if (this.resizeHandle === 'br') {
+        ann.width = Math.max(20, this.origAnnWidth + dx);
+        ann.height = Math.max(15, this.origAnnHeight + dy);
+      } else if (this.resizeHandle === 'bl') {
+        const newW = Math.max(20, this.origAnnWidth - dx);
+        ann.x = this.origAnnX + (this.origAnnWidth - newW);
+        ann.width = newW;
+        ann.height = Math.max(15, this.origAnnHeight + dy);
+      } else if (this.resizeHandle === 'tr') {
+        ann.width = Math.max(20, this.origAnnWidth + dx);
+        const newH = Math.max(15, this.origAnnHeight - dy);
+        ann.y = this.origAnnY + (this.origAnnHeight - newH);
+        ann.height = newH;
+      } else if (this.resizeHandle === 'tl') {
+        const newW = Math.max(20, this.origAnnWidth - dx);
+        const newH = Math.max(15, this.origAnnHeight - dy);
+        ann.x = this.origAnnX + (this.origAnnWidth - newW);
+        ann.y = this.origAnnY + (this.origAnnHeight - newH);
+        ann.width = newW;
+        ann.height = newH;
+      }
+      this.renderAnnotationCanvas();
+      return;
+    }
+
+    // 2. Dragging/moving selected annotation
+    if (this.isDraggingAnnotation && this.selectedAnnotation) {
+      const ann = this.selectedAnnotation;
+      ann.x = Math.max(0, this.origAnnX + (x - this.dragStartX));
+      ann.y = Math.max(0, this.origAnnY + (y - this.dragStartY));
+      this.renderAnnotationCanvas();
+      return;
+    }
+
+    // 3. Drawing new shape/pen
+    if (!this.isDrawing) return;
 
     if (this.activeTool === 'pen' || this.activeTool === 'highlight') {
       this.currentPoints.push({ x, y });
@@ -1142,6 +1296,14 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   }
 
   onPointerUpCanvas() {
+    if (this.isResizing || this.isDraggingAnnotation) {
+      this.isResizing = false;
+      this.resizeHandle = null;
+      this.isDraggingAnnotation = false;
+      this.saveHistory();
+      return;
+    }
+
     if (!this.isDrawing || !this.activePage) return;
     this.isDrawing = false;
 
@@ -1181,11 +1343,35 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     if (!this.activePage) return undefined;
     for (let i = this.activePage.annotations.length - 1; i >= 0; i--) {
       const ann = this.activePage.annotations[i];
-      if (x >= ann.x - 5 && x <= ann.x + ann.width + 5 && y >= ann.y - 5 && y <= ann.y + ann.height + 5) {
+      if (x >= ann.x - 6 && x <= ann.x + ann.width + 6 && y >= ann.y - 6 && y <= ann.y + ann.height + 6) {
         return ann;
       }
     }
     return undefined;
+  }
+
+  // Mobile-Friendly Scaling & Font Size Helpers
+  scaleSelectedAnnotation(factor: number) {
+    if (!this.selectedAnnotation) return;
+    const ann = this.selectedAnnotation;
+    const oldW = ann.width;
+    const oldH = ann.height;
+    ann.width = Math.max(24, Math.round(ann.width * factor));
+    ann.height = Math.max(16, Math.round(ann.height * factor));
+    // Keep centered
+    ann.x = Math.max(0, Math.round(ann.x - (ann.width - oldW) / 2));
+    ann.y = Math.max(0, Math.round(ann.y - (ann.height - oldH) / 2));
+    this.saveHistory();
+    this.renderAnnotationCanvas();
+  }
+
+  changeTextFontSize(delta: number) {
+    if (!this.selectedAnnotation) return;
+    const current = this.selectedAnnotation.fontSize || this.fontSize;
+    const next = Math.max(10, Math.min(72, current + delta));
+    this.selectedAnnotation.fontSize = next;
+    this.saveHistory();
+    this.renderAnnotationCanvas();
   }
 
   deleteSelectedAnnotation() {

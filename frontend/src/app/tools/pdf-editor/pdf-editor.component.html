@@ -3,7 +3,7 @@
   <!-- ═══ TOP NAVBAR / CONTROLS ═══ -->
   <header class="editor-header">
     <div class="header-left">
-      <!-- Mobile Pages Drawer Button -->
+      <!-- Mobile Pages Drawer Toggle -->
       <button type="button" class="mobile-sidebar-toggle" (click)="toggleMobileSidebar()" title="Toggle Thumbnails Drawer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon-xs"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="16" y2="10"></line><line x1="8" y1="14" x2="12" y2="14"></line></svg>
         <span class="mobile-toggle-badge">{{ pages.length }}</span>
@@ -16,13 +16,13 @@
 
       <div class="doc-actions-group">
         <!-- Open (New / Replace) -->
-        <label class="app-btn app-btn-secondary app-btn-xs upload-btn" title="Open PDF, Word (.docx), or Images (New Document)">
+        <label class="app-btn app-btn-secondary app-btn-xs upload-btn" title="Open PDF, Word (.docx), or Images (Replaces current document)">
           <span>📂 Open</span>
           <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onOpenFilesSelected($event)" style="display: none;" />
         </label>
 
         <!-- Merge / Append -->
-        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add / Merge PDF, Word (.docx), or Images to current document">
+        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add / Merge PDF, Word (.docx), or Images into current document">
           <span>＋ Merge</span>
           <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
         </label>
@@ -75,7 +75,7 @@
     <!-- Mobile Drawer Backdrop -->
     <div class="sidebar-backdrop" *ngIf="isMobileSidebarOpen" (click)="closeMobileSidebar()"></div>
 
-    <!-- LEFT SIDEBAR: THUMBNAIL REORDER STRIP (COLLAPSIBLE ON MOBILE) -->
+    <!-- LEFT SIDEBAR: THUMBNAIL REORDER STRIP (COMPACT & 2-COL ON MOBILE) -->
     <aside class="thumbnail-sidebar" [class.mobile-open]="isMobileSidebarOpen" aria-label="Page Thumbnails">
       <div class="sidebar-header">
         <div class="sidebar-title">
@@ -121,7 +121,7 @@
         </div>
 
         <button type="button" class="thumb-add-card" (click)="addBlankPage()">
-          <span>＋ Add Page</span>
+          <span>＋ Add</span>
         </button>
       </div>
     </aside>
@@ -198,7 +198,7 @@
         <!-- ANNOTATION TOOLBAR -->
         <div class="annotation-toolbar">
           <div class="tool-group">
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'select'" (click)="setTool('select')" title="Select & Move (V)">
+            <button type="button" class="tool-btn" [class.active]="activeTool === 'select'" (click)="setTool('select')" title="Select, Move & Resize (V)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="M3 3l7 18 3-7 7-3L3 3z"></path></svg>
               <span>Select</span>
             </button>
@@ -278,12 +278,31 @@
           </div>
         </div>
 
-        <!-- SELECTED TEXT EDIT INPUT (If active selected annotation is text) -->
-        <div class="selected-text-bar" *ngIf="selectedAnnotation && selectedAnnotation.type === 'text'">
-          <label>Text:</label>
-          <input class="app-input" [(ngModel)]="selectedAnnotation.text" (ngModelChange)="renderAnnotationCanvas()" placeholder="Enter text..." />
-          <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.bold" (click)="selectedAnnotation.bold = !selectedAnnotation.bold; renderAnnotationCanvas()">B</button>
-          <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.italic" (click)="selectedAnnotation.italic = !selectedAnnotation.italic; renderAnnotationCanvas()">I</button>
+        <!-- SELECTED ELEMENT QUICK ACTION BAR (MOBILE-FRIENDLY RESIZE & TOUCH CONTROLS) -->
+        <div class="selected-element-bar" *ngIf="selectedAnnotation">
+          <div class="element-bar-row">
+            <span class="element-type-badge">{{ selectedAnnotation.type | uppercase }}</span>
+            <input *ngIf="selectedAnnotation.type === 'text'"
+                   class="app-input text-inline-input"
+                   [(ngModel)]="selectedAnnotation.text"
+                   (ngModelChange)="renderAnnotationCanvas()"
+                   placeholder="Enter text..." />
+
+            <div class="element-action-btns">
+              <!-- Text Specific Buttons -->
+              <ng-container *ngIf="selectedAnnotation.type === 'text'">
+                <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="changeTextFontSize(-2)" title="Smaller font">A−</button>
+                <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="changeTextFontSize(2)" title="Larger font">A＋</button>
+                <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.bold" (click)="selectedAnnotation.bold = !selectedAnnotation.bold; renderAnnotationCanvas()">B</button>
+                <button type="button" class="app-btn app-btn-secondary app-btn-xs" [class.active]="selectedAnnotation.italic" (click)="selectedAnnotation.italic = !selectedAnnotation.italic; renderAnnotationCanvas()">I</button>
+              </ng-container>
+
+              <!-- Size scaling buttons for any element -->
+              <button type="button" class="app-btn app-btn-secondary app-btn-xs resize-btn" (click)="scaleSelectedAnnotation(0.85)" title="Shrink by 15%">⇲ 작게</button>
+              <button type="button" class="app-btn app-btn-secondary app-btn-xs resize-btn" (click)="scaleSelectedAnnotation(1.15)" title="Enlarge by 15%">⇱ 크게</button>
+              <button type="button" class="app-btn app-btn-ghost app-btn-xs btn-delete-danger" (click)="deleteSelectedAnnotation()" title="Delete element">🗑 삭제</button>
+            </div>
+          </div>
         </div>
 
         <!-- STAGE / CANVAS VIEWPORT (FULL-PAGE, AUTO-FITTED) -->
