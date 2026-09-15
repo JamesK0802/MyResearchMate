@@ -4,9 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { PDFDocument, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Ensure local worker is configured
+// Ensure worker is configured
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  const v = pdfjsLib.version || '4.10.38';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${v}/build/pdf.worker.min.mjs`;
 }
 
 export type ToolType = 'select' | 'text' | 'pen' | 'highlight' | 'rect' | 'circle' | 'line' | 'arrow' | 'whiteout' | 'image' | 'signature';
@@ -1090,7 +1091,7 @@ export class PdfEditorComponent implements OnInit {
       }
 
       const pdfBytes = await outputDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
 
       const downloadLink = document.createElement('a');
