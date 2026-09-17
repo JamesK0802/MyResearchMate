@@ -18,10 +18,22 @@ describe('experiment creation snapshot', () => {
   it('preserves existing individual shares when lab sharing changes', async () => {
     const notebook={getWorkflowShares:vi.fn().mockResolvedValue({lab_ids:['lab-1'],user_ids:['42']}), updateWorkflowShares:vi.fn().mockResolvedValue({})};
     const page=new LabExperimentsPageComponent(notebook as any,{} as any,{} as any,{detectChanges(){}} as any,{getMyLabs:vi.fn().mockResolvedValue([{id:'lab-1'},{id:'lab-2'}])} as any);
+    page.loadExperiments=vi.fn().mockResolvedValue(undefined);
     await page.openSharing({id:'run'});
     page.toggleSharingLab('lab-2');
     await page.saveSharing();
     expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],['42']);
+    expect(page.loadExperiments).toHaveBeenCalled();
+  });
+  it('shows owner and shared state for an experiment shared with a lab', () => {
+    const page=new LabExperimentsPageComponent({} as any,{} as any,{} as any,{detectChanges(){}} as any,{} as any);
+    const experiment={shared_lab_ids:['lab-1'],shared_labs:["Nicole's Lab"]};
+    expect(page.isExperimentShared(experiment)).toBe(true);
+    expect(page.cardBadges(experiment)).toEqual([
+      {label:'OWNER',tone:'owner'},
+      {label:'SHARED',tone:'shared'}
+    ]);
+    expect(page.sharingSummary(experiment)).toBe("Shared with: Nicole's Lab");
   });
   it('does not create until paths are chosen and does not share content with the source tree', async () => {
     const notebook = { createExperiment:vi.fn().mockResolvedValue({}) };

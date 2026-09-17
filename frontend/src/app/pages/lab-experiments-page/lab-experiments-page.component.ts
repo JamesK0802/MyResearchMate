@@ -346,6 +346,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     try {
       await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingUserIds);
       this.sharingExperiment=null;
+      await this.loadExperiments();
     } catch { this.sharingError='Could not save sharing settings. Close and try again.'; }
     finally {this.sharingBusy=false;this.cdr.detectChanges();}
   }
@@ -440,9 +441,21 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   progress(exp: any): number { const total = this.routeStepCount(exp); return total ? Math.round((this.completedStepCount(exp) / total) * 100) : 0; }
   nextStep(exp: any): ExperimentStep | undefined { return this.routeSteps(exp).find(step => step.status !== 'completed' && step.status !== 'skipped'); }
   cardBadges(exp: any): MyDataCardBadge[] {
-    const badges: MyDataCardBadge[] = [{ label: this.activeTab === 'completed' ? 'COMPLETED' : 'IN PROGRESS', tone: this.activeTab === 'completed' ? 'completed' : 'active' }];
-    if (exp._shared) badges.push({ label: 'SHARED', tone: 'shared' });
-    return badges;
+    return [
+      ...(!exp._shared ? [{ label: 'OWNER', tone: 'owner' as const }] : []),
+      ...(this.isExperimentShared(exp) ? [{ label: 'SHARED', tone: 'shared' as const }] : [])
+    ];
+  }
+  isExperimentShared(exp: any): boolean {
+    return !!exp._shared || ['shared_lab_ids', 'shared_user_ids', 'shared_labs', 'shared_users', 'shared_with_labs', 'shared_with_users']
+      .some(key => Array.isArray(exp?.[key]) && exp[key].length > 0);
+  }
+  sharingSummary(exp: any): string {
+    if (exp._shared) return `Shared by: ${exp.shared_by_name || 'Lab member'}`;
+    const labs = exp.shared_labs || exp.shared_with_labs || [];
+    const users = exp.shared_users || exp.shared_with_users || [];
+    const recipients = [...labs, ...users];
+    return `Shared with: ${recipients.join(', ') || 'Selected collaborators'}`;
   }
   cardMeta(exp: any): string[] {
     const date = this.formatDate(this.activeTab === 'completed' ? exp.archived_at : exp.updated_at);

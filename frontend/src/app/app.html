@@ -27,23 +27,6 @@
           </div>
         </div>
 
-        <!-- Labs dropdown (logged in only) -->
-        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
-          <span class="nav-tab" style="cursor: pointer;">Labs ▾</span>
-          <div class="dropdown-content">
-            <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
-            <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
-            <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
-            <ng-container *ngIf="myLabs && myLabs.length > 0">
-              <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
-              <div style="padding: 6px 16px; font-size: 0.75rem; font-weight: 800; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;">Labs Archive</div>
-              <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="dropdown-item" [style.color]="lab.archive_deletion_at ? '#dc2626' : null" style="padding-left: 24px;">
-                📁 {{ lab.lab_name }} <span *ngIf="lab.archive_deletion_at">({{ remainingArchiveDays(lab.archive_deletion_at) }}d left)</span>
-              </a>
-            </ng-container>
-          </div>
-        </div>
-
         <!-- My Data dropdown (logged in only) -->
         <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
           <span class="nav-tab" style="cursor: pointer;">My Data ▾</span>
@@ -60,6 +43,23 @@
             <a routerLink="/data/pcr-protocols" routerLinkActive="active" class="dropdown-item">Solution Protocol</a>
             <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
             <a routerLink="/data/memos" routerLinkActive="active" class="dropdown-item">Memo</a>
+          </div>
+        </div>
+
+        <!-- Labs dropdown (logged in only) -->
+        <div class="nav-dropdown" *ngIf="auth.isLoggedIn">
+          <span class="nav-tab" style="cursor: pointer;">Labs ▾</span>
+          <div class="dropdown-content">
+            <a routerLink="/labs/my" routerLinkActive="active" class="dropdown-item">My Labs</a>
+            <a routerLink="/labs/find" routerLinkActive="active" class="dropdown-item">Find Lab</a>
+            <a routerLink="/labs/register" routerLinkActive="active" class="dropdown-item">Register Lab</a>
+            <ng-container *ngIf="myLabs && myLabs.length > 0">
+              <div class="dropdown-divider" style="height: 1px; background: var(--color-border); margin: 4px 0;"></div>
+              <div style="padding: 6px 16px; font-size: 0.75rem; font-weight: 800; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;">Labs Archive</div>
+              <a *ngFor="let lab of myLabs" [routerLink]="['/labs', lab.id, 'archive']" routerLinkActive="active" class="dropdown-item" [style.color]="lab.archive_deletion_at ? '#dc2626' : null" style="padding-left: 24px;">
+                📁 {{ lab.lab_name }} <span *ngIf="lab.archive_deletion_at">({{ remainingArchiveDays(lab.archive_deletion_at) }}d left)</span>
+              </a>
+            </ng-container>
           </div>
         </div>
 
@@ -173,16 +173,6 @@
         </div>
       </div>
 
-      <!-- Facility Booking (logged in) -->
-      <div class="drawer-section" *ngIf="auth.isLoggedIn">
-        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('booking')" [attr.aria-expanded]="isMobileSectionOpen('booking')">
-          <span>Booking</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('booking')">⌄</span>
-        </button>
-        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('booking')">
-          <a routerLink="/booking" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Facility Booking</a>
-        </div>
-      </div>
-
       <!-- Labs management (logged in) -->
       <div class="drawer-section" *ngIf="auth.isLoggedIn">
         <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('labs')" [attr.aria-expanded]="isMobileSectionOpen('labs')">
@@ -198,6 +188,16 @@
               {{ lab.lab_name }} <span *ngIf="lab.archive_deletion_at">({{ remainingArchiveDays(lab.archive_deletion_at) }}d left)</span>
             </a>
           </ng-container>
+        </div>
+      </div>
+
+      <!-- Facility Booking (logged in) -->
+      <div class="drawer-section" *ngIf="auth.isLoggedIn">
+        <button type="button" class="drawer-section-toggle" (click)="toggleMobileSection('booking')" [attr.aria-expanded]="isMobileSectionOpen('booking')">
+          <span>Booking</span><span class="drawer-chevron" [class.open]="isMobileSectionOpen('booking')">⌄</span>
+        </button>
+        <div class="drawer-section-content" *ngIf="isMobileSectionOpen('booking')">
+          <a routerLink="/booking" routerLinkActive="active" class="drawer-link" (click)="isMobileMenuOpen = false">Facility Booking</a>
         </div>
       </div>
 

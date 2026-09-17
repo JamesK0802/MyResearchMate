@@ -22,11 +22,14 @@
   <div *ngIf="loading" class="loading-state"><span class="spinner"></span><p>Loading…</p></div>
   <app-my-data-grid *ngIf="!loading && displayExperiments.length">
     <app-my-data-card *ngFor="let exp of displayExperiments"
-      [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="!!exp._shared"
+      [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="isExperimentShared(exp)"
       [syncLabel]="syncStates[exp.id] === 'error' ? 'Save failed' : ''" [syncError]="syncStates[exp.id] === 'error'"
       primaryLabel="Open" [showShare]="!exp._shared" [showDelete]="!exp._shared"
       (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">
-      <div card-content><p class="card-protocol">{{exp.protocol_root_name || exp.protocol_title}}</p></div>
+      <div card-content>
+        <p class="card-protocol">{{exp.protocol_root_name || exp.protocol_title}}</p>
+        <div *ngIf="isExperimentShared(exp)" class="sharing-info">{{sharingSummary(exp)}}</div>
+      </div>
     </app-my-data-card>
   </app-my-data-grid>
   <section *ngIf="!loading && !displayExperiments.length" class="empty-state"><p>{{searchQuery ? 'No matching experiments' : 'No experiments yet'}}</p></section>
