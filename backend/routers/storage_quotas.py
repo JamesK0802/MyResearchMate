@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from auth.dependencies import get_current_user, require_admin
 from database.db import get_db
 from database.models import Lab, LabMember, StorageQuota, StorageQuotaRequest, User
-from storage.file_store import LAB_ROOT, PERSONAL_ROOT, user_uid
+from storage.file_store import PERSONAL_ROOT, lab_root_dir, user_uid
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 PERSONAL_DEFAULT = 5 * 1024 ** 3
@@ -30,7 +30,7 @@ def latest_request_payload(db, scope, user_id=None, lab_id=None):
 
 def usage_payload(db, scope, user=None, lab=None):
     row = quota_row(db, scope, user.id if user else None, lab.id if lab else None)
-    root = PERSONAL_ROOT / user_uid(user) if scope == "personal" else LAB_ROOT / str(lab.lab_name)
+    root = PERSONAL_ROOT / user_uid(user) if scope == "personal" else lab_root_dir(lab.lab_name, create=False)
     return {"scope": scope, "used_bytes": directory_size(root), "quota_bytes": row.quota_bytes if row else (PERSONAL_DEFAULT if scope == "personal" else LAB_DEFAULT), "lab_id": str(lab.id) if lab else None, "latest_request": latest_request_payload(db, scope, user.id if user else None, lab.id if lab else None)}
 
 def require_lab_member(db, user, lab_id):

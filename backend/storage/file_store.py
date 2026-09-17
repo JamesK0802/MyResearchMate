@@ -37,8 +37,15 @@ def personal_tool_dir(user: Any, tool_name: str, create: bool = True) -> Path:
     return path
 
 
+def lab_root_dir(lab_name: str, create: bool = True) -> Path:
+    path = LAB_ROOT / safe_segment(lab_name, "unnamed-lab")
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def lab_tool_dir(lab_name: str, tool_name: str, create: bool = True) -> Path:
-    path = LAB_ROOT / safe_segment(lab_name, "unnamed-lab") / safe_segment(tool_name)
+    path = lab_root_dir(lab_name, create=create) / safe_segment(tool_name)
     if create:
         path.mkdir(parents=True, exist_ok=True)
     return path
@@ -74,4 +81,3 @@ def read_json(relative_path: str, fallback: Any = None) -> Any:
 
 def document_path(user: Any, tool_name: str, document_id: Any) -> Path:
     return personal_tool_dir(user, tool_name) / f"{safe_segment(document_id)}.json"
-

@@ -1,10 +1,13 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
 import { AuthService } from './auth.service';
 export interface StorageUsage { used_bytes:number; quota_bytes:number; scope:string; lab_id?:string; can_request?:boolean; latest_request?:{id:string;status:'pending'|'approved'|'rejected';review_reason:string;requested_bytes:number}; }
 @Injectable({providedIn:'root'}) export class StorageQuotaService {
+  private usageChanges = new Subject<{scope:'personal'|'lab';labId?:string}>();
+  readonly usageChanges$ = this.usageChanges.asObservable();
   constructor(private http:HttpClient, private auth:AuthService) {}
+  notifyUsageChanged(scope:'personal'|'lab',labId?:string){this.usageChanges.next({scope,labId});}
   private async headers(){ const s=await this.auth.getSession(); return new HttpHeaders({Authorization:`Bearer ${s?.access_token||''}`}); }
   async getPersonal(){ return firstValueFrom(this.http.get<StorageUsage>('/api/storage/personal',{headers:await this.headers()})); }
   async getLab(id:string){ return firstValueFrom(this.http.get<StorageUsage>(`/api/storage/labs/${id}`,{headers:await this.headers()})); }

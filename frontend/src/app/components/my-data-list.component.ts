@@ -17,17 +17,28 @@ import { FormsModule } from '@angular/forms';
     </div>`,
   styles:[`
     :host{display:block;margin-bottom:var(--space-4)}
-    .controls{display:flex;flex-direction:column;gap:12px}
-    .tabs{display:flex;border-bottom:1px solid var(--color-border)}
-    .tabs button{flex:1;min-width:0;padding:10px var(--space-6);border:0;border-bottom:2px solid transparent;background:none;font-family:var(--font-sans);font-weight:var(--fw-semi);font-size:var(--text-base);color:var(--color-text-secondary);cursor:pointer}
+    .controls{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--color-border)}
+    .tabs{display:flex;align-items:flex-end;gap:4px}
+    .tabs button{flex:0 0 auto;min-width:0;margin-bottom:-1px;padding:10px var(--space-5);border:0;border-bottom:2px solid transparent;background:none;font-family:var(--font-sans);font-weight:var(--fw-semi);font-size:var(--text-base);color:var(--color-text-secondary);cursor:pointer}
     .tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}
-    .actions{display:flex;gap:8px;align-items:center}
-    .actions label{flex:1;min-width:0;margin:0}
+    .actions{display:flex;align-items:center;gap:8px;padding-bottom:7px}
+    .actions label{flex:0 1 180px;min-width:140px;margin:0}
     .actions input,.actions select,.create{box-sizing:border-box;height:40px;min-height:40px;margin:0;padding:8px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-family:var(--font-sans);font-size:var(--text-sm);line-height:1.2}
-    .actions input{flex:1;min-width:0;background:var(--color-surface)}
+    .actions input{width:min(260px,30vw);min-width:160px;background:var(--color-surface)}
     .actions select{width:100%;background:var(--color-surface)}
     .create{border:0;background:var(--color-primary);color:white;font-weight:var(--fw-bold);cursor:pointer;white-space:nowrap}
-    @media(max-width:600px){:host{margin-bottom:12px}.tabs button{font-size:.72rem;line-height:1.15;padding:9px 4px}.actions{flex-wrap:wrap}.actions input{flex-basis:100%;width:100%}.actions input,.actions select,.create{height:36px;min-height:36px;font-size:.76rem}.create{min-width:72px}}
+    @media(max-width:720px){
+      :host{margin-bottom:12px}
+      .controls{align-items:stretch;flex-direction:column;gap:8px;border-bottom:0}
+      .tabs{width:100%;border-bottom:1px solid var(--color-border)}
+      .tabs button{flex:1;font-size:.72rem;line-height:1.15;padding:9px 4px}
+      .actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;padding-bottom:0}
+      .actions input{grid-column:1/-1;width:100%;min-width:0}
+      .actions label{min-width:0}
+      .actions label:only-child{grid-column:1/-1}
+      .actions input,.actions select,.create{height:36px;min-height:36px;font-size:.76rem}
+      .create{min-width:72px}
+    }
   `]
 })
 export class MyDataListControlsComponent {

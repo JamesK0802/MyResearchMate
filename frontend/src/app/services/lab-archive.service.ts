@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AuthService } from './auth.service';
 import { firstValueFrom } from 'rxjs';
 import { ArchiveSettings, StorageLocationRule } from '../utils/storage-location-rules';
+import { StorageQuotaService } from './storage-quota.service';
 
 @Injectable({ providedIn: 'root' })
 export class LabArchiveService {
@@ -46,7 +47,13 @@ export class LabArchiveService {
   });
   private demoSettings: Record<string, ArchiveSettings> = {};
 
-  constructor(private http: HttpClient, private auth: AuthService) {}
+  constructor(private http: HttpClient, private auth: AuthService, private storageQuota: StorageQuotaService) {}
+
+  private async withStorageRefresh<T>(labId: string, request: Promise<T>): Promise<T> {
+    const result = await request;
+    this.storageQuota.notifyUsageChanged('lab', labId);
+    return result;
+  }
 
   private async getAuthHeaders() {
     const session = await this.auth.getSession();
@@ -96,9 +103,9 @@ export class LabArchiveService {
     const headers = await this.getAuthHeaders();
     const formData = new FormData();
     formData.append('file', file);
-    return firstValueFrom(
+    return this.withStorageRefresh(labId, firstValueFrom(
       this.http.post(`${this.apiUrl}/${labId}/records/${recordId}/upload`, formData, { headers })
-    );
+    ));
   }
 
   // --- File System ---
@@ -135,9 +142,9 @@ export class LabArchiveService {
     const formData = new FormData();
     formData.append('path', path);
     formData.append('file', file);
-    return firstValueFrom(
+    return this.withStorageRefresh(labId, firstValueFrom(
       this.http.post(`${this.apiUrl}/${labId}/fs/upload`, formData, { headers })
-    );
+    ));
   }
 
   async createFolder(labId: string, path: string, folderName: string): Promise<any> {
@@ -149,9 +156,9 @@ export class LabArchiveService {
 
   async deletePath(labId: string, path: string): Promise<any> {
     const headers = await this.getAuthHeaders();
-    return firstValueFrom(
+    return this.withStorageRefresh(labId, firstValueFrom(
       this.http.post(`${this.apiUrl}/${labId}/fs/delete`, { path }, { headers })
-    );
+    ));
   }
 
   async movePath(labId: string, sourcePath: string, destPath: string): Promise<any> {
@@ -163,9 +170,9 @@ export class LabArchiveService {
 
   async copyPath(labId: string, sourcePath: string, destPath: string): Promise<any> {
     const headers = await this.getAuthHeaders();
-    return firstValueFrom(
+    return this.withStorageRefresh(labId, firstValueFrom(
       this.http.post(`${this.apiUrl}/${labId}/fs/copy`, { source_path: sourcePath, dest_path: destPath }, { headers })
-    );
+    ));
   }
 
   async linkExistingFile(labId: string, recordId: string, path: string): Promise<any> {
@@ -230,8 +237,8 @@ export class LabArchiveService {
     const headers = await this.getAuthHeaders();
     const formData = new FormData();
     formData.append('file', file);
-    return firstValueFrom(
+    return this.withStorageRefresh(labId, firstValueFrom(
       this.http.post(`${this.apiUrl}/${labId}/samples/${sampleId}/upload`, formData, { headers })
-    );
+    ));
   }
 }
