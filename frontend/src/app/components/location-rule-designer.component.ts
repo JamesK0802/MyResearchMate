@@ -38,7 +38,7 @@ import { suggestLocationRule } from '../utils/suggest-location-rule';
       </div>
     </section>
     <section class="saved" *ngIf="rules.length">
-      <h3>Your rules</h3><p>The first enabled matching rule is used.</p>
+      <h3>Your rules</h3><p>If several enabled rules match a barcode, their resulting names must be identical. Different results cause an error.</p>
       <article *ngFor="let rule of rules; let i=index">
         <div class="rule-row"><button type="button" (click)="selected=selected===rule?null:rule">{{i+1}}. {{rule.name}} {{rule.enabled ? '' : '(disabled)'}} <span>{{selected===rule?'−':'Edit'}}</span></button>
           <button *ngIf="editable" type="button" (click)="move(i,-1)" [disabled]="i===0" aria-label="Move rule up">↑</button>

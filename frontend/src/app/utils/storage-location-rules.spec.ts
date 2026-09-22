@@ -57,4 +57,19 @@ describe('storage location formula', () => {
 
     expect(calculateStorageLocation('A42', [rule])).toBe('Box / 42');
   });
+
+  it('allows overlapping rules only when they produce the same location', () => {
+    const rule = (id: string, match: StorageLocationRule['match'], value: string): StorageLocationRule => ({
+      id, name: id, enabled: true, match, separator: ' ',
+      parts: [{ ...makeStoragePart('text'), value, joiner: '' }],
+    });
+    expect(calculateStorageLocation('ADS572', [
+      rule('AD rule', { type: 'starts_with', value: 'AD' }, 'Admin Room'),
+      rule('S rule', { type: 'contains', value: 'S' }, 'Admin Room'),
+    ])).toBe('Admin Room');
+    expect(() => calculateStorageLocation('ADS572', [
+      rule('AD rule', { type: 'starts_with', value: 'AD' }, 'Admin Room'),
+      rule('S rule', { type: 'contains', value: 'S' }, 'South Room'),
+    ])).toThrow(/Conflicting location rules.*AD rule.*S rule/);
+  });
 });

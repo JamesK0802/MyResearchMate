@@ -129,6 +129,7 @@
       </div>
     </div>
 
+    <div *ngIf="syncState === 'error' && storageRulesError" role="alert" class="app-alert app-alert-error">{{ storageRulesError }}</div>
     <!-- Excel-like grid -->
     <div class="spreadsheet-grid-container">
       <table class="spreadsheet-table">
@@ -1045,7 +1046,7 @@
       <div><span>New location</span><strong>{{ overallStoragePreview() }}</strong></div>
     </div>
     <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
-      <div><strong>Naming rules</strong><span>The first matching rule is used. Arrange its parts in the order you want to read them.</span></div>
+      <div><strong>Naming rules</strong><span>Matching rules must produce the same location. Arrange each rule's parts in the order you want to read them.</span></div>
       <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ New rule</button>
       <button type="button" (click)="addBarcodeExample()">Use room / cabinet / layer example</button>
     </div>
@@ -1066,7 +1067,7 @@
           </select>
           <input *ngIf="rule.match.type !== 'always'" [(ngModel)]="rule.match.value" [disabled]="!canManageStorageRules || isReadOnly" placeholder="e.g. AD">
         </div>
-        <p>Only needed for different barcode formats. The first matching format is used; every piece inside it is combined.</p></details>
+        <p>Only needed for different barcode formats. If formats overlap, they must produce the same location; every piece inside a rule is combined.</p></details>
 
         <div class="rule-output-heading"><div><strong>Build the new name</strong><span>Click a part to edit it. Each part reads the original barcode; the results are joined in order.</span></div></div>
         <div class="rule-parts">
@@ -1138,7 +1139,7 @@
     </details>
     </div>
 
-    <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
-    <footer class="storage-rule-footer"><button type="button" class="app-btn app-btn-outline" (click)="closeStorageRules()">Cancel</button><button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="app-btn app-btn-primary" [disabled]="savingStorageRules" (click)="saveStorageRules()">{{ savingStorageRules ? 'Applying…' : 'Apply to ' + samples.length + ' samples & save rules' }}</button></footer>
+    <div *ngIf="storageConflict || storageRulesError" role="alert" class="app-alert app-alert-error">{{ storageConflict || storageRulesError }}</div>
+    <footer class="storage-rule-footer"><button type="button" class="app-btn app-btn-outline" (click)="closeStorageRules()">Cancel</button><button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="app-btn app-btn-primary" [disabled]="savingStorageRules || !!storageConflict" (click)="saveStorageRules()">{{ savingStorageRules ? 'Applying…' : 'Apply to ' + samples.length + ' samples & save rules' }}</button></footer>
   </section>
 </div>

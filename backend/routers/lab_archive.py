@@ -156,6 +156,7 @@ def calculate_storage_location(barcode: str, rules: list) -> Optional[str]:
     enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
     if not enabled_rules:
         return None
+    results = []
     for rule in enabled_rules:
         if not _rule_matches(barcode or "", rule.get("match", {})):
             continue
@@ -164,8 +165,11 @@ def calculate_storage_location(barcode: str, rules: list) -> Optional[str]:
         output = ""
         for part, piece in ((part, piece) for part, piece in pieces if piece):
             output += ((separator if part.get("joiner") is None else str(part.get("joiner"))) if output else "") + piece
-        return output
-    return ""
+        results.append((rule.get("name") or rule.get("id", "Rule"), output))
+    if len({output for _, output in results}) > 1:
+        detail = "; ".join(f'{name} → “{output}”' for name, output in results)
+        raise HTTPException(status_code=422, detail=f'Conflicting location rules for “{barcode}”: {detail}')
+    return results[0][1] if results else ""
 
 def get_linked_paths(lab_dir: str) -> dict:
     """Returns dict of {relative_path: record_id} for all files linked to records or samples."""
@@ -505,6 +509,8 @@ async def update_archive_settings(lab_id: str, req: ArchiveSettingsUpdate, db: S
     if len(req.storage_location_rules) > 50 or any(len(rule.parts) > 20 for rule in req.storage_location_rules):
         raise HTTPException(status_code=400, detail="Too many storage location rules or output parts")
     settings = {"storage_location_rules": [rule.dict() for rule in req.storage_location_rules], "updated_at": now_iso()}
+    for sample in read_samples(get_lab_dir(db, lab_id)):
+        calculate_storage_location(sample.get("barcode") or "", settings["storage_location_rules"])
     write_archive_settings(get_lab_dir(db, lab_id), settings)
     return {**settings, "can_manage": True}
 

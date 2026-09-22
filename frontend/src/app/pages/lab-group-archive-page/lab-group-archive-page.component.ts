@@ -372,11 +372,23 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   get storagePreviewRows() {
     return this.samples.map(sample => {
       const before = sample.storage_location || '';
-      const calculated = calculateStorageLocation(sample.barcode || '', this.storageRules);
-      const after = calculated === null ? before : calculated;
-      return { barcode: sample.barcode || '(empty)', before, after,
-        status: calculated === '' ? 'No location' : before === after ? 'Unchanged' : 'Changed' };
+      try {
+        const calculated = calculateStorageLocation(sample.barcode || '', this.storageRules);
+        const after = calculated === null ? before : calculated;
+        return { barcode: sample.barcode || '(empty)', before, after,
+          status: calculated === '' ? 'No location' : before === after ? 'Unchanged' : 'Changed' };
+      } catch (error: any) {
+        return { barcode: sample.barcode || '(empty)', before, after: error.message, status: 'Conflict' };
+      }
     });
+  }
+
+  get storageConflict(): string {
+    for (const barcode of [this.storageRuleExampleBarcode, ...this.samples.map(s => s.barcode || '')]) {
+      try { calculateStorageLocation(barcode, this.storageRules); }
+      catch (error: any) { return error.message; }
+    }
+    return '';
   }
 
   storagePartDescription(part: StorageRulePart): string {
@@ -447,12 +459,15 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   }
 
   overallStoragePreview(): string {
-    const result = calculateStorageLocation(this.storageRuleExampleBarcode, this.storageRules);
-    return result === null ? 'No rules enabled' : result || 'No matching rule';
+    try {
+      const result = calculateStorageLocation(this.storageRuleExampleBarcode, this.storageRules);
+      return result === null ? 'No rules enabled' : result || 'No matching rule';
+    } catch (error: any) { return error.message; }
   }
 
   async saveStorageRules() {
     if (!this.canManageStorageRules || this.isReadOnly) return;
+    if (this.storageConflict) { this.storageRulesError = this.storageConflict; return; }
     this.savingStorageRules = true;
     this.storageRulesError = '';
     try {
@@ -473,11 +488,13 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   recalculateStorageLocations() {
     const hasRules = this.storageRules.some(rule => rule.enabled);
     if (!hasRules) return;
-    for (const sample of this.samples) sample.storage_location = calculateStorageLocation(sample.barcode || '', this.storageRules) || '';
+    for (const sample of this.samples) {
+      try { sample.storage_location = calculateStorageLocation(sample.barcode || '', this.storageRules) || ''; }
+      catch { /* Preserve the stored location until conflicting rules are resolved. */ }
+    }
   }
 
   onBarcodeChange(sample: any) {
-    if (this.storageRules.some(rule => rule.enabled)) sample.storage_location = calculateStorageLocation(sample.barcode || '', this.storageRules) || '';
     this.onSamplesChange();
   }
 
@@ -712,6 +729,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   async triggerAutoSave() {
     if (this.isReadOnly) return;
     try {
+      for (const sample of this.samples) calculateStorageLocation(sample.barcode || '', this.storageRules);
       const samplesToSave = this.samples.map(s => {
         return {
           ...s,
@@ -727,8 +745,9 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
       }
       this.syncState = 'saved';
       this.cdr.detectChanges();
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to auto-save samples', e);
+      this.storageRulesError = e?.error?.detail || e?.message || 'Could not save samples.';
       this.syncState = 'error';
       this.cdr.detectChanges();
     }

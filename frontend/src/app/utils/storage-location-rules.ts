@@ -85,8 +85,13 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
 export function calculateStorageLocation(barcode: string, rules: StorageLocationRule[]): string | null {
   const enabled = (rules || []).filter(rule => rule.enabled);
   if (!enabled.length) return null;
-  const rule = enabled.find(candidate => storageRuleMatches(barcode, candidate));
-  if (!rule) return '';
-  const pieces = rule.parts.map(part => ({ value: storagePartValue(barcode, part), joiner: part.joiner })).filter(piece => piece.value);
-  return pieces.reduce((output, piece, index) => output + (index ? (piece.joiner ?? rule.separator ?? ' ') : '') + piece.value, '');
+  const matches = enabled.filter(candidate => storageRuleMatches(barcode, candidate));
+  const results = matches.map(rule => {
+    const pieces = rule.parts.map(part => ({ value: storagePartValue(barcode, part), joiner: part.joiner })).filter(piece => piece.value);
+    return pieces.reduce((output, piece, index) => output + (index ? (piece.joiner ?? rule.separator ?? ' ') : '') + piece.value, '');
+  });
+  if (new Set(results).size > 1) {
+    throw new Error(`Conflicting location rules for “${barcode}”: ${matches.map((rule, i) => `${rule.name || rule.id} → “${results[i]}”`).join('; ')}`);
+  }
+  return results[0] ?? '';
 }
