@@ -1017,25 +1017,36 @@
 <div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
   <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
     <header class="storage-rule-header">
-      <div><h2>Barcode location builder</h2></div>
+      <div><h2>Location names</h2><p>Build a location from your barcode. Check the changes below, then apply.</p></div>
       <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
     </header>
 
-    <div class="storage-builder-scroll">
-    <details class="barcode-help"><summary>Try a barcode · {{ overallStoragePreview() }}</summary>
     <div class="storage-rule-preview-bar">
-      <label><span>Try a barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
-      <div><span>Calculated location</span><strong>{{ overallStoragePreview() }}</strong></div>
+      <label><span>Example barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
+      <div><span>New location · live preview</span><strong aria-live="polite">{{ overallStoragePreview() }}</strong></div>
     </div>
-    <p>Read each piece separately, then combine them: room + cabinet + layer. Positions count from 1. For variable-length numbers, read the whole number and remove its last digit for the cabinet; read the last digit separately for the layer.</p>
-    </details>
+
+    <div class="storage-builder-scroll">
+    <section class="location-batch-preview" aria-label="Sample location changes">
+      <h3>Preview changes <span>{{ samples.length }} samples</span></h3>
+      <p>Click a barcode to use it as the example above. Empty results will clear the current location when applied.</p>
+      <div class="location-preview-table">
+        <table><thead><tr><th>Barcode</th><th>Current location</th><th>New location</th><th>Status</th></tr></thead>
+          <tbody><tr *ngFor="let row of storagePreviewRows" [class.location-changed]="row.status === 'Changed'" [class.location-empty]="row.status === 'No location'">
+            <td><button type="button" (click)="storageRuleExampleBarcode = row.barcode === '(empty)' ? '' : row.barcode">{{ row.barcode }}</button></td>
+            <td>{{ row.before || '—' }}</td><td>{{ row.after || '—' }}</td><td>{{ row.status }}</td>
+          </tr></tbody>
+        </table>
+        <p *ngIf="!samples.length">No samples yet. Use the example barcode to preview your location name.</p>
+      </div>
+    </section>
 
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 
     <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
-      <div><strong>Barcode formats</strong><span>Add named pieces in the order you want to display them.</span></div>
-      <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ Blank format</button>
-      <button type="button" (click)="addBarcodeExample()">＋ Room / cabinet / layer example</button>
+      <div><strong>Naming rules</strong><span>The first matching rule is used. Arrange its parts in the order you want to read them.</span></div>
+      <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ New rule</button>
+      <button type="button" (click)="addBarcodeExample()">Use room / cabinet / layer example</button>
     </div>
 
     <div class="storage-rules-list">
@@ -1056,13 +1067,19 @@
         </div>
         <p>Only needed for different barcode formats. The first matching format is used; every piece inside it is combined.</p></details>
 
-        <div class="rule-output-heading"><div><strong>Read and combine pieces</strong><span>For example: room code → room name, middle digits → cabinet, last digit → layer.</span></div></div>
+        <div class="rule-output-heading"><div><strong>Build the new name</strong><span>Click a part to edit it. Each part reads the original barcode; the results are joined in order.</span></div></div>
         <div class="rule-parts">
           <div *ngFor="let part of rule.parts; let partIndex = index" class="rule-part-row">
             <label *ngIf="partIndex > 0" class="part-joiner">Connect with
               <select [(ngModel)]="part.joiner" [disabled]="!canManageStorageRules || isReadOnly"><option value=" ">space</option><option value=" / "> / </option><option value=" - "> - </option><option value=", ">comma</option><option value="">nothing</option></select>
             </label>
             <div class="part-element-card">
+              <button type="button" class="location-part-summary" [attr.aria-expanded]="editingStoragePart === part" (click)="editingStoragePart = editingStoragePart === part ? null : part">
+                <span class="part-number">{{ partIndex + 1 }}</span>
+                <span><b>{{ part.label || storagePartDescription(part) }}</b><small>{{ storagePartDescription(part) }}</small></span>
+                <strong>{{ partPreview(part) }}</strong><span>{{ editingStoragePart === part ? '−' : 'Edit' }}</span>
+              </button>
+              <div *ngIf="editingStoragePart === part" class="location-part-editor">
               <div class="part-element-head">
                 <span class="part-number">{{ partIndex + 1 }}</span>
                 <input [(ngModel)]="part.label" placeholder="Piece name, e.g. Cabinet" aria-label="Piece name" [disabled]="!canManageStorageRules || isReadOnly">
@@ -1070,8 +1087,8 @@
                   <option value="text">Fixed text</option><option value="characters">Positions from start</option><option value="characters_from_end">Positions from end</option><option value="digits_after">Number after marker</option><option value="remainder_after">Everything after marker</option><option value="number_group">Number group</option><option value="barcode">Entire barcode</option>
                 </select>
                 <div class="part-actions" *ngIf="canManageStorageRules && !isReadOnly">
-                  <button type="button" (click)="moveStoragePart(rule, partIndex, -1)" [disabled]="partIndex === 0" aria-label="Move element left">←</button>
-                  <button type="button" (click)="moveStoragePart(rule, partIndex, 1)" [disabled]="partIndex === rule.parts.length - 1" aria-label="Move element right">→</button>
+                  <button type="button" (click)="moveStoragePart(rule, partIndex, -1)" [disabled]="partIndex === 0" aria-label="Move part up">↑</button>
+                  <button type="button" (click)="moveStoragePart(rule, partIndex, 1)" [disabled]="partIndex === rule.parts.length - 1" aria-label="Move part down">↓</button>
                   <button type="button" class="remove-part" (click)="removeStoragePart(rule, partIndex)" aria-label="Remove element">×</button>
                 </div>
               </div>
@@ -1082,26 +1099,27 @@
                 <label *ngIf="part.type === 'number_group'">Number group <input type="number" min="1" [(ngModel)]="part.group" [disabled]="!canManageStorageRules || isReadOnly"></label>
                 <select *ngIf="part.type !== 'text'" class="part-case" [(ngModel)]="part.transform" [disabled]="!canManageStorageRules || isReadOnly"><option value="as_is">Keep case</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option></select>
               </div>
-              <details class="barcode-help"><summary>Trim, translate code, or add labels</summary>
+              <details class="barcode-help" [open]="!!part.trimStart || !!part.trimEnd || !!part.prefix || !!part.suffix || !!part.mappings?.length"><summary>Remove characters, replace a code, or add text</summary>
                 <div class="part-element-fields">
                   <label>Remove first characters <input type="number" min="0" [(ngModel)]="part.trimStart" [disabled]="!canManageStorageRules || isReadOnly"></label>
                   <label>Remove last characters <input type="number" min="0" [(ngModel)]="part.trimEnd" [disabled]="!canManageStorageRules || isReadOnly"></label>
                   <label>Text before <input [(ngModel)]="part.prefix" placeholder="Cabinet " [disabled]="!canManageStorageRules || isReadOnly"></label>
                   <label>Text after <input [(ngModel)]="part.suffix" placeholder=" layer" [disabled]="!canManageStorageRules || isReadOnly"></label>
                 </div>
-                <p>Translate extracted codes (AD → Admin room). Unlisted codes stay unchanged.</p>
+                <p>Replace a whole extracted code, e.g. AD → Admin room.</p>
                 <div class="barcode-mapping" *ngFor="let mapping of part.mappings; let mi = index">
                   <input [(ngModel)]="mapping.from" placeholder="Code" aria-label="Extracted code" [disabled]="!canManageStorageRules || isReadOnly"><span>→</span><input [(ngModel)]="mapping.to" placeholder="Display name" aria-label="Code display name" [disabled]="!canManageStorageRules || isReadOnly">
                   <button *ngIf="canManageStorageRules && !isReadOnly" (click)="part.mappings?.splice(mi, 1)" aria-label="Remove code translation">×</button>
                 </div>
-                <button *ngIf="canManageStorageRules && !isReadOnly" (click)="addStorageMapping(part)">＋ Code translation</button>
+                <button *ngIf="canManageStorageRules && !isReadOnly" (click)="addStorageMapping(part)">＋ Replace code</button>
               </details>
               <div class="piece-preview">{{ part.label || 'This piece' }}: <strong>{{ partPreview(part) }}</strong></div>
+              </div>
             </div>
           </div>
           <div *ngIf="!rule.parts.length" class="rule-parts-empty">Start the formula by choosing an element below.</div>
           <div *ngIf="canManageStorageRules && !isReadOnly" class="element-palette">
-            <span>Add element</span>
+            <span>Add to name</span>
             <button type="button" (click)="addStoragePart(rule, 'text')">＋ Fixed text</button>
             <button type="button" (click)="addStoragePart(rule, 'characters')">＋ Barcode characters</button>
             <button type="button" (click)="addStoragePart(rule, 'characters_from_end')">＋ From end</button>
@@ -1119,6 +1137,6 @@
     </div>
 
     <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
-    <footer class="storage-rule-footer"><button type="button" class="app-btn app-btn-outline" (click)="closeStorageRules()">Close</button><button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="app-btn app-btn-primary" [disabled]="savingStorageRules" (click)="saveStorageRules()">{{ savingStorageRules ? 'Applying…' : 'Save & apply to samples' }}</button></footer>
+    <footer class="storage-rule-footer"><button type="button" class="app-btn app-btn-outline" (click)="closeStorageRules()">Cancel</button><button *ngIf="canManageStorageRules && !isReadOnly" type="button" class="app-btn app-btn-primary" [disabled]="savingStorageRules" (click)="saveStorageRules()">{{ savingStorageRules ? 'Applying…' : 'Apply to ' + samples.length + ' samples & save rules' }}</button></footer>
   </section>
 </div>

@@ -61,6 +61,8 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
   canManageStorageRules = false;
   showStorageRulesModal = false;
   storageRuleExampleBarcode = 'AD12';
+  editingStoragePart: StorageRulePart | null = null;
+  private storageRulesBeforeEdit: StorageLocationRule[] = [];
   savingStorageRules = false;
   storageRulesError = '';
 
@@ -355,10 +357,38 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
 
   openStorageRules() {
     this.storageRulesError = '';
+    this.storageRulesBeforeEdit = structuredClone(this.storageRules);
+    this.editingStoragePart = null;
     this.showStorageRulesModal = true;
   }
 
-  closeStorageRules() { if (!this.savingStorageRules) this.showStorageRulesModal = false; }
+  closeStorageRules() {
+    if (this.savingStorageRules) return;
+    this.storageRules = structuredClone(this.storageRulesBeforeEdit);
+    this.showStorageRulesModal = false;
+  }
+
+  get storagePreviewRows() {
+    return this.samples.map(sample => {
+      const before = sample.storage_location || '';
+      const calculated = calculateStorageLocation(sample.barcode || '', this.storageRules);
+      const after = calculated === null ? before : calculated;
+      return { barcode: sample.barcode || '(empty)', before, after,
+        status: calculated === '' ? 'No location' : before === after ? 'Unchanged' : 'Changed' };
+    });
+  }
+
+  storagePartDescription(part: StorageRulePart): string {
+    switch (part.type) {
+      case 'text': return `Add text “${part.value || '…'}”`;
+      case 'barcode': return 'Use the whole barcode';
+      case 'characters': return `Take characters ${part.start}–${part.end} from the start`;
+      case 'characters_from_end': return `Take characters ${part.start}–${part.end} from the end`;
+      case 'digits_after': return `Take the number after “${part.value || '…'}”`;
+      case 'remainder_after': return `Take everything after “${part.value || '…'}”`;
+      case 'number_group': return `Take number group ${part.group}`;
+    }
+  }
 
   addStorageRule() {
     const rule: StorageLocationRule = {
@@ -391,6 +421,7 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     const part = makeStoragePart(type);
     part.joiner = rule.parts.length ? ' ' : '';
     rule.parts.push(part);
+    this.editingStoragePart = part;
   }
   removeStoragePart(rule: StorageLocationRule, index: number) { rule.parts.splice(index, 1); }
   removeStorageRule(index: number) { this.storageRules.splice(index, 1); }
