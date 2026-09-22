@@ -9,6 +9,7 @@ HELPER="$REPO_DIR/deploy/update_status.py"
 RUNTIME_HELPER="$STATE_DIR/update-status-runtime.py"
 COMMITS_FILE="$STATE_DIR/commits.txt"
 CHANGED_FILES_FILE="$STATE_DIR/changed-files.txt"
+BUILD_LOG_FILE="$STATE_DIR/rebuild.log"
 
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/update.lock"
@@ -41,7 +42,13 @@ write_status() {
 on_exit() {
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
-    write_status failed "$CURRENT_STAGE" "Update failed during $CURRENT_STAGE. Check the host service log." "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || true
+    local message="Update failed during $CURRENT_STAGE."
+    if [[ -s "$BUILD_LOG_FILE" ]]; then
+      local build_tail
+      build_tail="$(tail -n 14 "$BUILD_LOG_FILE" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' | tr '\n' ' ' | cut -c1-1800)"
+      [[ -n "$build_tail" ]] && message+=" Last build output: $build_tail"
+    fi
+    write_status failed "$CURRENT_STAGE" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || true
   fi
   rm -f "$REQUEST_FILE"
   exit "$exit_code"
@@ -65,7 +72,8 @@ fi
 
 CURRENT_STAGE="rebuilding"
 write_status running rebuilding "Rebuilding and restarting Docker services"
-docker compose up -d --build
+: > "$BUILD_LOG_FILE"
+docker compose up -d --build 2>&1 | tee "$BUILD_LOG_FILE"
 
 CURRENT_STAGE="verifying"
 write_status running verifying "Verifying Docker services"
