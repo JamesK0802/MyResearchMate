@@ -1431,12 +1431,14 @@
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  overflow: visible;
   padding: 0 !important;
   margin-top: 16px;
 }
 
 .spreadsheet-toolbar {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -1445,6 +1447,7 @@
   background: var(--color-surface-alt);
   border-bottom: 1px solid var(--color-border);
   gap: 12px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .toolbar-left, .toolbar-right {
@@ -1510,6 +1513,7 @@
   overflow-x: auto;
   overflow-y: auto;
   max-height: 60vh;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .spreadsheet-table {
@@ -1588,11 +1592,7 @@
 .storage-rules-button { display:inline-flex; align-items:center; }
 .storage-rules-button span { display:inline-grid; place-items:center; min-width:18px; height:18px; margin-left:4px; padding:0 4px; border-radius:999px; background:var(--color-primary-light); color:var(--color-primary); font-size:.66rem; line-height:1; box-sizing:border-box; }
 .storage-rule-overlay { z-index: 1250; }
-.location-batch-preview { padding:16px 24px; background:#fff; border-bottom:1px solid var(--color-border); }
-.location-batch-preview summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; }
-.location-batch-preview summary::-webkit-details-marker { display:none; }
-.location-batch-preview[open] summary > span { transform:rotate(180deg); }
-.location-batch-preview summary > span { color:var(--color-text-secondary); transition:transform .18s ease; }
+.location-batch-preview { margin:12px 24px 24px; padding:16px; background:#fff; border:1px solid #dce5e1; border-radius:12px; box-shadow:var(--shadow-sm); }
 .location-batch-preview h3 { margin:0; font-size:1rem; }
 .location-batch-preview h3 span { margin-left:8px; font-size:.75rem; color:var(--color-text-secondary); font-weight:400; }
 .location-batch-preview p { margin:6px 0 12px; font-size:.78rem; color:var(--color-text-secondary); }
@@ -1615,7 +1615,7 @@
 .location-part-editor .part-element-fields > label { font-size:.76rem; }
 .location-part-editor .part-element-fields > label input:not([type=number]) { width:130px; }
 @media(max-width:600px) {
-  .location-batch-preview { padding:12px; }
+  .location-batch-preview { margin:10px 12px 18px; padding:12px; }
   .location-preview-table table { min-width:480px; }
   .location-part-summary { gap:7px; flex-wrap:wrap; }
   .location-part-summary strong { max-width:100%; }

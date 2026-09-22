@@ -15,6 +15,8 @@ export interface StorageRulePart {
   trimEnd?: number;
   prefix?: string;
   suffix?: string;
+  /** A replacement template: {1} means the first selected barcode character. */
+  template?: string;
   mappings?: { from:string; to:string }[];
 }
 
@@ -75,8 +77,13 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
   }
   value = value.slice(Math.max(0, part.trimStart || 0), Math.max(0, value.length - Math.max(0, part.trimEnd || 0))).trim();
   if (!value) return '';
-  const mapping = part.mappings?.find(item => item.from.toLowerCase() === value.toLowerCase());
-  if (mapping) value = mapping.to;
+  if (part.template !== undefined) {
+    const selected = value;
+    value = part.template.replace(/\{(\d+)\}/g, (_match, indexText) => selected.charAt(Math.max(0, Number(indexText) - 1)) || '');
+  } else {
+    const mapping = part.mappings?.find(item => item.from.toLowerCase() === value.toLowerCase());
+    if (mapping) value = mapping.to;
+  }
   if (part.transform === 'uppercase') value = value.toUpperCase();
   if (part.transform === 'lowercase') value = value.toLowerCase();
   return value ? (part.prefix || '') + value + (part.suffix || '') : '';

@@ -13,8 +13,9 @@ describe('simple location rule designer', () => {
     editor.add(rule,'characters');
     rule.parts[0].start=1; rule.parts[0].end=3;
     editor.addReplace(rule);
+    editor.setReplacementTemplate(rule.parts[1], '0{1}{2}');
     expect(calculateStorageLocation('ADSXX',[rule])).toBe('ADS0XX');
-    expect(calculateStorageLocation('ADS72',[rule])).toBe('ADS72');
+    expect(calculateStorageLocation('ADS72',[rule])).toBe('ADS072');
   });
   it('starts with one example row and adds more on demand', () => {
     const editor=new LocationRuleDesignerComponent();

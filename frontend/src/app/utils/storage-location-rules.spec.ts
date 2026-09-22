@@ -6,6 +6,11 @@ describe('storage location formula', () => {
     const rule: StorageLocationRule = { id:'draft', name:'Draft', enabled:true, match:{type:'always',value:''}, separator:' ', parts:[] };
     expect(calculateStorageLocation('ADS572', [rule])).toBeNull();
   });
+  it('expands replacement templates without relying on literal placeholder bases', () => {
+    const part = { ...makeStoragePart('characters_from_end'), start: 1, end: 2, template: '0{1}{2}' };
+    expect(storagePartValue('ADSXX', part)).toBe('0XX');
+    expect(storagePartValue('ADSAC', part)).toBe('0AC');
+  });
   it('splits variable-length cabinet and layer numbers without changing formats', () => {
     const rule: StorageLocationRule = {
       id:'split', name:'Location', enabled:true, match:{type:'always',value:''}, separator:' / ',

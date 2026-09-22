@@ -1006,14 +1006,14 @@
 <div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
   <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
     <header class="storage-rule-header">
-      <div><h2>Location names</h2><p>Check examples, then add only the rules you need.</p></div>
+      <div><h2>Location names</h2></div>
       <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
     </header>
 
     <div class="storage-builder-scroll">
     <app-location-rule-designer [(rules)]="storageRules" [editable]="canManageStorageRules && !isReadOnly && !savingStorageRules" (exampleChange)="storageRuleExampleBarcode=$event"></app-location-rule-designer>
-    <details class="location-batch-preview" aria-label="Sample location changes">
-      <summary><h3>Preview changes <span>{{ samples.length }} samples</span></h3><span aria-hidden="true">⌄</span></summary>
+    <section class="location-batch-preview" aria-label="Sample location changes">
+      <h3>Preview changes <span>{{ samples.length }} samples</span></h3>
       <p>These changes will be applied when you save. Empty results will clear the current location.</p>
       <div class="location-preview-table">
         <table><thead><tr><th>Barcode</th><th>Current location</th><th>New location</th><th>Status</th></tr></thead>
@@ -1024,11 +1024,11 @@
         </table>
         <p *ngIf="!samples.length">No samples yet. Use the example barcode to preview your location name.</p>
       </div>
-    </details>
+    </section>
 
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 
-    <details class="legacy-location-settings"><summary>Advanced settings for existing rules</summary>
+    <details class="legacy-location-settings" hidden><summary>Advanced settings for existing rules</summary>
     <div class="storage-rule-preview-bar">
       <label><span>Example barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
       <div><span>New location</span><strong>{{ overallStoragePreview() }}</strong></div>
