@@ -25,4 +25,14 @@ describe('simple location rule designer', () => {
     editor.removeExample(1);
     expect(editor.examples).toHaveLength(1);
   });
+  it('updates the location shown in the fixed example row from the current rules', () => {
+    const editor=new LocationRuleDesignerComponent();
+    editor.editable=true;
+    editor.createRule();
+    const rule=editor.selected!;
+    editor.rules=[rule];
+    editor.add(rule,'text');
+    rule.parts[0].value='Admin Room';
+    expect(editor.exampleLocation('AD317')).toBe('Admin Room');
+  });
 });
