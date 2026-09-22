@@ -1454,21 +1454,15 @@
   gap: 8px;
 }
 
-.toolbar-actions-desktop {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.toolbar-actions-mobile {
+.toolbar-actions-menu {
   position: relative;
-  display: none;
+  display: block;
 }
 
-.toolbar-actions-mobile .dropdown-toggle {
-  padding: 4px 12px;
-  font-size: 1.1rem;
-  font-weight: bold;
+.toolbar-actions-menu .dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .dropdown-menu-container {
@@ -1589,9 +1583,16 @@
   text-align: center;
 }
 
-.storage-rules-button span { display:inline-grid; place-items:center; min-width:20px; height:20px; margin-left:4px; padding:0 5px; border-radius:999px; background:var(--color-primary-light); color:var(--color-primary); font-size:.68rem; }
+.spreadsheet-toolbar .toolbar-left > .app-btn,
+.spreadsheet-toolbar .toolbar-actions-menu > .app-btn { min-height:38px; height:38px; box-sizing:border-box; }
+.storage-rules-button { display:inline-flex; align-items:center; }
+.storage-rules-button span { display:inline-grid; place-items:center; min-width:18px; height:18px; margin-left:4px; padding:0 4px; border-radius:999px; background:var(--color-primary-light); color:var(--color-primary); font-size:.66rem; line-height:1; box-sizing:border-box; }
 .storage-rule-overlay { z-index: 1250; }
 .location-batch-preview { padding:16px 24px; background:#fff; border-bottom:1px solid var(--color-border); }
+.location-batch-preview summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; }
+.location-batch-preview summary::-webkit-details-marker { display:none; }
+.location-batch-preview[open] summary > span { transform:rotate(180deg); }
+.location-batch-preview summary > span { color:var(--color-text-secondary); transition:transform .18s ease; }
 .location-batch-preview h3 { margin:0; font-size:1rem; }
 .location-batch-preview h3 span { margin-left:8px; font-size:.75rem; color:var(--color-text-secondary); font-weight:400; }
 .location-batch-preview p { margin:6px 0 12px; font-size:.78rem; color:var(--color-text-secondary); }

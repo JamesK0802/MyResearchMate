@@ -3,20 +3,25 @@ import { describe, it, expect } from 'vitest';
 import { LocationRuleDesignerComponent } from './location-rule-designer.component';
 import { calculateStorageLocation } from '../utils/storage-location-rules';
 
-describe('plain-language replacement rules', () => {
-  it('replaces only the last two characters when they match and preserves the rest', () => {
+describe('simple location rule designer', () => {
+  it('builds a rule from keep and replace steps', () => {
     const editor=new LocationRuleDesignerComponent();
-    editor.editable=true;editor.operation='replace';editor.side='end';editor.skip=0;editor.count=2;
-    editor.find='XX';editor.replacement='0XX';editor.createManual();
+    editor.editable=true;
+    editor.createRule();
     const rule=editor.selected!;
+    rule.separator='';
+    editor.add(rule,'characters');
+    rule.parts[0].start=1; rule.parts[0].end=3;
+    editor.addReplace(rule);
     expect(calculateStorageLocation('ADSXX',[rule])).toBe('ADS0XX');
     expect(calculateStorageLocation('ADS72',[rule])).toBe('ADS72');
   });
-  it('skips a prefix and conditionally replaces a middle field', () => {
+  it('starts with one example row and adds more on demand', () => {
     const editor=new LocationRuleDesignerComponent();
-    editor.editable=true;editor.operation='replace';editor.side='start';editor.skip=2;editor.count=1;
-    editor.find='S';editor.replacement='South';editor.createManual();
-    expect(calculateStorageLocation('ADS572',[editor.selected!])).toBe('ADSouth572');
-    expect(calculateStorageLocation('ADT572',[editor.selected!])).toBe('ADT572');
+    expect(editor.examples).toHaveLength(1);
+    editor.addExample();
+    expect(editor.examples).toHaveLength(2);
+    editor.removeExample(1);
+    expect(editor.examples).toHaveLength(1);
   });
 });

@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { calculateStorageLocation, makeStoragePart, storagePartValue, StorageLocationRule } from './storage-location-rules';
 
 describe('storage location formula', () => {
+  it('ignores an unfinished enabled rule with no parts', () => {
+    const rule: StorageLocationRule = { id:'draft', name:'Draft', enabled:true, match:{type:'always',value:''}, separator:' ', parts:[] };
+    expect(calculateStorageLocation('ADS572', [rule])).toBeNull();
+  });
   it('splits variable-length cabinet and layer numbers without changing formats', () => {
     const rule: StorageLocationRule = {
       id:'split', name:'Location', enabled:true, match:{type:'always',value:''}, separator:' / ',

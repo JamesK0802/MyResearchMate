@@ -84,31 +84,19 @@
       <div class="toolbar-left">
         <button class="app-btn app-btn-outline app-btn-sm" (click)="addSampleRow()" [disabled]="isReadOnly">+ Add Sample</button>
         <button class="app-btn app-btn-outline app-btn-sm storage-rules-button" (click)="openStorageRules()">⚙ Storage Rules <span *ngIf="storageRules.length">{{ storageRules.length }}</span></button>
-        
-        <!-- Desktop buttons: hidden on mobile -->
-        <div class="toolbar-actions-desktop" style="display:flex; gap:8px; align-items:center;">
-          <button class="app-btn app-btn-outline app-btn-sm" (click)="downloadExcelTemplate()">📥 Template</button>
-          <label class="app-btn app-btn-outline app-btn-sm" style="cursor:pointer; margin-bottom:0; display:inline-flex; align-items:center;">
-            📤 Import Excel
-            <input type="file" accept=".xlsx,.xls" style="display:none" (change)="importExcelFile($event)">
-          </label>
-          <button class="app-btn app-btn-outline app-btn-sm" (click)="exportCurrentTable()">📥 Export Table</button>
-          <button class="app-btn app-btn-outline app-btn-sm" [class.app-btn-primary]="showFilterRow" (click)="showFilterRow = !showFilterRow">🔍 Filters</button>
-        </div>
 
-        <!-- Mobile vertical ellipsis (3-dot) dropdown: hidden on desktop -->
-        <div class="toolbar-actions-mobile" (click)="$event.stopPropagation()">
-          <button class="app-btn app-btn-outline app-btn-sm dropdown-toggle" (click)="showSpreadsheetDropdown = !showSpreadsheetDropdown">
-            ⋮
+        <button class="app-btn app-btn-outline app-btn-sm" [class.app-btn-primary]="showFilterRow" (click)="showFilterRow = !showFilterRow">Filters</button>
+        <div class="toolbar-actions-menu" (click)="$event.stopPropagation()">
+          <button class="app-btn app-btn-outline app-btn-sm dropdown-toggle" (click)="showSpreadsheetDropdown = !showSpreadsheetDropdown" [attr.aria-expanded]="showSpreadsheetDropdown">
+            Table actions <span aria-hidden="true">▾</span>
           </button>
           <div class="dropdown-menu-container" *ngIf="showSpreadsheetDropdown">
-            <button class="dropdown-item" (click)="downloadExcelTemplate(); showSpreadsheetDropdown = false;">📥 Download Template</button>
+            <button class="dropdown-item" (click)="downloadExcelTemplate(); showSpreadsheetDropdown = false;">Download template</button>
             <label class="dropdown-item" style="cursor:pointer; margin-bottom:0; display:flex; align-items:center; width:100%;">
-              📤 Import Excel
+              Import Excel
               <input type="file" accept=".xlsx,.xls" style="display:none" (change)="importExcelFile($event); showSpreadsheetDropdown = false;">
             </label>
-            <button class="dropdown-item" (click)="exportCurrentTable(); showSpreadsheetDropdown = false;">📥 Export Table</button>
-            <button class="dropdown-item" (click)="showFilterRow = !showFilterRow; showSpreadsheetDropdown = false;" [class.active]="showFilterRow">🔍 Filters</button>
+            <button class="dropdown-item" (click)="exportCurrentTable(); showSpreadsheetDropdown = false;">Export table</button>
           </div>
         </div>
       </div>
@@ -1018,14 +1006,14 @@
 <div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
   <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
     <header class="storage-rule-header">
-      <div><h2>Location names</h2><p>Show an example, or describe which characters to use.</p></div>
+      <div><h2>Location names</h2><p>Check examples, then add only the rules you need.</p></div>
       <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
     </header>
 
     <div class="storage-builder-scroll">
     <app-location-rule-designer [(rules)]="storageRules" [editable]="canManageStorageRules && !isReadOnly && !savingStorageRules" (exampleChange)="storageRuleExampleBarcode=$event"></app-location-rule-designer>
-    <section class="location-batch-preview" aria-label="Sample location changes">
-      <h3>Preview changes <span>{{ samples.length }} samples</span></h3>
+    <details class="location-batch-preview" aria-label="Sample location changes">
+      <summary><h3>Preview changes <span>{{ samples.length }} samples</span></h3><span aria-hidden="true">⌄</span></summary>
       <p>These changes will be applied when you save. Empty results will clear the current location.</p>
       <div class="location-preview-table">
         <table><thead><tr><th>Barcode</th><th>Current location</th><th>New location</th><th>Status</th></tr></thead>
@@ -1036,7 +1024,7 @@
         </table>
         <p *ngIf="!samples.length">No samples yet. Use the example barcode to preview your location name.</p>
       </div>
-    </section>
+    </details>
 
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 

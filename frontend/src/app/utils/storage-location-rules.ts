@@ -83,7 +83,8 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
 }
 
 export function calculateStorageLocation(barcode: string, rules: StorageLocationRule[]): string | null {
-  const enabled = (rules || []).filter(rule => rule.enabled);
+  // An unfinished rule in the editor must not clear existing locations.
+  const enabled = (rules || []).filter(rule => rule.enabled && (rule.parts || []).length > 0);
   if (!enabled.length) return null;
   const matches = enabled.filter(candidate => storageRuleMatches(barcode, candidate));
   const results = matches.map(rule => {
