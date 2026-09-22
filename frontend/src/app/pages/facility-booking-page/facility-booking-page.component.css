@@ -372,6 +372,17 @@
   align-items: end;
 }
 
+/* Native select and month controls otherwise render at different intrinsic
+   heights across Safari and Chromium. Keep every booking field on one grid. */
+.booking-form-card .form-grid-inline .app-input,
+.booking-form-card .form-grid-inline .app-select {
+  height: 46px;
+  min-height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
+}
+
 .success-text {
   font-size: var(--text-sm);
   color: var(--color-primary);
@@ -879,8 +890,8 @@
   .form-grid-inline { grid-template-columns: 1fr 1fr; gap: 8px; }
   .form-grid-inline .app-form-group:first-child { grid-column: 1 / -1; }
   .booking-form-card .app-label { margin-bottom: 3px; font-size: .65rem; }
-  .booking-form-card .app-input,
-  .booking-form-card .app-select { min-width: 0; padding: 7px 8px; font-size: .75rem; }
+  .booking-form-card .form-grid-inline .app-input,
+  .booking-form-card .form-grid-inline .app-select { min-width: 0; height: 40px; min-height: 40px; padding: 0 8px; font-size: .75rem; }
   .booking-form-card .form-actions { gap: 6px !important; }
   .booking-form-card .form-actions .app-btn { min-height: 36px; padding: 6px 10px; font-size: .74rem; }
 
