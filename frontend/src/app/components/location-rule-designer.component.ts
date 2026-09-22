@@ -55,8 +55,8 @@ import { calculateStorageLocation, makeStoragePart, StorageLocationRule, Storage
                 <label>Characters<select [ngModel]="source(part)" (ngModelChange)="setSource(part,$event)" [disabled]="!editable"><option value="barcode">Entire barcode</option><option value="start">From start</option><option value="end">From end</option></select></label>
                 <div class="numbers" *ngIf="source(part)!=='barcode'"><label>Skip<input type="number" min="0" [ngModel]="part.start-1" (ngModelChange)="setRange(part,$event,part.end-part.start+1)" [disabled]="!editable"></label><span>then take</span><label>Count<input type="number" min="1" [ngModel]="part.end-part.start+1" (ngModelChange)="setRange(part,part.start-1,$event)" [disabled]="!editable"></label></div>
                 <div class="replacement" *ngIf="partKind(part)==='replace'">
-                  <label>Replace with<input [ngModel]="replacementTemplate(part)" (ngModelChange)="setReplacementTemplate(part, $event)" [disabled]="!editable" placeholder="0{1}{2}"></label>
-                  <div class="token-hint"><span class="token">{1}</span> first selected character <span class="token token-two">{2}</span> second <span class="token token-three">{3}</span> third</div>
+                  <label>Replace with<input [ngModel]="replacementTemplate(part)" (ngModelChange)="setReplacementTemplate(part, $event)" [disabled]="!editable" placeholder="0&#123;1&#125;&#123;2&#125;"></label>
+                  <div class="token-hint"><span class="token">&#123;1&#125;</span> first selected character <span class="token token-two">&#123;2&#125;</span> second <span class="token token-three">&#123;3&#125;</span> third</div>
                   <small *ngIf="sampleBarcode()">Produces <strong>{{ replacementPreview(part) }}</strong> for <strong>{{ sampleBarcode() }}</strong></small>
                 </div>
               </ng-container>
