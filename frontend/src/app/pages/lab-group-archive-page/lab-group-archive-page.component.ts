@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { LabService } from '../../services/lab.service';
 import { LabArchiveService } from '../../services/lab-archive.service';
 import { StorageUsageComponent } from '../../components/storage-usage.component';
+import { LocationRuleDesignerComponent } from '../../components/location-rule-designer.component';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import ExcelJS from 'exceljs';
@@ -15,7 +16,7 @@ import { calculateStorageLocation, makeStoragePart, storagePartValue, StorageRul
 @Component({
   selector: 'app-lab-group-archive-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, StorageUsageComponent],
+  imports: [CommonModule, FormsModule, StorageUsageComponent, LocationRuleDesignerComponent],
   templateUrl: './lab-group-archive-page.component.html',
   styleUrl: './lab-group-archive-page.component.css'
 })

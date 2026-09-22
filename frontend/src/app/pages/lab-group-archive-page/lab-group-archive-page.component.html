@@ -1017,23 +1017,19 @@
 <div class="app-modal-overlay storage-rule-overlay" *ngIf="showStorageRulesModal" (click)="closeStorageRules()">
   <section class="storage-rule-modal" role="dialog" aria-modal="true" aria-label="Storage location rules" (click)="$event.stopPropagation()">
     <header class="storage-rule-header">
-      <div><h2>Location names</h2><p>Build a location from your barcode. Check the changes below, then apply.</p></div>
+      <div><h2>Location names</h2><p>Show an example, or describe which characters to use.</p></div>
       <button type="button" class="app-modal-close" (click)="closeStorageRules()">✕</button>
     </header>
 
-    <div class="storage-rule-preview-bar">
-      <label><span>Example barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
-      <div><span>New location · live preview</span><strong aria-live="polite">{{ overallStoragePreview() }}</strong></div>
-    </div>
-
     <div class="storage-builder-scroll">
+    <app-location-rule-designer [(rules)]="storageRules" [editable]="canManageStorageRules && !isReadOnly && !savingStorageRules" (exampleChange)="storageRuleExampleBarcode=$event"></app-location-rule-designer>
     <section class="location-batch-preview" aria-label="Sample location changes">
       <h3>Preview changes <span>{{ samples.length }} samples</span></h3>
-      <p>Click a barcode to use it as the example above. Empty results will clear the current location when applied.</p>
+      <p>These changes will be applied when you save. Empty results will clear the current location.</p>
       <div class="location-preview-table">
         <table><thead><tr><th>Barcode</th><th>Current location</th><th>New location</th><th>Status</th></tr></thead>
           <tbody><tr *ngFor="let row of storagePreviewRows" [class.location-changed]="row.status === 'Changed'" [class.location-empty]="row.status === 'No location'">
-            <td><button type="button" (click)="storageRuleExampleBarcode = row.barcode === '(empty)' ? '' : row.barcode">{{ row.barcode }}</button></td>
+            <td>{{ row.barcode }}</td>
             <td>{{ row.before || '—' }}</td><td>{{ row.after || '—' }}</td><td>{{ row.status }}</td>
           </tr></tbody>
         </table>
@@ -1043,6 +1039,11 @@
 
     <div *ngIf="!canManageStorageRules" class="rule-readonly-note">Only the lab leader can edit these shared rules. You can still inspect them and try example barcodes.</div>
 
+    <details class="legacy-location-settings"><summary>Advanced settings for existing rules</summary>
+    <div class="storage-rule-preview-bar">
+      <label><span>Example barcode</span><input class="app-input" [(ngModel)]="storageRuleExampleBarcode" placeholder="e.g. AD12"></label>
+      <div><span>New location</span><strong>{{ overallStoragePreview() }}</strong></div>
+    </div>
     <div class="rule-starters" *ngIf="canManageStorageRules && !isReadOnly">
       <div><strong>Naming rules</strong><span>The first matching rule is used. Arrange its parts in the order you want to read them.</span></div>
       <button type="button" class="create-storage-rule" (click)="addStorageRule()">＋ New rule</button>
@@ -1134,6 +1135,7 @@
 
       <div *ngIf="!storageRules.length" class="storage-rules-empty"><strong>Split your barcode into named pieces</strong><p>Start with the room / cabinet / layer example, or add a blank format.</p></div>
     </div>
+    </details>
     </div>
 
     <div *ngIf="storageRulesError" class="app-alert app-alert-error">{{ storageRulesError }}</div>
