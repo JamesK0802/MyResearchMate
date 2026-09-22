@@ -235,6 +235,10 @@ function alignReadToWindow(
   const seqUp = seq.toUpperCase();
   const refUp = refWindow.toUpperCase();
   const winLen = refWindow.length;
+  // A short direct-input window cannot hold two independent 12 bp anchors.
+  // Split it into non-overlapping terminal anchors instead of treating the
+  // entire window as both anchors (which can never form a valid pair).
+  const anchorLen = Math.min(ANCHOR_LEN, Math.max(1, Math.floor(winLen / 2)));
 
   // Step 1: Find coordinate offset
   const offset = findOffset(seqUp, refUp, sgrnaSeq);
@@ -247,8 +251,8 @@ function alignReadToWindow(
   }
 
   // Step 3: Find anchors
-  const leftAnchor = refUp.substring(0, ANCHOR_LEN);
-  const rightAnchor = refUp.substring(refUp.length - ANCHOR_LEN);
+  const leftAnchor = refUp.substring(0, anchorLen);
+  const rightAnchor = refUp.substring(refUp.length - anchorLen);
 
   // Find all anchor positions
   const leftPositions: number[] = [];
@@ -266,12 +270,12 @@ function alignReadToWindow(
   }
 
   // Find best anchor pair
-  const refInnerLen = winLen - 2 * ANCHOR_LEN;
+  const refInnerLen = winLen - 2 * anchorLen;
   let bestLi = -1, bestRi = -1, bestDiff = Infinity;
   for (const l of leftPositions) {
     for (const r of rightPositions) {
-      if (r >= l + ANCHOR_LEN) {
-        const innerLen = r - l - ANCHOR_LEN;
+      if (r >= l + anchorLen) {
+        const innerLen = r - l - anchorLen;
         const diff = Math.abs(innerLen - refInnerLen);
         if (diff < bestDiff) {
           bestDiff = diff;
@@ -291,11 +295,11 @@ function alignReadToWindow(
 
   if (bestLi !== -1 && bestRi !== -1) {
     // CASE A: Both anchors found
-    observedRead = seq.substring(bestLi, bestRi + ANCHOR_LEN).toUpperCase();
+    observedRead = seq.substring(bestLi, bestRi + anchorLen).toUpperCase();
     leftX = 0;
     rightX = 0;
     readWindow = observedRead;
-    qualObserved = qual ? qual.slice(bestLi, bestRi + ANCHOR_LEN) : null;
+    qualObserved = qual ? qual.slice(bestLi, bestRi + anchorLen) : null;
 
   } else if (leftPositions.length > 0) {
     // CASE B: Left anchor found, right truncated
@@ -309,10 +313,10 @@ function alignReadToWindow(
   } else if (rightPositions.length > 0) {
     // CASE C: Right anchor found, left truncated
     const bestRight = rightPositions.reduce((best, x) =>
-      Math.abs(x - (offset + winLen - ANCHOR_LEN)) < Math.abs(best - (offset + winLen - ANCHOR_LEN)) ? x : best
+      Math.abs(x - (offset + winLen - anchorLen)) < Math.abs(best - (offset + winLen - anchorLen)) ? x : best
     );
-    const endPos = bestRight + ANCHOR_LEN;
-    const winStart = bestRight - (winLen - ANCHOR_LEN);
+    const endPos = bestRight + anchorLen;
+    const winStart = bestRight - (winLen - anchorLen);
     const actualStart = Math.max(0, winStart);
     observedRead = seq.substring(actualStart, endPos).toUpperCase();
     leftX = Math.max(0, -winStart);

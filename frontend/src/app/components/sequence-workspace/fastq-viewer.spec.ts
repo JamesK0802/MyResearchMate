@@ -1,3 +1,4 @@
+import '@angular/compiler';
 import { describe, expect, it, vi } from 'vitest';
 import { FastqDocument } from '../../models/sequence.model';
 import { cutIndexInWindow, findGrnaCutSite } from '../../workers/core/classifier';
@@ -178,6 +179,37 @@ describe('FastqViewerComponent alignment persistence', () => {
     expect(streamRemoteFastqReads).toHaveBeenCalledOnce();
     expect(component.document.alignmentState).toMatchObject({ processedReadCount: 2 });
     expect(saveRemoteAlignmentPage).toHaveBeenCalledOnce();
+  });
+
+  it('resets and deletes the previous cache before starting a replacement alignment', async () => {
+    const oldState = {
+      active: true, mode: 'window' as const, inputWindowSeq: 'OLDTARGET', inputRefSeq: '', inputGrnaSeq: '',
+      inputWinSize: 90, alignedWindowSeq: 'OLDTARGET', alignedCutSiteInWindow: 4,
+      readOrder: 'aligned' as const, cacheVersion: 2, cacheId: 'old-cache',
+      processedReadCount: 1, alignedCount: 1, unalignedCount: 0, updatedTimestamp: 1
+    };
+    const sourceReads = document().reads;
+    const deleteRemoteAlignment = vi.fn().mockResolvedValue(undefined);
+    const saveRemoteAlignmentPage = vi.fn().mockResolvedValue(undefined);
+    const component = new FastqViewerComponent({
+      saveItem: vi.fn().mockResolvedValue(undefined),
+      deleteRemoteAlignment,
+      saveRemoteAlignmentPage,
+      streamRemoteFastqReads: vi.fn(async (_document, onBatch) => onBatch(sourceReads)),
+      loadRemoteAlignmentResults: vi.fn().mockResolvedValue(1)
+    } as any);
+    component.document = document();
+    component.document.remoteFileId = 'remote-file';
+    component.document.alignmentState = oldState;
+    component.isAlignedActive = true;
+    component.inputWindowSeq = 'AACCGGTT';
+
+    await component.runAlign();
+
+    expect(deleteRemoteAlignment).toHaveBeenCalledOnce();
+    expect(deleteRemoteAlignment).toHaveBeenCalledWith(component.document, 'old-cache');
+    expect(deleteRemoteAlignment.mock.invocationCallOrder[0]).toBeLessThan(saveRemoteAlignmentPage.mock.invocationCallOrder[0]);
+    expect(component.document.alignmentState?.cacheId).not.toBe('old-cache');
   });
 
   it('resumes an alignment page save after a mobile connection interruption', async () => {

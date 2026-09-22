@@ -6,7 +6,8 @@ import {
   getWindowBounds,
   cutIndexInWindow,
   extractWindow,
-  scoreReadAgainstWindow
+  scoreReadAgainstWindow,
+  isReadUsable
 } from '../classifier';
 
 describe('Classifier Core Utilities', () => {
@@ -97,6 +98,16 @@ describe('Classifier Core Utilities', () => {
     );
     const guardedScore = scoreReadAgainstWindow('AAAAXXXXCCCC', window);
     expect(guardedScore).toBeCloseTo(segmentScore);
+  });
+
+  it('aligns an exact short direct-input window inside a long read', () => {
+    const target = 'AACATCAATC';
+    const read = `${'G'.repeat(25)}${target}${'T'.repeat(25)}`;
+    const [usable, reason, result] = isReadUsable(read, null, target, 0, '', 5);
+
+    expect(usable).toBe(true);
+    expect(reason).toBe('ok');
+    expect(result?.read_window).toBe(target);
   });
 
   it('should exclude cut-site mutations only when exclusionFlank is configured', () => {

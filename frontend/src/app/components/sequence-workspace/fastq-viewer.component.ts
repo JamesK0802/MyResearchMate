@@ -1156,6 +1156,22 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
 
     if (!targetWin) return;
 
+    if (this.isAlignedActive || this.document.alignmentState) {
+      this.isAligning = true;
+      this.alignmentProgress = 0;
+      this.alignmentStatus = 'Resetting the previous alignment…';
+      try {
+        await this.clearAlignmentForRerun();
+      } catch (error) {
+        console.error('Failed to reset the previous FASTQ alignment', error);
+        alert(`The previous alignment could not be reset.\n\n${this.alignmentErrorMessage(error)}`);
+        return;
+      } finally {
+        this.isAligning = false;
+        this.alignmentStatus = '';
+      }
+    }
+
     this.alignedWindowSeq = targetWin;
     this.alignedCutSiteInWindow = cutSiteInWin;
     this.isAlignedActive = true;
@@ -1254,6 +1270,9 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
         this.isAlignedActive = false;
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
+        if (this.document.remoteFileId && this.document.reads.length === 0) {
+          await this.sequenceWorkspaceService.loadMoreRemoteFastqReads(this.document).catch(() => undefined);
+        }
         this.initProcessedReads();
       }
       const detail = this.alignmentErrorMessage(error);
@@ -1485,6 +1504,11 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   }
 
   async resetAlign() {
+    await this.clearAlignmentForRerun(true);
+    this.initProcessedReads();
+  }
+
+  private async clearAlignmentForRerun(reloadRawPreview = false) {
     const cacheId = this.document.alignmentState?.cacheId;
     this.isAlignedActive = false;
     this.alignedWindowSeq = '';
@@ -1500,9 +1524,12 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       this.document.reads.forEach(read => { delete read.alignment; });
     }
     await this.sequenceWorkspaceService.saveItem(this.document);
-    if (cacheId && cacheId !== 'local') void this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, cacheId);
-    if (this.document.remoteFileId) await this.sequenceWorkspaceService.loadMoreRemoteFastqReads(this.document);
-    this.initProcessedReads();
+    if (cacheId && cacheId !== 'local') {
+      await this.sequenceWorkspaceService.deleteRemoteAlignment(this.document, cacheId);
+    }
+    if (reloadRawPreview && this.document.remoteFileId) {
+      await this.sequenceWorkspaceService.loadMoreRemoteFastqReads(this.document);
+    }
   }
 
   async setAlignmentReadOrder(order: 'aligned' | 'unaligned') {
