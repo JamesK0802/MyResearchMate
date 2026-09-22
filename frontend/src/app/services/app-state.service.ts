@@ -11,6 +11,7 @@ import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult } fro
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
 import { IlluminaFilePair } from '../models/illumina.model';
+import { safeSequenceFilename } from '../utils/sequence-filename';
 
 /** Independent result data container */
 export interface ResultSlot {
@@ -1239,7 +1240,7 @@ export class AppStateService {
 
       if (blobs.length > 0) {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
-        const filename = `${target.target_id}_Group_${group.group_rank}.fastq`;
+        const filename = safeSequenceFilename(`${target.target_id}_Group_${group.group_rank}.fastq`);
 
         const refSeq = target.ref_sequence || target.reference_seq || '';
         const grnaSeq = target.sgrna_seq || '';
@@ -1301,7 +1302,7 @@ export class AppStateService {
 
       if (blobs.length > 0) {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
-        const filename = `${target.target_id}_All_Reads.fastq`;
+        const filename = safeSequenceFilename(`${target.target_id}_All_Reads.fastq`);
 
         const refSeq = target.ref_sequence || target.reference_seq || '';
         const grnaSeq = target.sgrna_seq || '';

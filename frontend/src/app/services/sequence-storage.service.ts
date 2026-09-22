@@ -4,6 +4,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
+import { safeSequenceFilename } from '../utils/sequence-filename';
 
 export interface SequenceStorageUsage {
   used_bytes: number;
@@ -71,8 +72,9 @@ export class SequenceStorageService {
 
   async upload(file: File, metadata: Record<string, unknown>, onProgress?: (fraction: number) => void): Promise<StoredSequenceFile> {
     const headers = await this.headers();
+    const filename = safeSequenceFilename(file.name);
     const session = await firstValueFrom(this.http.post<SequenceUploadSession>(`${this.apiUrl}/uploads`, {
-      filename: file.name,
+      filename,
       size_bytes: file.size,
       metadata_json: metadata,
     }, { headers }));
