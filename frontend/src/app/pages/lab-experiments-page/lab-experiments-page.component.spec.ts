@@ -15,6 +15,16 @@ describe('experiment creation snapshot', () => {
     }));
     expect(page.memoComposerOpen).toBe(false);
   });
+  it('edits a stage note as one free-form note and preserves status logs', () => {
+    const page = new LabExperimentsPageComponent({updateExperiment:vi.fn().mockResolvedValue({})} as any, {} as any, {} as any, {detectChanges(){}} as any, {} as any);
+    const step:any={id:'step-1',title:'Step',logs:[{id:'status',kind:'status',text:'Started'},{id:'old',text:'Old note'}],comments:['Earlier comment']};
+    page.selectedExperiment={id:'run',title:'Run',steps:[step],run_memos:[]};
+    expect(page.stageNote(page.selectedExperiment,step)).toBe('Old note\n\nEarlier comment');
+    page.updateStageNote(step,'Edited freely');
+    expect(page.selectedExperiment.run_memos).toEqual([expect.objectContaining({node_id:'step-1',text:'Edited freely'})]);
+    expect(step.logs).toEqual([{id:'status',kind:'status',text:'Started'}]);
+    expect(step.comments).toEqual([]);
+  });
   it('preserves existing individual shares when lab sharing changes', async () => {
     const notebook={getWorkflowShares:vi.fn().mockResolvedValue({lab_ids:['lab-1'],user_ids:['42']}), updateWorkflowShares:vi.fn().mockResolvedValue({})};
     const page=new LabExperimentsPageComponent(notebook as any,{} as any,{} as any,{detectChanges(){}} as any,{getMyLabs:vi.fn().mockResolvedValue([{id:'lab-1'},{id:'lab-2'}])} as any);

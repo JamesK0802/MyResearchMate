@@ -401,6 +401,33 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     this.memoText=''; this.memoComposerOpen=false;
   }
 
+  stageNote(exp:any,step:ExperimentStep):string {
+    if (Object.prototype.hasOwnProperty.call(this.noteDrafts,step.id)) return this.noteDrafts[step.id];
+    const note=[
+      ...(exp.run_memos || []).filter((memo:any)=>memo.node_id === step.id).map((memo:any)=>memo.text),
+      ...(step.logs || []).filter(log=>log.kind !== 'status').map(log=>log.text),
+      ...(step.comments || [])
+    ].filter(Boolean).join('\n\n');
+    return note;
+  }
+
+  updateStageNote(step:ExperimentStep,text:string) {
+    if (!this.selectedExperiment || this.activeTab !== 'current') return;
+    this.noteDrafts[step.id]=text;
+    const unrelated=(this.selectedExperiment.run_memos || []).filter((memo:any)=>memo.node_id !== step.id);
+    const existing=(this.selectedExperiment.run_memos || []).find((memo:any)=>memo.node_id === step.id);
+    this.selectedExperiment.run_memos=text ? [...unrelated,{id:existing?.id || experimentId(),node_id:step.id,text,created_at:existing?.created_at || new Date().toISOString()}] : unrelated;
+    step.logs=(step.logs || []).filter(log=>log.kind === 'status');
+    step.comments=[];
+    this.onExperimentChange(this.selectedExperiment);
+  }
+
+  autoGrow(event:Event) {
+    const textarea=event.target as HTMLTextAreaElement;
+    textarea.style.height='auto';
+    textarea.style.height=`${Math.max(76,textarea.scrollHeight)}px`;
+  }
+
   protocolInstructions(step:ExperimentStep):string[] {
     return step.instructions || (step.description || '').split('\n').map(line=>line.replace(/^•\s*/, '')).filter(Boolean);
   }
@@ -466,8 +493,8 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     return `Shared with: ${recipients.join(', ') || 'Selected collaborators'}`;
   }
   cardMeta(exp: any): string[] {
-    const date = this.formatDate(this.activeTab === 'completed' ? exp.archived_at : exp.updated_at);
-    return [this.activeTab === 'completed' ? `Completed ${date}` : `Updated ${date}`, ...(this.activeTab === 'completed' && exp.success_score ? [`Outcome ${exp.success_score}/5`] : [])];
+    const date = this.formatDate(exp.created_at);
+    return [`Created ${date}`, ...(this.activeTab === 'completed' && exp.success_score ? [`Outcome ${exp.success_score}/5`] : [])];
   }
 
   formatDate(value: string | null | undefined): string {
