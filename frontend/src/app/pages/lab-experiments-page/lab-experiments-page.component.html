@@ -24,10 +24,18 @@
     <app-my-data-card *ngFor="let exp of displayExperiments"
       [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="isExperimentShared(exp)"
       [syncLabel]="syncStates[exp.id] === 'error' ? 'Save failed' : ''" [syncError]="syncStates[exp.id] === 'error'"
-      primaryLabel="Open" [showShare]="!exp._shared" [showDelete]="!exp._shared"
+      [primaryLabel]="activeTab === 'current' ? 'Continue' : 'Review'" [showShare]="!exp._shared" [showDelete]="!exp._shared"
       (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">
       <div card-content>
-        <p class="card-protocol">{{exp.protocol_root_name || exp.protocol_title}}</p>
+        <div class="experiment-summary">
+          <div class="protocol-line"><span class="summary-icon">⌘</span><span><small>Protocol</small><strong>{{exp.protocol_root_name || exp.protocol_title || 'Protocol not named'}}</strong></span></div>
+          <div class="run-stats">
+            <span><b>{{routeStepCount(exp)}}</b> stages</span>
+            <span><b>{{exp.samples?.length || 0}}</b> samples</span>
+          </div>
+          <div *ngIf="activeTab === 'current' && nextStep(exp) as next" class="next-stage"><span>Current stage</span><strong>{{next.title}}</strong></div>
+          <div *ngIf="activeTab === 'completed'" class="completed-summary"><span>✓</span> Experiment completed</div>
+        </div>
         <div *ngIf="isExperimentShared(exp)" class="sharing-info">{{sharingSummary(exp)}}</div>
       </div>
     </app-my-data-card>
@@ -37,46 +45,66 @@
 
 <div *ngIf="selectedExperiment" class="detail-backdrop" (click)="closeExperiment()">
   <section class="detail-panel" role="dialog" aria-modal="true" aria-label="Experiment log details" (click)="$event.stopPropagation()">
-    <header class="detail-header"><h2>{{selectedExperiment.title}}</h2><button type="button" class="icon-close" (click)="closeExperiment()" aria-label="Close experiment log">×</button></header>
+    <header class="detail-header">
+      <div><span class="detail-status">{{activeTab === 'current' ? 'IN PROGRESS' : 'COMPLETED'}}</span><h2>{{selectedExperiment.title}}</h2><p>{{selectedExperiment.protocol_root_name || selectedExperiment.protocol_title}}</p></div>
+      <button type="button" class="icon-close" (click)="closeExperiment()" aria-label="Close experiment log">×</button>
+    </header>
+    <div class="detail-overview">
+      <div class="overview-meta"><span>Started <strong>{{formatDate(selectedExperiment.created_at)}}</strong></span><span><strong>{{routeSteps(selectedExperiment).length}}</strong> stages</span><span><strong>{{selectedExperiment.samples?.length || 0}}</strong> samples</span></div>
+      <button *ngIf="activeTab === 'current'" class="primary-action complete-action" (click)="openCompletion(selectedExperiment)">Complete experiment</button>
+    </div>
     <div class="detail-body">
-      <div class="log-toolbar"><small>{{formatDate(selectedExperiment.created_at)}}</small><button *ngIf="activeTab === 'current'" class="primary-action" (click)="openCompletion(selectedExperiment)">Complete</button></div>
-      <p *ngIf="selectedExperiment.samples?.length" class="sample-summary">{{selectedExperiment.samples.join(', ')}}</p>
-      <nav class="node-navigation" aria-label="Protocol node pages">
-        <button (click)="turnNode(-1)" [disabled]="nodeIndex === 0" aria-label="Previous node">‹</button>
-        <span>{{nodeIndex + 1}} / {{routeSteps(selectedExperiment).length}}</span>
-        <button (click)="turnNode(1)" [disabled]="nodeIndex >= routeSteps(selectedExperiment).length-1" aria-label="Next node">›</button>
-      </nav>
-      <div #nodePages class="node-pages" (scroll)="onNodeScroll()">
+      <div *ngIf="selectedExperiment.samples?.length" class="sample-chips"><span *ngFor="let sample of selectedExperiment.samples">{{sample}}</span></div>
+      <div class="detail-workspace">
+        <aside class="stage-sidebar" aria-label="Experiment stages">
+          <strong>Experiment stages</strong>
+          <button *ngFor="let step of routeSteps(selectedExperiment); let index=index" [class.active]="nodeIndex === index" (click)="goToNode(index)">
+            <span class="stage-number">{{index + 1}}</span><span><small>{{step.status}}</small><b>{{step.title}}</b></span>
+          </button>
+        </aside>
+        <main class="stage-main">
+          <nav class="node-navigation" aria-label="Protocol node pages">
+            <button (click)="turnNode(-1)" [disabled]="nodeIndex === 0" aria-label="Previous node">‹</button>
+            <span><small>STAGE {{nodeIndex + 1}} OF {{routeSteps(selectedExperiment).length}}</small><strong>{{routeSteps(selectedExperiment)[nodeIndex]?.title}}</strong></span>
+            <button (click)="turnNode(1)" [disabled]="nodeIndex >= routeSteps(selectedExperiment).length-1" aria-label="Next node">›</button>
+          </nav>
+          <div #nodePages class="node-pages" (scroll)="onNodeScroll()">
         <article *ngFor="let step of routeSteps(selectedExperiment); let index=index" class="node-page">
-          <h3>{{index+1}}. {{step.title}}</h3>
-          <div class="memo-heading"><span>Memos</span><button *ngIf="activeTab === 'current' && !(memoComposerOpen && nodeIndex === index)" class="add-memo" aria-label="Add memo" (click)="memoText=noteDrafts[step.id] || ''; memoComposerOpen=true">+</button></div>
+          <div class="stage-title"><span>{{index+1}}</span><div><small>{{step.status}}</small><h3>{{step.title}}</h3></div></div>
+          <section class="notes-section">
+          <div class="memo-heading"><div><strong>Experiment notes</strong><small>Observations, changes and results for this stage</small></div><button *ngIf="activeTab === 'current' && !(memoComposerOpen && nodeIndex === index)" class="add-memo" aria-label="Add memo" (click)="memoText=noteDrafts[step.id] || ''; memoComposerOpen=true">+</button></div>
           <section *ngIf="memoComposerOpen && nodeIndex === index" class="memo-composer">
             <textarea [(ngModel)]="memoText" (ngModelChange)="noteDrafts[step.id]=$event" rows="3" aria-label="Memo" placeholder="Observation, change, result…"></textarea>
             <div class="form-actions"><button class="secondary-action" (click)="memoComposerOpen=false">Cancel</button><button class="primary-action" [disabled]="!memoText.trim()" (click)="addMemo()">Save</button></div>
           </section>
+          <p *ngIf="!nodeMemos(selectedExperiment,step).length && !step.logs?.length && !step.comments?.length" class="notes-empty">No notes recorded for this stage.</p>
           <article *ngFor="let memo of nodeMemos(selectedExperiment,step)" class="memo-entry"><small>{{formatDate(memo.created_at)}}</small><p>{{memo.text}}</p></article>
           <ng-container *ngFor="let log of step.logs"><article *ngIf="log.kind !== 'status'" class="memo-entry"><small>{{formatDate(log.created_at)}}</small><p>{{log.text}}</p></article></ng-container>
           <article *ngFor="let comment of step.comments" class="memo-entry"><p>{{comment}}</p></article>
           <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>
-          <details class="node-instructions"><summary>Steps</summary>
+          </section>
+          <section class="node-instructions">
+            <div class="section-label"><span>Procedure</span><small>{{protocolInstructions(step).length}} steps</small></div>
             <p *ngIf="step.node_snapshot?.description">{{step.node_snapshot?.description}}</p>
             <ol><li *ngFor="let instruction of protocolInstructions(step)">{{instruction}}</li></ol>
-          </details>
+          </section>
           <section *ngIf="step.node_snapshot?.leaves?.length" class="protocol-notes">
             <h4>Protocol notes</h4><article *ngFor="let leaf of step.node_snapshot?.leaves"><h4>{{leaf.title}}</h4><p>{{leaf.content}}</p></article>
           </section>
         </article>
-      </div>
-      <p *ngIf="syncStates[selectedExperiment.id] === 'error'" class="create-error" role="alert">Could not save. <button (click)="onExperimentChange(selectedExperiment)">Retry</button></p>
-      <details *ngIf="earlierMemos(selectedExperiment).length || selectedExperiment.description || selectedExperiment.run_notes" class="saved-protocol"><summary>Earlier experiment memos</summary>
+          </div>
+          <p *ngIf="syncStates[selectedExperiment.id] === 'error'" class="create-error" role="alert">Could not save. <button (click)="onExperimentChange(selectedExperiment)">Retry</button></p>
+          <details *ngIf="earlierMemos(selectedExperiment).length || selectedExperiment.description || selectedExperiment.run_notes" class="saved-protocol"><summary>Earlier experiment memos</summary>
         <article *ngFor="let memo of earlierMemos(selectedExperiment)" class="memo-entry"><small>{{formatDate(memo.created_at)}}</small><p>{{memo.text}}</p></article>
         <p>{{selectedExperiment.description}}</p><p>{{selectedExperiment.run_notes}}</p>
-      </details>
-      <details *ngIf="legacyEvidence(selectedExperiment).length" class="saved-protocol"><summary>Earlier step notes &amp; images</summary>
+          </details>
+          <details *ngIf="legacyEvidence(selectedExperiment).length" class="saved-protocol"><summary>Earlier step notes &amp; images</summary>
         <article *ngFor="let step of legacyEvidence(selectedExperiment)" class="memo-entry"><h4>{{step.title}}</h4><ng-container *ngFor="let log of step.logs"><p *ngIf="log.kind !== 'status'"><small>{{formatDate(log.created_at)}}</small><br>{{log.text}}</p></ng-container><p *ngFor="let comment of step.comments">{{comment}}</p>
           <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>
         </article>
-      </details>
+          </details>
+        </main>
+      </div>
     </div>
   </section>
 </div>

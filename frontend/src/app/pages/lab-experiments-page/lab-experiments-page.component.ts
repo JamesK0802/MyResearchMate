@@ -323,10 +323,18 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     if (step) { try { localStorage.setItem(this.positionKey(this.selectedExperiment),step.id); } catch {} }
   }
   turnNode(delta:number) {
+    this.goToNode(this.nodeIndex+delta);
+  }
+  goToNode(index:number) {
     const element=this.nodePages?.nativeElement;
     if (!element || !this.selectedExperiment) return;
-    const index=Math.max(0,Math.min(this.routeSteps(this.selectedExperiment).length-1,this.nodeIndex+delta));
-    element.scrollTo({left:index*element.clientWidth,behavior:'smooth'});
+    const lastIndex=this.routeSteps(this.selectedExperiment).length-1;
+    const boundedIndex=Math.max(0,Math.min(lastIndex,index));
+    this.nodeIndex=boundedIndex;
+    this.memoComposerOpen=false;
+    const step=this.routeSteps(this.selectedExperiment)[boundedIndex];
+    if (step) { try { localStorage.setItem(this.positionKey(this.selectedExperiment),step.id); } catch {} }
+    element.scrollTo({left:boundedIndex*element.clientWidth,behavior:'smooth'});
   }
 
   async openSharing(exp:any) {
