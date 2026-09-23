@@ -13,6 +13,7 @@ import { AuthService } from '../../services/auth.service';
 import { LabService } from '../../services/lab.service';
 import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/experiment-route';
 import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
+import { ActivatedRoute, Router } from '@angular/router';
 
 type ExperimentTab = 'current' | 'completed';
 type StepStatus = 'pending' | 'active' | 'completed' | 'skipped';
@@ -82,16 +83,20 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   private saveSubscription?: Subscription;
   private pendingSaves = new Map<string, any>();
   private completingExperimentIds = new Set<string>();
+  detailExperimentId = '';
 
   constructor(
     private notebook: LabNotebookService,
     private protocolService: ProtocolTreeService,
     public auth: AuthService,
     private cdr: ChangeDetectorRef,
-    private labs: LabService
+    private labs: LabService,
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   async ngOnInit() {
+    this.detailExperimentId=this.route.snapshot.paramMap.get('experimentId') || '';
     this.saveSubscription = this.saveSubject.pipe(debounceTime(550)).subscribe(() => this.flushPendingSaves());
     await Promise.all([this.loadExperiments(), this.loadProtocols()]);
   }
@@ -121,6 +126,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
       this.currentExperiments = [...current, ...sharedCurrent].map(item => this.normalizeExperiment(item));
       this.completedExperiments = [...completed, ...sharedCompleted].map(item => this.normalizeExperiment(item));
       for (const item of [...this.currentExperiments, ...this.completedExperiments]) this.syncStates[item.id] = 'saved';
+      if (this.detailExperimentId) this.selectRouteExperiment();
     } catch (error) {
       console.error('Could not load experiment logs', error);
       this.currentExperiments = [];
@@ -301,7 +307,13 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
-  openExperiment(exp: any) {
+  openExperiment(exp: any) { void this.router.navigate(['/data/experiment-logs',exp.id]); }
+  private selectRouteExperiment() {
+    const current=this.currentExperiments.find(exp=>String(exp.id) === this.detailExperimentId);
+    const completed=this.completedExperiments.find(exp=>String(exp.id) === this.detailExperimentId);
+    const exp=current || completed;
+    if (!exp) { void this.router.navigate(['/data/experiment-logs']); return; }
+    this.activeTab=current ? 'current' : 'completed';
     this.selectedExperiment = exp; this.noteDrafts = {}; this.memoComposerOpen=false; this.memoText='';
     const steps=this.routeSteps(exp);
     let remembered='';
@@ -358,7 +370,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     } catch { this.sharingError='Could not save sharing settings. Close and try again.'; }
     finally {this.sharingBusy=false;this.cdr.detectChanges();}
   }
-  closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; }
+  closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; void this.router.navigate(['/data/experiment-logs']); }
 
   onExperimentChange(exp: any) {
     if (this.activeTab === 'completed') return;

@@ -1,4 +1,4 @@
-<app-my-data-page>
+<app-my-data-page *ngIf="!detailExperimentId">
   <app-my-data-header title="Experiment Logs"></app-my-data-header>
   <app-my-data-list-controls [tabs]="[{value:'current',label:'Current (' + currentExperiments.length + ')'}, {value:'completed',label:'Completed (' + completedExperiments.length + ')'}]"
     [activeTab]="activeTab" (tabChange)="setTab($event)" [searchable]="true" [(query)]="searchQuery"
@@ -42,12 +42,13 @@
   <section *ngIf="!loading && !displayExperiments.length" class="empty-state"><p>{{searchQuery ? 'No matching experiments' : 'No experiments yet'}}</p></section>
 </app-my-data-page>
 
-<div *ngIf="selectedExperiment" class="detail-backdrop" (click)="closeExperiment()">
-  <section class="detail-panel" role="dialog" aria-modal="true" aria-label="Experiment log details" (click)="$event.stopPropagation()">
+<div *ngIf="detailExperimentId && !selectedExperiment" class="detail-loading"><span class="spinner"></span><p>Loading experiment…</p></div>
+<main *ngIf="selectedExperiment" class="experiment-detail-page">
+  <button type="button" class="back-to-list" (click)="closeExperiment()">← Experiment Logs</button>
+  <section class="detail-panel" aria-label="Experiment log details">
     <header class="detail-header">
       <h2>{{selectedExperiment.title}}</h2>
       <button *ngIf="activeTab === 'current'" class="primary-action complete-action" (click)="openCompletion(selectedExperiment)">Complete</button>
-      <button type="button" class="icon-close" (click)="closeExperiment()" aria-label="Close experiment log">×</button>
     </header>
     <div class="detail-body">
       <details class="experiment-meta">
@@ -75,12 +76,11 @@
           <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>
           </section>
           <section class="node-instructions">
-            <div class="section-label"><span>Procedure</span><small>{{protocolInstructions(step).length}} steps</small></div>
-            <p *ngIf="step.node_snapshot?.description">{{step.node_snapshot?.description}}</p>
+            <div class="section-label"><span>Protocol Steps</span><small>{{protocolInstructions(step).length}} steps</small></div>
             <ol><li *ngFor="let instruction of protocolInstructions(step)">{{instruction}}</li></ol>
           </section>
           <section *ngIf="step.node_snapshot?.leaves?.length" class="protocol-notes">
-            <h4>Protocol notes</h4><article *ngFor="let leaf of step.node_snapshot?.leaves"><h4>{{leaf.title}}</h4><p>{{leaf.content}}</p></article>
+            <h4>Protocol notes</h4><article *ngFor="let leaf of step.node_snapshot?.leaves"><p>{{leaf.content}}</p></article>
           </section>
         </article>
           </div>
@@ -89,7 +89,7 @@
       </div>
     </div>
   </section>
-</div>
+</main>
 
 <div *ngIf="sharingExperiment" class="modal-backdrop">
   <section class="completion-modal" role="dialog" aria-modal="true" aria-label="Share experiment">

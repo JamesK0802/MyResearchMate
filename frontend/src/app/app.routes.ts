@@ -75,6 +75,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent),
     canActivate: [authGuard]
   },
+  {
+    path: 'data/experiment-logs/:experimentId',
+    loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent),
+    canActivate: [authGuard]
+  },
   { path: 'labs/register', loadComponent: () => import('./pages/lab-registration-page/lab-registration-page.component').then(m => m.LabRegistrationPageComponent), canActivate: [authGuard] },
   { path: 'labs/find', loadComponent: () => import('./pages/find-lab/find-lab.component').then(m => m.FindLabComponent), canActivate: [authGuard] },
   { path: 'labs/my', loadComponent: () => import('./pages/my-labs/my-labs.component').then(m => m.MyLabsComponent), canActivate: [authGuard] },
