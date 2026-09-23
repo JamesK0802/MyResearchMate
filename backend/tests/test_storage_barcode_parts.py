@@ -31,6 +31,18 @@ class BarcodePartsTest(unittest.TestCase):
                 'start':1, 'end':1, 'prefix':'Layer '}), 'Layer 2')
         self.assertEqual(evaluate('AD', {'type':'digits_after','value':'AD','prefix':'Cabinet '}), '')
 
+    def test_replacement_template_uses_selected_characters(self):
+        source = Path(__file__).parents[1] / 'routers' / 'lab_archive.py'
+        tree = ast.parse(source.read_text())
+        functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                     and node.name == '_storage_part']
+        namespace = {'re': re}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(source), 'exec'), namespace)
+        evaluate = namespace['_storage_part']
+        part = {'type':'characters_from_end', 'start':1, 'end':2, 'template':'0{1}{2}'}
+        self.assertEqual(evaluate('ADS72', part), '072')
+        self.assertEqual(evaluate('ADSXX', part), '0XX')
+
     def test_overlapping_rules_must_return_the_same_location(self):
         source = Path(__file__).parents[1] / 'routers' / 'lab_archive.py'
         tree = ast.parse(source.read_text())

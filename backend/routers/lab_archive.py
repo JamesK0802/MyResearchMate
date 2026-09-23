@@ -141,10 +141,19 @@ def _storage_part(barcode: str, part: dict) -> str:
     result = result[max(0, int(part.get("trimStart", 0) or 0)):max(0, len(result)-max(0, int(part.get("trimEnd", 0) or 0)))].strip()
     if not result:
         return ""
-    for mapping in part.get("mappings", []) or []:
-        if str(mapping.get("from", "")).lower() == result.lower():
-            result = str(mapping.get("to", ""))
-            break
+    template = part.get("template")
+    if template is not None:
+        selected = result
+        result = re.sub(
+            r"\{(\d+)\}",
+            lambda match: selected[int(match.group(1)) - 1] if 0 < int(match.group(1)) <= len(selected) else "",
+            str(template),
+        )
+    else:
+        for mapping in part.get("mappings", []) or []:
+            if str(mapping.get("from", "")).lower() == result.lower():
+                result = str(mapping.get("to", ""))
+                break
     transform = part.get("transform", "as_is")
     if transform == "uppercase":
         result = result.upper()
@@ -264,6 +273,7 @@ class StorageRulePart(BaseModel):
     trimEnd: int = Field(default=0, ge=0)
     prefix: str = ""
     suffix: str = ""
+    template: Optional[str] = None
     mappings: List[dict] = Field(default_factory=list)
 
 class StorageLocationRule(BaseModel):
