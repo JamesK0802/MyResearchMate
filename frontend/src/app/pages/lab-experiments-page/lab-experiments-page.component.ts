@@ -14,6 +14,7 @@ import { LabService } from '../../services/lab.service';
 import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/experiment-route';
 import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
 import { ActivatedRoute, Router } from '@angular/router';
+import { OverflowTooltipDirective } from '../../components/overflow-tooltip.directive';
 
 type ExperimentTab = 'current' | 'completed';
 type StepStatus = 'pending' | 'active' | 'completed' | 'skipped';
@@ -40,7 +41,7 @@ interface ExperimentStep {
 @Component({
   selector: 'app-lab-experiments-page',
   standalone: true,
-  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
+  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, OverflowTooltipDirective],
   templateUrl: './lab-experiments-page.component.html',
   styleUrl: './lab-experiments-page.component.css'
 })

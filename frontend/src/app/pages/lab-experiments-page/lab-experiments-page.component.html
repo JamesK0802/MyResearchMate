@@ -28,7 +28,7 @@
       (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">
       <div card-content>
         <div class="experiment-summary">
-          <div *ngIf="activeTab === 'current' && nextStep(exp) as next" class="next-stage"><span>Current stage</span><strong>{{next.title}}</strong></div>
+          <div *ngIf="activeTab === 'current' && nextStep(exp) as next" class="next-stage"><span>Current stage</span><strong [appOverflowTooltip]="next.title">{{next.title}}</strong></div>
           <details class="card-details">
             <summary>Details</summary>
             <p><span>Protocol</span><strong>{{exp.protocol_root_name || exp.protocol_title || 'Not recorded'}}</strong></p>
@@ -47,7 +47,7 @@
   <button type="button" class="back-to-list" (click)="closeExperiment()">← Experiment Logs</button>
   <section class="detail-panel" aria-label="Experiment log details">
     <header class="detail-header">
-      <h2>{{selectedExperiment.title}}</h2>
+      <h2 [appOverflowTooltip]="selectedExperiment.title">{{selectedExperiment.title}}</h2>
       <button *ngIf="activeTab === 'current'" class="primary-action complete-action" (click)="openCompletion(selectedExperiment)">Complete</button>
     </header>
     <div class="detail-body">
@@ -59,13 +59,13 @@
         <aside class="stage-sidebar" aria-label="Experiment stages">
           <strong>Experiment stages</strong>
           <button *ngFor="let step of routeSteps(selectedExperiment); let index=index" [class.active]="nodeIndex === index" (click)="goToNode(index)">
-            <span class="stage-number">{{index + 1}}</span><span><small>{{step.status}}</small><b>{{step.title}}</b></span>
+            <span class="stage-number">{{index + 1}}</span><span><small>{{step.status}}</small><b [appOverflowTooltip]="step.title">{{step.title}}</b></span>
           </button>
         </aside>
         <main class="stage-main">
           <nav class="node-navigation" aria-label="Protocol node pages">
             <button (click)="turnNode(-1)" [disabled]="nodeIndex === 0" aria-label="Previous node">‹</button>
-            <span><small>STAGE {{nodeIndex + 1}} OF {{routeSteps(selectedExperiment).length}}</small><strong>{{routeSteps(selectedExperiment)[nodeIndex]?.title}}</strong></span>
+            <span><small>STAGE {{nodeIndex + 1}} OF {{routeSteps(selectedExperiment).length}}</small><strong [appOverflowTooltip]="routeSteps(selectedExperiment)[nodeIndex]?.title || ''">{{routeSteps(selectedExperiment)[nodeIndex]?.title}}</strong></span>
             <button (click)="turnNode(1)" [disabled]="nodeIndex >= routeSteps(selectedExperiment).length-1" aria-label="Next node">›</button>
           </nav>
           <div #nodePages class="node-pages" (scroll)="onNodeScroll()">

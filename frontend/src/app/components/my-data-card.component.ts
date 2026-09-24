@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { OverflowTooltipDirective } from './overflow-tooltip.directive';
 
 export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'active' | 'completed'; }
 
 @Component({
   selector: 'app-my-data-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, OverflowTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <article class="data-card" [class.shared-card]="shared" [class.muted-card]="muted">
@@ -14,11 +15,11 @@ export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'a
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Zm3 11h2v7l-1-1-1 1v-7Z"></path></svg>
       </button>
       <div class="heading" [class.has-pin]="showPin">
-        <h2>{{ title || 'Untitled' }}</h2>
+        <h2 [appOverflowTooltip]="title || 'Untitled'">{{ title || 'Untitled' }}</h2>
         <div class="badges" *ngIf="badges.length"><span *ngFor="let badge of badges" [class]="'badge ' + (badge.tone || 'owner')">{{ badge.label }}</span></div>
         <span *ngIf="syncLabel" class="sync" [class.error]="syncError">{{ syncLabel }}</span>
       </div>
-      <p *ngIf="description" class="description">{{ description }}</p>
+      <p *ngIf="description" class="description" [appOverflowTooltip]="description">{{ description }}</p>
       <div *ngIf="meta.length" class="meta"><span *ngFor="let item of meta">{{ item }}</span></div>
       <div class="content"><ng-content select="[card-content]"></ng-content></div>
       <div class="actions">

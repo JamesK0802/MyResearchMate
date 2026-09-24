@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppStateService } from '../../services/app-state.service';
 
 @Component({
@@ -8,7 +8,7 @@ import { AppStateService } from '../../services/app-state.service';
   standalone: true,
   imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
-    <div class="crispr-shell">
+    <div class="crispr-shell" [class.my-data-route]="isMyDataRoute">
       <div class="sub-nav">
         <div class="sub-nav-inner">
           <a routerLink="analysis" routerLinkActive="active" class="sub-tab">
@@ -60,7 +60,7 @@ import { AppStateService } from '../../services/app-state.service';
       background: #fff; border-bottom: 1px solid #e5e7eb;
       padding: 0 28px;
     }
-    .sub-nav-inner { display: flex; gap: 6px; max-width: 1100px; margin: 0 auto; }
+    .sub-nav-inner { display: flex; gap: 6px; max-width: var(--page-max-width); margin: 0 auto; }
     .sub-tab {
       display: flex; align-items: center; gap: 10px;
       padding: 12px 16px; text-decoration: none; color: #64748b;
@@ -78,6 +78,7 @@ import { AppStateService } from '../../services/app-state.service';
       flex: 1; padding: 24px 28px; background: #f7f8fa;
       max-width: 1100px; width: 100%; margin: 0 auto;
     }
+    .crispr-shell.my-data-route .crispr-body { max-width:none; padding:0; }
 
     @media (max-width: 760px) {
       .sub-nav { display: none; }
@@ -86,7 +87,9 @@ import { AppStateService } from '../../services/app-state.service';
   `]
 })
 export class CrisprLayoutComponent {
-  constructor(public state: AppStateService) {}
+  constructor(public state: AppStateService, private router: Router) {}
+
+  get isMyDataRoute(): boolean { return this.router.url.startsWith('/crispr/my-data'); }
 
   blockWhileAnalyzing(event: MouseEvent): void {
     if (!this.state.isAnalysisRunning) return;

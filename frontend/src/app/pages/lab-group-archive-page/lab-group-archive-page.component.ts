@@ -12,11 +12,12 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { OperationProgressService } from '../../services/operation-progress.service';
 import { calculateStorageLocation, makeStoragePart, storagePartValue, StorageRulePart, StorageLocationRule, StoragePartType } from '../../utils/storage-location-rules';
+import { OverflowTooltipDirective } from '../../components/overflow-tooltip.directive';
 
 @Component({
   selector: 'app-lab-group-archive-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, StorageUsageComponent, LocationRuleDesignerComponent],
+  imports: [CommonModule, FormsModule, StorageUsageComponent, LocationRuleDesignerComponent, OverflowTooltipDirective],
   templateUrl: './lab-group-archive-page.component.html',
   styleUrl: './lab-group-archive-page.component.css'
 })

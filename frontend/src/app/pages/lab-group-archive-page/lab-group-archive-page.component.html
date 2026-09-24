@@ -32,11 +32,11 @@
       <div class="record-row-main">
         <div class="record-info">
           <div class="record-card-header">
-            <span class="record-title" [title]="record.title">{{ record.title }}</span>
+            <span class="record-title" [appOverflowTooltip]="record.title">{{ record.title }}</span>
             <span class="record-date">{{ record.created_by }} · {{ record.created_at | date:'mediumDate' }}</span>
           </div>
 
-          <p class="record-desc-preview" *ngIf="record.description" [title]="record.description">{{ record.description }}</p>
+          <p class="record-desc-preview" *ngIf="record.description" [appOverflowTooltip]="record.description">{{ record.description }}</p>
           
           <!-- Clickable Hyperlinks -->
           <div class="record-card-links" *ngIf="record.links?.length" (click)="$event.stopPropagation()">
@@ -49,7 +49,7 @@
           <div class="record-card-files" *ngIf="record.files?.length" (click)="$event.stopPropagation()">
             <span class="card-file-label">Files: </span>
             <a *ngFor="let file of (record.files || []).slice(0, 1)" [href]="getDownloadUrl(file.path)" [attr.download]="file.filename" (click)="downloadFile(file.path, file.filename, $event)" class="card-file-item card-file-link">
-              <span class="file-icon-text">📄</span> <span class="file-name-text" [title]="file.filename">{{ getDisplayText(file.filename, 44) }}</span>
+              <span class="file-icon-text">📄</span> <span class="file-name-text" [appOverflowTooltip]="file.filename">{{ file.filename }}</span>
             </a>
             <span class="card-more-chip" *ngIf="(record.files?.length || 0) > 1">+{{ (record.files?.length || 0) - 1 }} more</span>
           </div>
@@ -439,6 +439,7 @@
             <span *ngIf="editingItem !== file" 
                   class="file-name" 
                   [class.dir-name]="file.is_dir"
+                  [appOverflowTooltip]="file.name"
                   (click)="file.is_dir ? navigateFolder(file, $event) : null"
                   [style.cursor]="file.is_dir ? 'pointer' : 'default'">
               {{ file.name }}
