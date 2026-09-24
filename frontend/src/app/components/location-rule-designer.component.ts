@@ -105,13 +105,13 @@ export class LocationRuleDesignerComponent {
     this.selected=rule;this.rulesChange.emit([...this.rules,rule]);this.exampleChange.emit(this.example);
   }
   legacy(part: StorageRulePart) { return !['text','characters','characters_from_end','barcode'].includes(part.type); }
-  partKind(part:StorageRulePart) { return part.type==='text'?'insert':this.legacy(part)?'legacy':part.template !== undefined || part.mappings?.length?'replace':'keep'; }
+  partKind(part:StorageRulePart) { return part.type==='text'?'insert':this.legacy(part)?'legacy':typeof part.template === 'string' || part.mappings?.length?'replace':'keep'; }
   source(part:StorageRulePart) { return part.type==='barcode'?'barcode':part.type==='characters_from_end'?'end':'start'; }
   setSource(part:StorageRulePart,source:'barcode'|'start'|'end') { part.type=source==='barcode'?'barcode':source==='end'?'characters_from_end':'characters'; if(source==='barcode'){part.start=1;part.end=1;} }
   changePartKind(part:StorageRulePart,kind:'insert'|'replace'|'keep'|'legacy') { if(kind==='legacy') return; if(kind==='insert'){part.type='text';part.value='';part.template=undefined;part.mappings=[];} else {if(part.type==='text'||this.legacy(part)) part.type='characters';part.value='';part.template=kind==='replace'?'{1}':undefined;part.mappings=[];} }
   describe(part: StorageRulePart): string {
     let text = part.type === 'text' ? `Add “${part.value || 'your text'}”` : part.type === 'barcode' ? 'Use the whole barcode' : this.legacy(part) ? (part.label || 'Saved extraction') : `From the ${part.type === 'characters' ? 'start' : 'end'}, skip ${part.start-1} and take ${part.end-part.start+1}`;
-    if (part.template !== undefined) text += `: ${part.template}`;
+    if (typeof part.template === 'string') text += `: ${part.template}`;
     else if (part.mappings?.length) text += ': ' + part.mappings.map(m=>`“${m.from}” → “${m.to}”`).join(', ');
     if (part.prefix) text += `; add “${part.prefix}” before`;
     if (part.suffix) text += `; add “${part.suffix}” after`;

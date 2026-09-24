@@ -35,4 +35,9 @@ describe('simple location rule designer', () => {
     rule.parts[0].value='Admin Room';
     expect(editor.exampleLocation('AD317')).toBe('Admin Room');
   });
+  it('shows a server-returned null template as a keep step', () => {
+    const editor=new LocationRuleDesignerComponent();
+    const part={type:'characters',value:'',start:1,end:2,group:1,transform:'as_is',template:null,mappings:[]} as const;
+    expect(editor.partKind(part)).toBe('keep');
+  });
 });

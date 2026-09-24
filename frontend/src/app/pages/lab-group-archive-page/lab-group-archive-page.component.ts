@@ -472,7 +472,10 @@ export class LabGroupArchivePageComponent implements OnInit, OnDestroy {
     this.storageRulesError = '';
     try {
       const saved = await this.archiveService.saveSettings(this.labId, this.storageRules);
-      this.storageRules = saved.storage_location_rules;
+      this.storageRules = (saved.storage_location_rules || []).map(rule => ({
+        ...rule,
+        parts: (rule.parts || []).map((part, index) => ({ ...part, joiner: index === 0 ? '' : (part.joiner ?? rule.separator ?? ' ') }))
+      }));
       this.recalculateStorageLocations();
       await this.triggerAutoSave();
       this.showStorageRulesModal = false;

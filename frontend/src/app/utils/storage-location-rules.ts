@@ -16,7 +16,7 @@ export interface StorageRulePart {
   prefix?: string;
   suffix?: string;
   /** A replacement template: {1} means the first selected barcode character. */
-  template?: string;
+  template?: string | null;
   mappings?: { from:string; to:string }[];
 }
 
@@ -52,6 +52,7 @@ export function storageRuleMatches(barcode: string, rule: StorageLocationRule): 
 }
 
 export function storagePartValue(barcode: string, part: StorageRulePart): string {
+  barcode = barcode || '';
   let value = '';
   if (part.type === 'text') value = part.value || '';
   if (part.type === 'barcode') value = barcode || '';
@@ -77,16 +78,17 @@ export function storagePartValue(barcode: string, part: StorageRulePart): string
   }
   value = value.slice(Math.max(0, part.trimStart || 0), Math.max(0, value.length - Math.max(0, part.trimEnd || 0))).trim();
   if (!value) return '';
-  if (part.template !== undefined) {
+  const template = typeof part.template === 'string' ? part.template : undefined;
+  if (template !== undefined) {
     const selected = value;
-    value = part.template.replace(/\{(\d+)\}/g, (_match, indexText) => selected.charAt(Math.max(0, Number(indexText) - 1)) || '');
+    value = template.replace(/\{(\d+)\}/g, (_match, indexText) => selected.charAt(Math.max(0, Number(indexText) - 1)) || '');
   } else {
-    const mapping = part.mappings?.find(item => item.from.toLowerCase() === value.toLowerCase());
-    if (mapping) value = mapping.to;
+    const mapping = part.mappings?.find(item => String(item?.from ?? '').toLowerCase() === value.toLowerCase());
+    if (mapping) value = String(mapping.to ?? '');
   }
   if (part.transform === 'uppercase') value = value.toUpperCase();
   if (part.transform === 'lowercase') value = value.toLowerCase();
-  return value ? (part.prefix || '') + value + (part.suffix || '') : '';
+  return value ? String(part.prefix || '') + value + String(part.suffix || '') : '';
 }
 
 export function calculateStorageLocation(barcode: string, rules: StorageLocationRule[]): string | null {

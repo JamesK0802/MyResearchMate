@@ -11,6 +11,12 @@ describe('storage location formula', () => {
     expect(storagePartValue('ADSXX', part)).toBe('0XX');
     expect(storagePartValue('ADSAC', part)).toBe('0AC');
   });
+  it('treats a null template returned by the server as no replacement template', () => {
+    const keepPart = { ...makeStoragePart('characters'), start:1, end:2, template:null };
+    const mappedPart = { ...keepPart, mappings:[{from:'AD',to:'Admin room'}] };
+    expect(storagePartValue('AD362',keepPart)).toBe('AD');
+    expect(storagePartValue('AD362',mappedPart)).toBe('Admin room');
+  });
   it('splits variable-length cabinet and layer numbers without changing formats', () => {
     const rule: StorageLocationRule = {
       id:'split', name:'Location', enabled:true, match:{type:'always',value:''}, separator:' / ',
