@@ -3,6 +3,14 @@ import { ChangeDetectorRef, Component, DestroyRef, Input, OnChanges, OnInit, Sim
 import { FormsModule } from '@angular/forms';
 import { DatabaseTableSummary, ServerAdminService, ServerDataEntry, ServerOperationStatus } from '../../services/server-admin.service';
 
+interface DirectoryTreeNode {
+  entry: ServerDataEntry;
+  depth: number;
+  expanded: boolean;
+  loading: boolean;
+  children: DirectoryTreeNode[];
+}
+
 @Component({
   selector: 'app-owner-server-admin',
   standalone: true,
@@ -31,6 +39,9 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   selectedTable = '';
   preview: any = null;
   rootDirectories: ServerDataEntry[] = [];
+  directoryTree: DirectoryTreeNode[] = [];
+  rootExpanded = true;
+  dataTotalSize: number | null = null;
   tableSearch = '';
   showEmptyTables = false;
   showLegacyTables = false;
@@ -58,6 +69,16 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   get cleanupSelectionCount(): number {
     return this.selectedDataRoots.size + this.selectedLegacyTables.size + this.selectedLegacyColumns.size;
   }
+  get visibleDirectoryNodes(): DirectoryTreeNode[] {
+    if (!this.rootExpanded) return [];
+    const visible: DirectoryTreeNode[] = [];
+    const append = (nodes: DirectoryTreeNode[]) => nodes.forEach(node => {
+      visible.push(node);
+      if (node.expanded) append(node.children);
+    });
+    append(this.directoryTree);
+    return visible;
+  }
 
   ngOnInit(): void {
     this.loadCurrentView();
@@ -81,14 +102,21 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
     try {
       const result = await this.server.listData(path);
       this.path = result.path; this.parent = result.parent; this.entries = result.entries;
+      if (!path && result.total_size !== undefined) this.dataTotalSize = result.total_size ?? null;
     } catch (error: any) { this.error = this.message(error, 'Could not read the server data folder.'); }
     finally { this.dataLoading = false; this.refreshedAt = new Date(); this.syncView(); }
   }
 
   async loadRootDirectories(): Promise<void> {
     try {
-      const result = await this.server.listData('');
+      const result = await this.server.listData('', false);
       this.rootDirectories = result.entries.filter(entry => entry.kind === 'directory');
+      this.dataTotalSize = result.total_size ?? this.dataTotalSize;
+      const previous = new Map(this.directoryTree.map(node => [node.entry.path, node]));
+      this.directoryTree = this.rootDirectories.map(entry => {
+        const existing = previous.get(entry.path);
+        return existing ? { ...existing, entry, depth: 0 } : { entry, depth: 0, expanded: false, loading: false, children: [] };
+      });
       this.selectedDataRoots = new Set([...this.selectedDataRoots].filter(name => this.rootDirectories.some(entry => entry.name === name && !entry.managed)));
     } catch (error: any) { this.error = this.message(error, 'Could not load data locations.'); }
     finally { this.syncView(); }
@@ -134,6 +162,35 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   open(entry: ServerDataEntry): void {
     if (entry.kind === 'directory') this.loadData(entry.path);
     else this.server.downloadData(entry).catch(error => this.error = this.message(error, 'Could not download this file.'));
+  }
+
+  async openDirectoryNode(node: DirectoryTreeNode): Promise<void> {
+    await this.loadData(node.entry.path);
+    if (!node.expanded) await this.toggleDirectoryNode(node);
+  }
+
+  async toggleDirectoryNode(node: DirectoryTreeNode): Promise<void> {
+    if (node.loading) return;
+    if (node.expanded) {
+      node.expanded = false;
+      this.syncView();
+      return;
+    }
+    if (!node.children.length && (node.entry.item_count || 0) > 0) {
+      node.loading = true; this.syncView();
+      try {
+        const result = await this.server.listData(node.entry.path);
+        node.children = result.entries
+          .filter(entry => entry.kind === 'directory')
+          .map(entry => ({ entry, depth: node.depth + 1, expanded: false, loading: false, children: [] }));
+      } catch (error: any) {
+        this.error = this.message(error, 'Could not expand this folder.');
+      } finally {
+        node.loading = false;
+      }
+    }
+    node.expanded = true;
+    this.syncView();
   }
 
   crumbs(): { label: string; path: string }[] {

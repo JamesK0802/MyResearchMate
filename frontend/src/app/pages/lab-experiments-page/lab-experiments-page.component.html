@@ -59,7 +59,7 @@
         <aside class="stage-sidebar" aria-label="Experiment stages">
           <strong>Experiment stages</strong>
           <button *ngFor="let step of routeSteps(selectedExperiment); let index=index" [class.active]="nodeIndex === index" (click)="goToNode(index)">
-            <span class="stage-number">{{index + 1}}</span><span><small>{{step.status}}</small><b [appOverflowTooltip]="step.title">{{step.title}}</b></span>
+            <span class="stage-number">{{index + 1}}</span><span><b [appOverflowTooltip]="step.title">{{step.title}}</b></span>
           </button>
         </aside>
         <main class="stage-main">
@@ -70,7 +70,7 @@
           </nav>
           <div #nodePages class="node-pages" (scroll)="onNodeScroll()">
         <article *ngFor="let step of routeSteps(selectedExperiment); let index=index" class="node-page">
-          <div class="stage-title"><span>{{index+1}}</span><div><small>{{step.status}}</small><h3>{{step.title}}</h3></div></div>
+          <div class="stage-title"><span>{{index+1}}</span><div><h3>{{step.title}}</h3></div></div>
           <section class="notes-section">
           <textarea class="stage-notepad" [ngModel]="stageNote(selectedExperiment,step)" (ngModelChange)="updateStageNote(step,$event)" (input)="autoGrow($event)" (focus)="autoGrow($event)" [readonly]="activeTab !== 'current'" aria-label="Experiment notes" placeholder="Notes…"></textarea>
           <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>

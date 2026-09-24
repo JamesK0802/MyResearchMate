@@ -10,7 +10,6 @@ import { LabService } from '../../services/lab.service';
     <div class="my-labs-container">
       <div class="page-header">
         <h1>My Research Labs</h1>
-        <p>Manage the labs you are a member of or lead.</p>
       </div>
 
       <div class="modal-overlay" *ngIf="deleteWarningLab" (click)="deleteWarningLab=null">
@@ -138,10 +137,9 @@ import { LabService } from '../../services/lab.service';
     </div>
   `,
   styles: [`
-    .my-labs-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
+    .my-labs-container { padding: var(--space-10); max-width: var(--page-max-width); margin: 0 auto; }
     .page-header { margin-bottom: var(--space-8); }
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
-    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
     .labs-list { display: flex; flex-direction: column; gap: var(--space-4); }
     .lab-item-row { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); border: 1px solid var(--color-border-light); display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-8); transition: var(--transition-normal); }
@@ -217,7 +215,6 @@ import { LabService } from '../../services/lab.service';
       .my-labs-container { padding: 16px 12px; }
       .page-header { margin-bottom: 14px; }
       .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
-      .page-header p { display: none; }
       .labs-list { gap: 10px; }
       .lab-item-row { padding: 14px; border-radius: 14px; display: block; }
       .lab-header { gap: 7px; margin-bottom: 5px; }

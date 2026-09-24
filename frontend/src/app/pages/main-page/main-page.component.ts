@@ -13,10 +13,6 @@ import { AuthService } from '../../services/auth.service';
       <section class="hero">
         <p class="hero-label">Australian National University · RSB</p>
         <h1>Unified Research <span class="highlight">Platform</span></h1>
-        <p class="hero-sub">
-          A practical workspace for pooled CRISPR sequencing analysis, experiment records,
-          facility booking, and team-based research records.
-        </p>
         <div class="hero-cta">
           <a *ngIf="!auth.isLoggedIn" routerLink="/login" class="cta-fill">Get Started</a>
           <button *ngIf="auth.isLoggedIn" type="button" (click)="goToMyData()" class="cta-fill">My Data</button>

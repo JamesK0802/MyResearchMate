@@ -43,7 +43,6 @@ import { AuthService } from '../../services/auth.service';
         <div class="welcome-card-box">
           <div class="welcome-header">
             <h1 class="welcome-title">Tree Protocol</h1>
-            <p class="welcome-subtitle">Map experiment steps visually, record supporting notes, and save the protocol directly on your device.</p>
           </div>
 
           <div class="welcome-actions-grid">

@@ -11,10 +11,9 @@ import { OwnerServerAdminComponent } from './owner-server-admin.component';
   standalone: true,
   imports: [CommonModule, FormsModule, OwnerServerAdminComponent],
   template: `
-    <div class="admin-container" [class.owner-workspace]="activeAdminTab === 'server-data' || activeAdminTab === 'database'">
+    <div class="admin-container">
       <div class="page-header">
         <h1>Admin Dashboard</h1>
-        <p>Manage lab access, storage, and owner-only server operations.</p>
       </div>
       <div class="tabs"><button [class.active]="activeAdminTab==='labs'" (click)="activeAdminTab='labs'">Lab Approval <span *ngIf="pendingRequests.length" class="request-badge">{{pendingRequests.length}}</span></button><button [class.active]="activeAdminTab==='storage'" (click)="activeAdminTab='storage'">Storage <span *ngIf="pendingStorageRequests.length" class="request-badge">{{pendingStorageRequests.length}}</span></button><button *ngIf="auth.currentProfile?.role === 'owner'" [class.active]="activeAdminTab==='server-data'" (click)="activeAdminTab='server-data'">Server Data</button><button *ngIf="auth.currentProfile?.role === 'owner'" [class.active]="activeAdminTab==='database'" (click)="activeAdminTab='database'">Database</button></div>
       <app-owner-server-admin *ngIf="auth.currentProfile?.role === 'owner' && (activeAdminTab === 'server-data' || activeAdminTab === 'database')" [view]="activeAdminTab === 'database' ? 'database' : 'data'"></app-owner-server-admin>
@@ -109,12 +108,10 @@ import { OwnerServerAdminComponent } from './owner-server-admin.component';
     </div>
   `,
   styles: [`
-    .admin-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
-    .admin-container.owner-workspace { max-width: 1540px; }
+    .admin-container { padding: var(--space-10); max-width: 1540px; margin: 0 auto; }
     .page-header { margin-bottom: var(--space-5); }
     .tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border);margin-bottom:var(--space-7)}.tabs button{padding:10px 16px;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-weight:700;color:var(--color-text-secondary);cursor:pointer}.tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}.request-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:.68rem;font-weight:800;line-height:1;vertical-align:middle}
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); letter-spacing: -0.025em; margin-bottom: var(--space-2); }
-    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
     .requests-list { display: flex; flex-direction: column; gap: var(--space-5); }
     .request-row { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-xs); border: 1px solid var(--color-border-light); display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-6); }
@@ -158,7 +155,6 @@ import { OwnerServerAdminComponent } from './owner-server-admin.component';
       .admin-container { padding: 16px 12px; }
       .page-header { margin-bottom: 10px; }
       .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
-      .page-header p { display: none; }
       .tabs { margin-bottom: 14px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border: 1px solid var(--color-border); border-radius: 10px; padding: 3px; }
       .tabs button { padding: 8px 4px; font-size: .72rem; border-radius: 7px; border-bottom: 0; }
       .tabs button.active { background: var(--color-primary-subtle); }

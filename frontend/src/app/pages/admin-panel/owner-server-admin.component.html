@@ -29,7 +29,7 @@
   <section class="file-explorer">
     <div class="explorer-toolbar">
       <button class="icon-button quiet" (click)="loadData(parent)" [disabled]="!path || dataLoading" aria-label="Go to parent folder">↑</button>
-      <nav class="breadcrumbs" aria-label="Data folder path"><ng-container *ngFor="let crumb of crumbs(); let last = last"><button (click)="loadData(crumb.path)" [class.current]="last">{{ crumb.label }}</button><span *ngIf="!last">/</span></ng-container></nav>
+      <nav class="breadcrumbs" aria-label="Data folder path"><ng-container *ngFor="let crumb of crumbs(); let last = last"><button (click)="loadData(crumb.path)" [class.current]="last">{{ crumb.label }}</button><span *ngIf="!last">/</span></ng-container><small *ngIf="!path && dataTotalSize !== null">{{ formatBytes(dataTotalSize) }}</small></nav>
       <span class="updated" *ngIf="refreshedAt">Updated {{ refreshedAt | date:'mediumTime' }}</span>
       <button class="quiet" (click)="refreshData()" [disabled]="loading">{{ dataLoading ? 'Refreshing…' : 'Refresh' }}</button>
     </div>
@@ -37,8 +37,8 @@
     <div class="explorer-body">
       <aside class="folder-sidebar">
         <div class="sidebar-title">Locations</div>
-        <button (click)="loadData('')" [class.active]="!path"><span>▣</span><strong>data</strong></button>
-        <button *ngFor="let directory of rootDirectories" (click)="loadData(directory.path)" [class.active]="path === directory.path || path.startsWith(directory.path + '/')"><span>▸</span><span class="location-name">{{ directory.name }}</span><small [class.legacy]="!directory.managed">{{ directory.managed ? directory.item_count : 'legacy' }}</small></button>
+        <button (click)="rootExpanded = !rootExpanded; loadData('')" [class.active]="!path"><span>{{ rootExpanded ? '▾' : '▸' }}</span><strong>data</strong><small *ngIf="dataTotalSize !== null">{{ formatBytes(dataTotalSize) }}</small></button>
+        <button *ngFor="let node of visibleDirectoryNodes" (click)="openDirectoryNode(node)" [class.active]="path === node.entry.path" [style.padding-left.px]="11 + node.depth * 16"><span class="tree-toggle" (click)="$event.stopPropagation(); toggleDirectoryNode(node)">{{ node.loading ? '…' : (node.expanded ? '▾' : '▸') }}</span><span class="location-name">{{ node.entry.name }}</span><small [class.legacy]="!node.entry.managed">{{ node.entry.managed ? node.entry.item_count : 'legacy' }}</small></button>
       </aside>
 
       <div class="file-list" [class.is-loading]="dataLoading">

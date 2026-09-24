@@ -29,9 +29,6 @@ import { PlotProjectService } from '../../services/plot-project.service';
         <div class="welcome-card-box">
           <div class="welcome-header">
             <h1 class="welcome-title">R-Plot Studio</h1>
-            <p class="welcome-subtitle">
-              Publication-ready scientific figure builder. Choose how you would like to create your figure.
-            </p>
           </div>
 
           <div class="welcome-actions-grid">

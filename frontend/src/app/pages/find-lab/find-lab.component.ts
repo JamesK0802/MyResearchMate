@@ -11,7 +11,6 @@ import { LabService } from '../../services/lab.service';
     <div class="find-lab-container">
       <div class="page-header">
         <h1>Find Research Labs</h1>
-        <p>Discover and join CRISPR research labs to collaborate on analysis results.</p>
       </div>
 
       <!-- My Requests Status Section -->
@@ -101,7 +100,6 @@ import { LabService } from '../../services/lab.service';
     .find-lab-container { padding: var(--space-10); max-width: var(--page-max-width); margin: 0 auto; }
     .page-header { margin-bottom: var(--space-8); }
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
-    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
     .search-bar-container { display: flex; gap: var(--space-5); margin-bottom: var(--space-8); background: var(--color-surface); padding: var(--space-5); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); border: 1px solid var(--color-border-light); }
     .search-box { flex: 1; position: relative; }
@@ -151,7 +149,6 @@ import { LabService } from '../../services/lab.service';
       .find-lab-container { padding: 16px 12px; }
       .page-header { margin-bottom: 14px; }
       .page-header h1 { font-size: 1.5rem; margin-bottom: 0; }
-      .page-header p { display: none; }
       .search-bar-container { padding: 10px; margin-bottom: 14px; border-radius: 12px; gap: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 116px; }
       .search-box input, .sort-box select { padding-top: 9px; padding-bottom: 9px; font-size: .8rem; }
       .sort-box label { display: none; }

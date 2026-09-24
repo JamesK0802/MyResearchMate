@@ -150,6 +150,26 @@ def _human_entry(path: Path) -> dict[str, Any]:
     }
 
 
+def _directory_size(path: Path) -> int:
+    """Return the size of regular files below ``path`` without following links."""
+    total = 0
+    try:
+        with os.scandir(path) as children:
+            for child in children:
+                try:
+                    if child.is_symlink():
+                        continue
+                    if child.is_dir(follow_symlinks=False):
+                        total += _directory_size(Path(child.path))
+                    elif child.is_file(follow_symlinks=False):
+                        total += child.stat(follow_symlinks=False).st_size
+                except (FileNotFoundError, PermissionError):
+                    continue
+    except (FileNotFoundError, PermissionError):
+        return total
+    return total
+
+
 def _json_value(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -346,7 +366,11 @@ def _replace_data(restored_data: Path) -> None:
 
 
 @router.get("/data")
-def list_data(path: str = Query(default=""), _owner: dict = Depends(require_owner)):
+def list_data(
+    path: str = Query(default=""),
+    include_total_size: bool = Query(default=True),
+    _owner: dict = Depends(require_owner),
+):
     directory = _safe_data_path(path)
     if not directory.exists():
         raise HTTPException(status_code=404, detail="Data path not found")
@@ -362,7 +386,12 @@ def list_data(path: str = Query(default=""), _owner: dict = Depends(require_owne
     entries.sort(key=lambda item: (item["kind"] != "directory", item["name"].lower()))
     relative = "" if directory == DATA_ROOT else directory.relative_to(DATA_ROOT).as_posix()
     parent = "" if not relative or "/" not in relative else relative.rsplit("/", 1)[0]
-    return {"path": relative, "parent": parent, "entries": entries}
+    return {
+        "path": relative,
+        "parent": parent,
+        "entries": entries,
+        "total_size": _directory_size(DATA_ROOT) if directory == DATA_ROOT and include_total_size else None,
+    }
 
 
 @router.get("/data/download")

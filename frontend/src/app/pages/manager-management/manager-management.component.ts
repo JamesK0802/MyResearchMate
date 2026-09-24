@@ -28,7 +28,6 @@ interface DeploymentStatus {
     <div class="manager-container">
       <div class="page-header">
         <h1>Manager & Access Management</h1>
-        <p>Promote users, revoke privileges, or manage private priority booking permissions.</p>
       </div>
 
       <section class="deployment-card" *ngIf="canManageServer">
@@ -135,7 +134,6 @@ interface DeploymentStatus {
     .manager-container { padding: 40px; max-width: 1200px; margin: 0 auto; }
     .page-header { margin-bottom: 40px; }
     .page-header h1 { font-size: 2.5rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
-    .page-header p { color: #64748b; font-size: 1.1rem; }
 
     .deployment-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 28px; margin-bottom: 28px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 18px; }
     .deployment-card h2 { margin: 3px 0 4px; color: #14532d; font-size: 1.2rem; }
@@ -201,7 +199,6 @@ interface DeploymentStatus {
       .manager-container { padding: 18px 12px 28px; overflow-x:hidden; }
       .page-header { margin-bottom:18px; }
       .page-header h1 { margin:0; font-size:1.45rem; }
-      .page-header p { display:none; }
       .deployment-card { align-items:stretch; flex-direction:column; gap:14px; padding:18px; margin-bottom:18px; }
       .deployment-card p { font-size:.82rem; line-height:1.4; }
       .btn-update { width:100%; }

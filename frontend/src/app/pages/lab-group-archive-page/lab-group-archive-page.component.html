@@ -2,7 +2,6 @@
   <header class="page-header">
     <div class="header-content">
       <h1>{{ labName ? labName + ' Archive' : 'Lab Archive' }}</h1>
-      <p>Store records, attach files and links, and collaborate with your lab team.</p>
       <div *ngIf="archiveDeletionAt" class="archive-deletion-notice">⚠ Scheduled for permanent deletion in {{ remainingDays(archiveDeletionAt) }} day(s). This archive is view and download only.</div>
     </div>
     <app-storage-usage *ngIf="labId" scope="lab" [labId]="labId" label="Lab storage"></app-storage-usage>

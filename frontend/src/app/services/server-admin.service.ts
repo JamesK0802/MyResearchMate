@@ -39,8 +39,8 @@ export class ServerAdminService {
     return new HttpHeaders({ Authorization: `Bearer ${session?.access_token || ''}` });
   }
 
-  async listData(path = ''): Promise<{ path: string; parent: string; entries: ServerDataEntry[] }> {
-    return firstValueFrom(this.http.get<any>(`${this.apiUrl}/data?path=${encodeURIComponent(path)}`, { headers: await this.headers() }));
+  async listData(path = '', includeTotalSize = true): Promise<{ path: string; parent: string; entries: ServerDataEntry[]; total_size?: number | null }> {
+    return firstValueFrom(this.http.get<any>(`${this.apiUrl}/data?path=${encodeURIComponent(path)}&include_total_size=${includeTotalSize}`, { headers: await this.headers() }));
   }
 
   async listTables(): Promise<DatabaseTableSummary[]> {

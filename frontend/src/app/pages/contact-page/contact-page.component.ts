@@ -17,7 +17,6 @@ import { environment } from '../../../environments/environment';
             <header class="card-header">
               <span class="m-badge">RESEARCH SUPPORT</span>
               <h1>How can I help?</h1>
-              <p>Direct assistance for technical issues, research collaboration, and system inquiries within the ANU RSB platform.</p>
             </header>
 
             <div class="support-categories">
@@ -49,12 +48,6 @@ import { environment } from '../../../environments/environment';
               <h3>James Kim</h3>
               <a href="mailto:James.Kim@anu.edu.au" class="email-link">James.Kim@anu.edu.au</a>
               <p class="role-desc">Lead Developer & Platform Architect</p>
-            </div>
-
-            <div class="info-block">
-              <span class="label">OFFICE LOCATION</span>
-              <h3>Robertson Building (Bldg 46)</h3>
-              <p>Australian National University<br>Acton ACT 2601, Australia</p>
             </div>
 
             <div class="footer-meta">
@@ -94,7 +87,7 @@ import { environment } from '../../../environments/environment';
     .card-left { padding: 80px 60px; }
     .m-badge { font-size: 0.7rem; font-weight: 800; color: #3b82f6; letter-spacing: 0.15em; display: block; margin-bottom: 20px; }
     .card-header h1 { font-size: 2.5rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 12px; }
-    .card-header p { font-size: 1rem; color: #64748b; line-height: 1.6; margin-bottom: 48px; }
+    .card-header { margin-bottom: 48px; }
 
     .support-categories { display: flex; flex-direction: column; gap: 24px; margin-bottom: 60px; }
     .cat-item { display: flex; gap: 16px; align-items: flex-start; }

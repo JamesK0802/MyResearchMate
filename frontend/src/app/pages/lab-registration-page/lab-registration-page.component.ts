@@ -12,7 +12,6 @@ import { AuthService } from '../../services/auth.service';
     <div class="lab-reg-container">
       <div class="page-header">
         <h1>Lab Workspace Registration</h1>
-        <p>Request a dedicated workspace for your research team to share CRISPR results.</p>
       </div>
 
       <div class="reg-layout">
@@ -121,10 +120,9 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `,
   styles: [`
-    .lab-reg-container { padding: var(--space-10); max-width: 1000px; margin: 0 auto; }
+    .lab-reg-container { padding: var(--space-10); max-width: var(--page-max-width); margin: 0 auto; }
     .page-header { margin-bottom: var(--space-10); }
     .page-header h1 { font-size: var(--text-3xl); font-weight: var(--fw-black); color: var(--color-text-primary); margin-bottom: var(--space-2); letter-spacing: -0.025em; }
-    .page-header p { color: var(--color-text-secondary); font-size: var(--text-lg); margin: 0; }
 
     .reg-layout { display: grid; grid-template-columns: 1fr 340px; gap: var(--space-10); align-items: flex-start; }
     
@@ -190,7 +188,6 @@ import { AuthService } from '../../services/auth.service';
       .lab-reg-container { padding: 28px 20px; }
       .page-header { margin-bottom: var(--space-8); }
       .page-header h1 { font-size: 2.35rem; line-height: 1.08; }
-      .page-header p { font-size: 1rem; line-height: 1.55; }
 
       .reg-layout {
         grid-template-columns: 1fr;
