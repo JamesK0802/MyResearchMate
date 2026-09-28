@@ -21,9 +21,9 @@
           <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onOpenFilesSelected($event)" style="display: none;" />
         </label>
 
-        <!-- Merge / Append -->
-        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add / Merge PDF, Word (.docx), or Images into current document">
-          <span>＋ Merge</span>
+        <!-- Add files to the current document -->
+        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add PDF, Word (.docx), or images to the current document">
+          <span>＋ Add File</span>
           <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
         </label>
 
@@ -106,11 +106,15 @@
 
           <div class="thumb-top">
             <span class="thumb-page-num">{{ p.displayNumber }}</span>
-            <span class="thumb-source-tag" *ngIf="p.sourceType && p.sourceType !== 'pdf'">{{ p.sourceType }}</span>
+            <span class="thumb-source-tag" *ngIf="p.sourceType && p.sourceType !== 'pdf' && p.sourceType !== 'blank'">{{ p.sourceType }}</span>
             <div class="thumb-actions">
               <button type="button" class="thumb-action-btn" (click)="$event.stopPropagation(); rotatePage(i, 90)" title="Rotate 90°">↻</button>
-              <button type="button" class="thumb-action-btn" (click)="$event.stopPropagation(); duplicatePage(i)" title="Duplicate">⧉</button>
-              <button type="button" class="thumb-action-btn thumb-delete" (click)="$event.stopPropagation(); deletePage(i)" title="Delete">✕</button>
+              <button type="button" class="thumb-action-btn" (click)="$event.stopPropagation(); duplicatePage(i)" title="Duplicate page" aria-label="Duplicate page">
+                <svg viewBox="0 0 24 24" class="page-action-icon"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+              </button>
+              <button type="button" class="thumb-action-btn thumb-delete" (click)="$event.stopPropagation(); deletePage(i)" title="Delete page" aria-label="Delete page">
+                <svg viewBox="0 0 24 24" class="page-action-icon"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>
+              </button>
             </div>
           </div>
 
@@ -138,7 +142,7 @@
           </div>
           <div class="organize-actions">
             <label class="app-btn app-btn-secondary app-btn-xs upload-btn">
-              <span>＋ Merge File</span>
+              <span>＋ Add File</span>
               <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
             </label>
             <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="addBlankPage()">
@@ -165,8 +169,12 @@
                 <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="movePageUp(i)" [disabled]="i === 0" title="Move Left">◀</button>
                 <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="movePageDown(i)" [disabled]="i === pages.length - 1" title="Move Right">▶</button>
                 <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="rotatePage(i, 90)" title="Rotate 90° Clockwise">↻</button>
-                <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="duplicatePage(i)" title="Duplicate Page">⧉</button>
-                <button type="button" class="app-btn app-btn-ghost app-btn-xs btn-delete-danger" (click)="deletePage(i)" title="Delete Page">🗑</button>
+                <button type="button" class="page-icon-btn" (click)="duplicatePage(i)" title="Duplicate page" aria-label="Duplicate page">
+                  <svg viewBox="0 0 24 24" class="page-action-icon"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+                </button>
+                <button type="button" class="page-icon-btn danger" (click)="deletePage(i)" title="Delete page" aria-label="Delete page">
+                  <svg viewBox="0 0 24 24" class="page-action-icon"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>
+                </button>
               </div>
             </div>
 
@@ -175,7 +183,7 @@
             </div>
 
             <div class="grid-card-footer">
-              <span class="grid-card-size">{{ p.sourceType || 'pdf' | uppercase }}</span>
+              <span class="grid-card-size" *ngIf="p.sourceType !== 'blank'">{{ p.sourceType || 'pdf' | uppercase }}</span>
               <button type="button" class="app-btn app-btn-primary app-btn-xs" (click)="openEditModeForPage(i)">
                 ✏ Edit Page
               </button>
@@ -205,26 +213,24 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
               <span>Text</span>
             </button>
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'pen'" (click)="setTool('pen')" title="Freehand Pen (P)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
-              <span>Draw</span>
-            </button>
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'highlight'" (click)="setTool('highlight')" title="Highlighter (H)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="m9 11-6 6v3h3l6-6"></path><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path></svg>
-              <span>Highlight</span>
-            </button>
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'rect'" (click)="setTool('rect')" title="Rectangle Box (R)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-              <span>Rect</span>
-            </button>
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'circle'" (click)="setTool('circle')" title="Circle / Ellipse (C)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><circle cx="12" cy="12" r="10"></circle></svg>
-              <span>Circle</span>
-            </button>
-            <button type="button" class="tool-btn" [class.active]="activeTool === 'arrow'" (click)="setTool('arrow')" title="Arrow Line (A)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-              <span>Arrow</span>
-            </button>
+            <label class="tool-select-wrap" [class.active]="drawToolValue">
+              <span class="tool-select-icon">✎</span>
+              <select [ngModel]="drawToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Drawing tools">
+                <option value="" disabled>Draw</option><option value="pen">Pen</option><option value="highlight">Highlight</option><option value="eraser">Eraser</option>
+              </select>
+            </label>
+            <label class="tool-select-wrap" [class.active]="shapeToolValue">
+              <span class="tool-select-icon">○</span>
+              <select [ngModel]="shapeToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Shape tools">
+                <option value="" disabled>Shapes</option><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option>
+              </select>
+            </label>
+            <label class="tool-select-wrap" [class.active]="lineToolValue">
+              <span class="tool-select-icon">╱</span>
+              <select [ngModel]="lineToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Line tools; hold Shift to snap angles">
+                <option value="" disabled>Lines</option><option value="line">Line</option><option value="arrow">Arrow</option>
+              </select>
+            </label>
             <button type="button" class="tool-btn tool-whiteout" [class.active]="activeTool === 'whiteout'" (click)="setTool('whiteout')" title="Whiteout Eraser Box">
               <span class="whiteout-icon">⬜</span>
               <span>Whiteout</span>
@@ -284,7 +290,8 @@
             <input *ngIf="selectedAnnotation.type === 'text'"
                    class="app-input text-inline-input"
                    [(ngModel)]="selectedAnnotation.text"
-                   (ngModelChange)="renderAnnotationCanvas()"
+                   (ngModelChange)="onSelectedAnnotationEdited()"
+                   (blur)="commitSelectedAnnotationEdit()"
                    placeholder="Enter text..." />
 
             <div class="element-action-btns">
@@ -366,9 +373,14 @@
           <button *ngIf="auth.isLoggedIn && !auth.isDemo" type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="saveCurrentSignature()">Save signature</button>
         </div>
         <div class="saved-signatures" *ngIf="savedSignatures.length">
-          <button type="button" *ngFor="let signature of savedSignatures" (click)="useSavedSignature(signature)" [class.active]="signaturePreviewUrl === signature.document_json.image_url">
-            <img [src]="signature.document_json.image_url" alt=""><span>{{ signature.title }}</span>
-          </button>
+          <div class="saved-signature-card" *ngFor="let signature of savedSignatures" [class.active]="signaturePreviewUrl === signature.document_json.image_url">
+            <button type="button" class="saved-signature-use" (click)="useSavedSignature(signature)">
+              <img [src]="signature.document_json.image_url" alt=""><span>{{ signature.title }}</span>
+            </button>
+            <button type="button" class="saved-signature-delete" (click)="deleteSavedSignature($event, signature)" title="Delete saved signature" aria-label="Delete saved signature">
+              <svg viewBox="0 0 24 24" class="page-action-icon"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path></svg>
+            </button>
+          </div>
         </div>
         <div class="signature-preview" *ngIf="signaturePreviewUrl"><img [src]="signaturePreviewUrl" alt="Extracted signature preview"></div>
         <div class="signature-canvas-wrap">

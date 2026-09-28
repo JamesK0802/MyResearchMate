@@ -25,9 +25,11 @@ export type ToolType =
   | 'select'
   | 'text'
   | 'pen'
+  | 'eraser'
   | 'highlight'
   | 'rect'
   | 'circle'
+  | 'triangle'
   | 'line'
   | 'arrow'
   | 'whiteout'
@@ -133,6 +135,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   drawStartX: number = 0;
   drawStartY: number = 0;
   previewShape: AnnotationItem | null = null;
+  private eraserChanged = false;
 
   // Interactive Resizing & Dragging State
   isResizing: boolean = false;
@@ -207,6 +210,18 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   get canRedo(): boolean {
     return this.historyIndex < this.history.length - 1;
+  }
+
+  get drawToolValue(): ToolType | '' {
+    return ['pen', 'highlight', 'eraser'].includes(this.activeTool) ? this.activeTool : '';
+  }
+
+  get shapeToolValue(): ToolType | '' {
+    return ['rect', 'circle', 'triangle'].includes(this.activeTool) ? this.activeTool : '';
+  }
+
+  get lineToolValue(): ToolType | '' {
+    return ['line', 'arrow'].includes(this.activeTool) ? this.activeTool : '';
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -957,6 +972,18 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         break;
       }
 
+      case 'triangle': {
+        ctx.strokeStyle = ann.strokeColor || this.strokeColor;
+        ctx.lineWidth = ann.strokeWidth || 2;
+        ctx.beginPath();
+        ctx.moveTo(ann.x + ann.width / 2, ann.y);
+        ctx.lineTo(ann.x + ann.width, ann.y + ann.height);
+        ctx.lineTo(ann.x, ann.y + ann.height);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+      }
+
       case 'circle': {
         ctx.strokeStyle = ann.strokeColor || this.strokeColor;
         ctx.lineWidth = ann.strokeWidth || 2;
@@ -970,6 +997,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         break;
       }
 
+      case 'line':
       case 'arrow': {
         ctx.strokeStyle = ann.strokeColor || this.strokeColor;
         ctx.fillStyle = ann.strokeColor || this.strokeColor;
@@ -978,16 +1006,19 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         const fromY = ann.y;
         const toX = ann.x + ann.width;
         const toY = ann.y + ann.height;
-        this.drawArrow(ctx, fromX, fromY, toX, toY);
+        if (ann.type === 'arrow') this.drawArrow(ctx, fromX, fromY, toX, toY);
+        else {
+          ctx.beginPath();
+          ctx.moveTo(fromX, fromY);
+          ctx.lineTo(toX, toY);
+          ctx.stroke();
+        }
         break;
       }
 
       case 'whiteout': {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(ann.x, ann.y, ann.width, ann.height);
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
         break;
       }
 
@@ -1108,6 +1139,13 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     const x = (event.clientX - rect.left) * scale;
     const y = (event.clientY - rect.top) * scale;
 
+    if (this.activeTool === 'eraser') {
+      this.isDrawing = true;
+      this.eraserChanged = false;
+      this.eraseAnnotationAt(x, y);
+      return;
+    }
+
     if (this.activeTool === 'select') {
       // 1. Check if user tapped a corner handle of the selected annotation
       if (this.selectedAnnotation) {
@@ -1198,6 +1236,11 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     const x = (event.clientX - rect.left) * scale;
     const y = (event.clientY - rect.top) * scale;
 
+    if (this.activeTool === 'eraser' && this.isDrawing) {
+      this.eraseAnnotationAt(x, y);
+      return;
+    }
+
     // 1. Resizing with touch corner handle
     if (this.isResizing && this.selectedAnnotation) {
       const ann = this.selectedAnnotation;
@@ -1256,16 +1299,24 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         strokeOpacity: this.activeTool === 'highlight' ? 0.35 : 1.0
       };
       this.renderAnnotationCanvas();
-    } else if (['rect', 'circle', 'arrow', 'whiteout'].includes(this.activeTool)) {
-      const w = x - this.drawStartX;
-      const h = y - this.drawStartY;
+    } else if (['rect', 'circle', 'triangle', 'line', 'arrow', 'whiteout'].includes(this.activeTool)) {
+      let w = x - this.drawStartX;
+      let h = y - this.drawStartY;
+      if (event.shiftKey && (this.activeTool === 'line' || this.activeTool === 'arrow')) {
+        ({ width: w, height: h } = this.snapLineDelta(w, h));
+      } else if (event.shiftKey && ['rect', 'circle', 'triangle'].includes(this.activeTool)) {
+        const size = Math.max(Math.abs(w), Math.abs(h));
+        w = Math.sign(w || 1) * size;
+        h = Math.sign(h || 1) * size;
+      }
+      const directional = this.activeTool === 'line' || this.activeTool === 'arrow';
       this.previewShape = {
         id: 'preview',
         type: this.activeTool,
-        x: this.activeTool === 'arrow' ? this.drawStartX : Math.min(this.drawStartX, x),
-        y: this.activeTool === 'arrow' ? this.drawStartY : Math.min(this.drawStartY, y),
-        width: this.activeTool === 'arrow' ? w : Math.abs(w),
-        height: this.activeTool === 'arrow' ? h : Math.abs(h),
+        x: directional ? this.drawStartX : Math.min(this.drawStartX, this.drawStartX + w),
+        y: directional ? this.drawStartY : Math.min(this.drawStartY, this.drawStartY + h),
+        width: directional ? w : Math.abs(w),
+        height: directional ? h : Math.abs(h),
         strokeColor: this.strokeColor,
         strokeWidth: this.strokeWidth
       };
@@ -1274,11 +1325,20 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   }
 
   onPointerUpCanvas() {
+    if (this.activeTool === 'eraser' && this.isDrawing) {
+      this.isDrawing = false;
+      if (this.eraserChanged) {
+        this.saveHistory();
+        this.refreshActiveThumbnail();
+      }
+      return;
+    }
     if (this.isResizing || this.isDraggingAnnotation) {
       this.isResizing = false;
       this.resizeHandle = null;
       this.isDraggingAnnotation = false;
       this.saveHistory();
+      this.refreshActiveThumbnail();
       return;
     }
 
@@ -1314,18 +1374,52 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       this.currentPoints = [];
       this.saveHistory();
       this.renderAnnotationCanvas();
+      this.refreshActiveThumbnail();
     }
   }
 
-  private findAnnotationAt(x: number, y: number): AnnotationItem | undefined {
+  private snapLineDelta(width: number, height: number): { width: number; height: number } {
+    const length = Math.hypot(width, height);
+    if (!length) return { width, height };
+    const angle = Math.atan2(height, width);
+    const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    return { width: Math.cos(snapped) * length, height: Math.sin(snapped) * length };
+  }
+
+  private eraseAnnotationAt(x: number, y: number) {
+    if (!this.activePage) return;
+    const hit = this.findAnnotationAt(x, y, 12);
+    if (!hit) return;
+    this.activePage.annotations = this.activePage.annotations.filter(annotation => annotation.id !== hit.id);
+    if (this.selectedAnnotationId === hit.id) this.selectedAnnotationId = null;
+    this.eraserChanged = true;
+    this.renderAnnotationCanvas();
+  }
+
+  private findAnnotationAt(x: number, y: number, tolerance = 6): AnnotationItem | undefined {
     if (!this.activePage) return undefined;
     for (let i = this.activePage.annotations.length - 1; i >= 0; i--) {
       const ann = this.activePage.annotations[i];
-      if (x >= ann.x - 6 && x <= ann.x + ann.width + 6 && y >= ann.y - 6 && y <= ann.y + ann.height + 6) {
+      if ((ann.type === 'pen' || ann.type === 'highlight') && ann.points?.some(point => Math.hypot(point.x - x, point.y - y) <= tolerance + (ann.strokeWidth || 2) / 2)) return ann;
+      if ((ann.type === 'line' || ann.type === 'arrow') && this.pointToSegmentDistance(x, y, ann.x, ann.y, ann.x + ann.width, ann.y + ann.height) <= tolerance + (ann.strokeWidth || 2) / 2) return ann;
+      const left = Math.min(ann.x, ann.x + ann.width);
+      const right = Math.max(ann.x, ann.x + ann.width);
+      const top = Math.min(ann.y, ann.y + ann.height);
+      const bottom = Math.max(ann.y, ann.y + ann.height);
+      if (x >= left - tolerance && x <= right + tolerance && y >= top - tolerance && y <= bottom + tolerance) {
         return ann;
       }
     }
     return undefined;
+  }
+
+  private pointToSegmentDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+    if (!lengthSquared) return Math.hypot(px - x1, py - y1);
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSquared));
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
   }
 
   // Mobile-Friendly Scaling & Font Size Helpers
@@ -1341,6 +1435,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     ann.y = Math.max(0, Math.round(ann.y - (ann.height - oldH) / 2));
     this.saveHistory();
     this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
   }
 
   changeTextFontSize(delta: number) {
@@ -1350,6 +1445,17 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.selectedAnnotation.fontSize = next;
     this.saveHistory();
     this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
+  }
+
+  onSelectedAnnotationEdited() {
+    this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
+  }
+
+  commitSelectedAnnotationEdit() {
+    this.saveHistory();
+    this.refreshActiveThumbnail();
   }
 
   deleteSelectedAnnotation() {
@@ -1358,6 +1464,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.selectedAnnotationId = null;
     this.saveHistory();
     this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
   }
 
   editSelectedText() {
@@ -1369,6 +1476,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     annotation.width = Math.max(annotation.width, (annotation.fontSize || 18) * Math.max(3, next.length) * 0.55);
     this.saveHistory();
     this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1396,6 +1504,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
           this.selectedAnnotationId = newImg.id;
           this.saveHistory();
           this.renderAnnotationCanvas();
+          this.refreshActiveThumbnail();
         }
       };
       reader.readAsDataURL(file);
@@ -1479,6 +1588,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.showSignatureModal = false;
     this.saveHistory();
     this.renderAnnotationCanvas();
+    this.refreshActiveThumbnail();
   }
 
   onSignatureImageSelected(event: Event) {
@@ -1530,6 +1640,39 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     if (!title) return;
     await this.pdfDocuments.saveSignature(title, imageUrl);
     await this.loadSavedSignatures();
+  }
+
+  async deleteSavedSignature(event: Event, signature: SavedSignature) {
+    event.stopPropagation();
+    if (!confirm(`Delete saved signature “${signature.title}”?`)) return;
+    try {
+      await this.pdfDocuments.deleteSignature(signature.id);
+      if (this.signaturePreviewUrl === signature.document_json?.image_url) this.signaturePreviewUrl = '';
+      await this.loadSavedSignatures();
+    } catch (error) {
+      console.error('Failed to delete saved signature', error);
+      alert('Could not delete this signature. Please try again.');
+    }
+  }
+
+  private refreshActiveThumbnail() {
+    const page = this.activePage;
+    const base = this.pageCanvasRef?.nativeElement;
+    const annotations = this.annotationCanvasRef?.nativeElement;
+    if (!page || !base || !annotations || !base.width || !base.height) return;
+    requestAnimationFrame(() => {
+      const thumbnail = document.createElement('canvas');
+      thumbnail.width = 140;
+      thumbnail.height = 198;
+      const ctx = thumbnail.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, thumbnail.width, thumbnail.height);
+      ctx.drawImage(base, 0, 0, thumbnail.width, thumbnail.height);
+      ctx.drawImage(annotations, 0, 0, thumbnail.width, thumbnail.height);
+      page.thumbnailUrl = thumbnail.toDataURL('image/jpeg', 0.88);
+      this.cdr.detectChanges();
+    });
   }
 
   private bytesToBase64(bytes: Uint8Array): string {
