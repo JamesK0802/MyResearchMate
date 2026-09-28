@@ -495,10 +495,14 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   async downloadCurrentSetup() {
     this.state.saveActiveReferenceConfig();
-    await this.downloadReferenceWorkbook(true);
+    const suggested = 'CRISPR_Reference_Config';
+    const requested = prompt('File name for the current configuration', suggested);
+    if (requested === null) return;
+    const fileName = this.safeDownloadFileName(requested, suggested);
+    await this.downloadReferenceWorkbook(true, fileName);
   }
 
-  private async downloadReferenceWorkbook(includeCurrent: boolean) {
+  private async downloadReferenceWorkbook(includeCurrent: boolean, requestedFileName?: string) {
     const workbook = new ExcelJS.Workbook();
     const usedNames = new Set<string>();
     const addSheet = (name: string, genes: any[] = []) => {
@@ -521,7 +525,12 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       }
     }
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), includeCurrent ? 'CRISPR_Reference_Setup.xlsx' : 'CRISPR_Reference_Template.xlsx');
+    saveAs(new Blob([buffer]), includeCurrent ? `${requestedFileName || 'CRISPR_Reference_Config'}.xlsx` : 'CRISPR_Reference_Template.xlsx');
+  }
+
+  private safeDownloadFileName(value: string, fallback: string): string {
+    const withoutExtension = value.trim().replace(/\.xlsx?$/i, '');
+    return (withoutExtension.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || fallback).slice(0, 120);
   }
 
   async onTemplateUpload(event: any) {
@@ -582,6 +591,57 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       alert(`Loaded ${loadedRows} reference target${loadedRows === 1 ? '' : 's'}${customSources.length ? ` with ${customSources.length} file override${customSources.length === 1 ? '' : 's'}` : ''}.${skipped}`);
     } catch (error) {
       console.error('Failed to import reference workbook', error);
+      alert('The Excel file could not be read. Please check the workbook format.');
+    } finally {
+      input.value = '';
+    }
+  }
+
+  async onCurrentFileTemplateUpload(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const activeKey = this.state.activeReferenceKey;
+    const source = this.referenceSources.find(item => item.key === activeKey);
+    if (!file || activeKey === 'default' || !source) {
+      input.value = '';
+      if (file) alert('Select a file tab before applying a file-specific configuration.');
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      let worksheet: ExcelJS.Worksheet | undefined;
+
+      if (workbook.worksheets.length === 1) {
+        worksheet = workbook.worksheets[0];
+      } else {
+        const activeName = this.normalizedBarcode(source.label);
+        worksheet = workbook.worksheets.find(sheet => this.normalizedBarcode(sheet.name) === activeName);
+        if (!worksheet) {
+          worksheet = workbook.worksheets.find(sheet => ['default', 'references', 'reference'].includes(this.normalizedBarcode(sheet.name)));
+        }
+      }
+
+      if (!worksheet) {
+        alert(`No sheet named “${source.label}” or “Default” was found in this workbook.`);
+        return;
+      }
+      const rows = this.worksheetRows(worksheet);
+      if (!rows.length) {
+        alert(`The “${worksheet.name}” sheet does not contain valid reference rows.`);
+        return;
+      }
+
+      this.state.setReferenceConfig(activeKey, this.rowsToGenes(rows));
+      this.state.selectReferenceConfig(activeKey);
+      this.showPerFileReferences = true;
+      this.showAutofill = false;
+      if (this.showWindowCheck) this.recalculateWindowCheck();
+      this.cdr.detectChanges();
+      alert(`Applied ${rows.length} reference target${rows.length === 1 ? '' : 's'} to ${source.label} from “${worksheet.name}”.`);
+    } catch (error) {
+      console.error('Failed to import current-file reference workbook', error);
       alert('The Excel file could not be read. Please check the workbook format.');
     } finally {
       input.value = '';
