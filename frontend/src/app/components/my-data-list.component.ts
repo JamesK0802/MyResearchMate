@@ -92,12 +92,21 @@ export class MyDataListControlsComponent {
 }
 
 @Component({
-  selector:'app-my-data-grid', standalone:true, template:'<ng-content></ng-content>',
+  selector:'app-my-data-grid', standalone:true, imports:[CommonModule],
+  template:`
+    <div *ngIf="viewMode === 'list'" class="list-header" aria-hidden="true">
+      <span>Name</span><span>Details</span><span>Sharing</span><span>Actions</span>
+    </div>
+    <ng-content></ng-content>
+  `,
   host:{'[class.list-view]':"viewMode === 'list'"},
   styles:[`
     :host{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:var(--space-6)}
-    :host.list-view{grid-template-columns:minmax(0,1fr);gap:10px}
+    :host.list-view{display:block;overflow:hidden;border:1px solid var(--color-border-light);border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:var(--shadow-xs)}
+    .list-header{display:grid;grid-template-columns:minmax(220px,1.35fr) minmax(170px,.75fr) minmax(190px,1fr) minmax(220px,auto);gap:16px;padding:8px 14px;border-bottom:1px solid var(--color-border-light);background:var(--color-surface-alt);color:var(--color-text-tertiary);font-size:.66rem;font-weight:850;letter-spacing:.055em;text-transform:uppercase}
     @media(max-width:720px){:host{grid-template-columns:1fr;gap:10px}}
+    @media(max-width:720px){:host.list-view{border-radius:10px}.list-header{grid-template-columns:minmax(0,1fr) minmax(82px,.55fr) auto;gap:8px;padding:7px 10px}.list-header span:nth-child(3){display:none}}
+    @media(max-width:460px){.list-header{grid-template-columns:minmax(0,1fr) auto}.list-header span:nth-child(2){display:none}}
   `]
 })
 export class MyDataGridComponent { @Input() viewMode: MyDataViewMode = 'card'; }

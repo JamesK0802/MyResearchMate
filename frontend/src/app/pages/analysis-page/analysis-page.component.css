@@ -26,7 +26,7 @@
 :host .reference-scope-tab.active { background: #166534; border-color: #166534; color: #fff; box-shadow: 0 2px 5px #1665342b; }
 :host .reference-scope-tab.custom { background: #f5f3ff; border-color: #a78bfa; color: #6d28d9; }
 :host .reference-scope-tab.custom.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
-:host .reference-scope-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 2px 0; color: #64748b; font-size: .73rem; }
+:host .reference-scope-status { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 3px 2px 0; color: #64748b; font-size: .73rem; }
 :host .reference-scope-status button { flex: none; padding: 5px 8px; border: 1px solid #c4b5fd; border-radius: 6px; background: #fff; color: #6d28d9; font-family: inherit; font-size: .7rem; font-weight: 700; line-height: 1; cursor: pointer; }
 :host .reference-empty-hint { margin: 3px 2px 0; color: #64748b; font-size: .74rem; }
 

@@ -229,7 +229,7 @@
               Download Template
             </button>
             <button type="button" class="btn-template-download" (click)="downloadCurrentSetup()">
-              Download Current Setup
+              Download Current Config
             </button>
             <button type="button" class="btn-template-upload" (click)="templateFileInput.click()">
               Upload Sequence (Excel)
@@ -248,13 +248,9 @@
               [attr.aria-selected]="state.activeReferenceKey === source.key" [title]="source.label"
               (click)="selectReferenceSource(source.key)">{{source.label}}</button>
           </div>
-          <div class="reference-scope-status">
-            <span *ngIf="state.activeReferenceKey === 'default'">Used by every file without a custom configuration.</span>
-            <span *ngIf="state.activeReferenceKey !== 'default' && !activeReferenceIsCustom">Using Default. Editing any field creates a custom configuration for this file.</span>
-            <span *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom">Custom reference configuration for this file.</span>
+          <div class="reference-scope-status" *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom">
             <button type="button" *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom" (click)="useDefaultForActiveSource()">Use Default</button>
           </div>
-          <p class="reference-empty-hint" *ngIf="referenceSources.length === 0">Upload FASTQ files to create file tabs.</p>
         </div>
 
         <!-- Window Check Panel -->
