@@ -77,7 +77,8 @@ interface ReferenceExcelRow {
   selector: 'app-analysis-page',
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, FormsModule, ResultDashboardComponent],
-  templateUrl: './analysis-page.component.html'
+  templateUrl: './analysis-page.component.html',
+  styleUrl: './analysis-page.component.css'
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
   isSaving = false;
@@ -547,7 +548,9 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         if (!rows.length) continue;
         const normalizedName = this.normalizedBarcode(worksheet.name);
         const isDefault = ['default', 'references', 'reference'].includes(normalizedName);
-        if (isDefault || (workbook.worksheets.length === 1 && !sourceByAlias.has(normalizedName))) {
+        // Legacy workbooks contained a single arbitrarily named sheet. Treat
+        // every one-sheet workbook as the shared Default configuration.
+        if (workbook.worksheets.length === 1 || isDefault) {
           this.state.setReferenceConfig('default', this.rowsToGenes(rows));
           defaultLoaded = true;
           loadedRows += rows.length;
@@ -564,7 +567,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       }
 
       if (!loadedRows) {
-        alert('No valid reference rows were found. Use Default or a sheet named after a barcode.');
+        alert('No valid reference rows were found. Use Default or a sheet named after a file.');
         return;
       }
       if (customSources.length) {
@@ -576,7 +579,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       this.showAutofill = false;
       this.cdr.detectChanges();
       const skipped = unmatchedSheets.length ? ` Skipped unmatched sheets: ${unmatchedSheets.join(', ')}.` : '';
-      alert(`Loaded ${loadedRows} reference target${loadedRows === 1 ? '' : 's'}${customSources.length ? ` with ${customSources.length} barcode override${customSources.length === 1 ? '' : 's'}` : ''}.${skipped}`);
+      alert(`Loaded ${loadedRows} reference target${loadedRows === 1 ? '' : 's'}${customSources.length ? ` with ${customSources.length} file override${customSources.length === 1 ? '' : 's'}` : ''}.${skipped}`);
     } catch (error) {
       console.error('Failed to import reference workbook', error);
       alert('The Excel file could not be read. Please check the workbook format.');
@@ -707,18 +710,9 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       fileCount: inputCount
     };
 
-    const toPayload = (genes: any[]) => genes.map((g: any, gi: number) => ({
-      gene: g.gene_name?.trim() || `G${gi + 1}`,
-      sequence: g.gene_reference,
-      targets: g.geneTargets.map((t: any, ti: number) => ({
-        target_id: t.target_id?.trim() || `T${ti + 1}`,
-        sgrna_seq: t.gRNA,
-        reference_seq: g.gene_reference,
-        window_size: windowSize,
-        window_left: customWindowEnabled ? customWindowLeft : undefined,
-        window_right: customWindowEnabled ? customWindowRight : undefined
-      }))
-    }));
+    const toPayload = (genes: any[]) => this.buildSequenceBasedPayload(
+      genes, windowSize, customWindowEnabled, customWindowLeft, customWindowRight
+    );
     const genesPayload = toPayload(this.state.referenceGenes('default'));
     const genesByInput: Record<string, any[]> = {};
     for (const source of this.referenceSources) {
@@ -754,6 +748,78 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     return this.barcodeName(value).trim().toLowerCase().replace(/[\s._-]+/g, '');
   }
 
+  /**
+   * Reference and target sequences are the identity; labels are presentation.
+   * This prevents duplicate names from collapsing different sequences and
+   * combines aliases (for example YCO/TRY) when they describe one sequence.
+   */
+  private buildSequenceBasedPayload(
+    genes: any[], windowSize: number, customWindowEnabled: boolean,
+    customWindowLeft: number, customWindowRight: number
+  ): any[] {
+    const normalized = (value: unknown) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
+    const referenceGroups = new Map<string, { names: string[]; sequence: string; targets: Map<string, string[]> }>();
+
+    genes.forEach((gene: any, geneIndex: number) => {
+      const sequence = normalized(gene.gene_reference);
+      if (!sequence) return;
+      let group = referenceGroups.get(sequence);
+      if (!group) {
+        group = { names: [], sequence, targets: new Map() };
+        referenceGroups.set(sequence, group);
+      }
+      const geneName = gene.gene_name?.trim() || `G${geneIndex + 1}`;
+      if (!group.names.includes(geneName)) group.names.push(geneName);
+      (gene.geneTargets || []).forEach((target: any, targetIndex: number) => {
+        const targetSequence = normalized(target.gRNA);
+        if (!targetSequence) return;
+        const targetName = target.target_id?.trim() || `T${targetIndex + 1}`;
+        const aliases = group!.targets.get(targetSequence) || [];
+        if (!aliases.includes(targetName)) aliases.push(targetName);
+        group!.targets.set(targetSequence, aliases);
+      });
+    });
+
+    const displayNameCounts = new Map<string, number>();
+    for (const group of referenceGroups.values()) {
+      const name = group.names.join('/');
+      displayNameCounts.set(name, (displayNameCounts.get(name) || 0) + 1);
+    }
+
+    return [...referenceGroups.values()].map((group, geneIndex) => {
+      const displayBase = group.names.join('/') || `G${geneIndex + 1}`;
+      const displayGene = (displayNameCounts.get(displayBase) || 0) > 1
+        ? `${displayBase} [${geneIndex + 1}]`
+        : displayBase;
+      const targetBases = [...group.targets.values()].map(names => names.join('/'));
+      const targetNameCounts = targetBases.reduce((counts, name) => {
+        counts.set(name, (counts.get(name) || 0) + 1);
+        return counts;
+      }, new Map<string, number>());
+      const targetOccurrences = new Map<string, number>();
+
+      return {
+        // Internal key must be unique even when two references share a label.
+        gene: `reference-${geneIndex + 1}`,
+        display_gene: displayGene,
+        sequence: group.sequence,
+        targets: [...group.targets.entries()].map(([sgrnaSeq, names]) => {
+          const base = names.join('/');
+          const occurrence = (targetOccurrences.get(base) || 0) + 1;
+          targetOccurrences.set(base, occurrence);
+          return {
+            target_id: (targetNameCounts.get(base) || 0) > 1 ? `${base} [${occurrence}]` : base,
+            sgrna_seq: sgrnaSeq,
+            reference_seq: group.sequence,
+            window_size: windowSize,
+            window_left: customWindowEnabled ? customWindowLeft : undefined,
+            window_right: customWindowEnabled ? customWindowRight : undefined
+          };
+        })
+      };
+    });
+  }
+
   private safeWorksheetBase(value: string): string {
     return (value.replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Barcode').slice(0, 31);
   }
@@ -786,15 +852,24 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   private rowsToGenes(rows: ReferenceExcelRow[]): any[] {
-    const genes = new Map<string, { gene_name: string; gene_reference: string; geneTargets: any[] }>();
+    const genes = new Map<string, { names: string[]; gene_reference: string; targets: Map<string, string[]> }>();
     for (const row of rows) {
-      if (!genes.has(row.geneName)) genes.set(row.geneName, { gene_name: row.geneName, gene_reference: row.geneSeq, geneTargets: [] });
-      genes.get(row.geneName)!.geneTargets.push({
-        target_id: row.targetName || `T${genes.get(row.geneName)!.geneTargets.length + 1}`,
-        gRNA: row.targetSeq
-      });
+      let gene = genes.get(row.geneSeq);
+      if (!gene) {
+        gene = { names: [], gene_reference: row.geneSeq, targets: new Map() };
+        genes.set(row.geneSeq, gene);
+      }
+      if (!gene.names.includes(row.geneName)) gene.names.push(row.geneName);
+      const targetNames = gene.targets.get(row.targetSeq) || [];
+      const targetName = row.targetName || `T${gene.targets.size + 1}`;
+      if (!targetNames.includes(targetName)) targetNames.push(targetName);
+      gene.targets.set(row.targetSeq, targetNames);
     }
-    return [...genes.values()];
+    return [...genes.values()].map(gene => ({
+      gene_name: gene.names.join('/'),
+      gene_reference: gene.gene_reference,
+      geneTargets: [...gene.targets.entries()].map(([gRNA, names]) => ({ target_id: names.join('/'), gRNA }))
+    }));
   }
 
   private genesToRows(genes: any[]): ReferenceExcelRow[] {

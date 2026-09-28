@@ -28,6 +28,20 @@ import { buildIlluminaPseudoReads, fastqReadsToString, preprocessIlluminaReads }
 
 let cancelled = false;
 
+const normalizedSequence = (value: unknown): string => String(value ?? '').replace(/\s+/g, '').toUpperCase();
+const mergeAliases = (first: string, second: string): string => [...new Set(
+  [...String(first || '').split('/'), ...String(second || '').split('/')].map(value => value.trim()).filter(Boolean)
+)].join('/');
+const geneResultKey = (gene: any): string => {
+  const sequence = normalizedSequence(gene.reference_sequence);
+  const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
+  return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
+};
+const targetResultKey = (target: any): string => {
+  const sequence = normalizedSequence(target.sgrna_seq || target.display_sgrna_seq);
+  return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
+};
+
 // Files below this size already run reliably through the normal in-memory
 // path. Switch only genuinely large inputs to batch processing.
 const LARGE_FASTQ_BYTES = 500 * 1024 * 1024;
@@ -108,21 +122,30 @@ function mergeFileResult(target: FileResult | null, source: FileResult): FileRes
     current.debug[key] = (current.debug[key] || 0) + (incoming.debug?.[key] || 0);
   }
 
-  const genes = new Map<string, any>((current.genes || []).map((gene: any) => [gene.gene, gene]));
+  const genes = new Map<string, any>((current.genes || []).map((gene: any) => [geneResultKey(gene), gene]));
   for (const incomingGene of incoming.genes || []) {
-    const gene = genes.get(incomingGene.gene);
+    const identity = geneResultKey(incomingGene);
+    const gene = genes.get(identity);
     if (!gene) {
       const copy = structuredClone(incomingGene);
       current.genes.push(copy);
-      genes.set(copy.gene, copy);
+      genes.set(identity, copy);
       continue;
     }
+    gene.gene = mergeAliases(gene.gene, incomingGene.gene);
     gene.assigned_read_count += incomingGene.assigned_read_count || 0;
-    const targets = new Map((gene.analysis_result.targets || []).map((item: any) => [item.target_id, item]));
+    const targets = new Map<string, any>((gene.analysis_result.targets || []).map((item: any) => [targetResultKey(item), item]));
     for (const incomingTarget of incomingGene.analysis_result.targets || []) {
-      const existing = targets.get(incomingTarget.target_id);
-      if (existing) mergeTargetResult(existing, incomingTarget);
-      else gene.analysis_result.targets.push(structuredClone(incomingTarget));
+      const targetIdentity = targetResultKey(incomingTarget);
+      const existing = targets.get(targetIdentity);
+      if (existing) {
+        existing.target_id = mergeAliases(existing.target_id, incomingTarget.target_id);
+        mergeTargetResult(existing, incomingTarget);
+      } else {
+        const copy = structuredClone(incomingTarget);
+        gene.analysis_result.targets.push(copy);
+        targets.set(targetIdentity, copy);
+      }
     }
     if (incomingGene.analysis_result.multi_target_summary) {
       const existingSummary = gene.analysis_result.multi_target_summary;
@@ -309,13 +332,17 @@ addEventListener('message', async (event: MessageEvent) => {
       const allConfiguredGenes = [...genesPayload];
       for (const configured of Object.values(genesByInput)) {
         for (const gene of configured) {
-          const existing = allConfiguredGenes.find(item => item.gene === gene.gene);
+          const geneSequence = normalizedSequence(gene.sequence);
+          const existing = allConfiguredGenes.find(item => normalizedSequence(item.sequence) === geneSequence);
           if (!existing) {
             allConfiguredGenes.push(structuredClone(gene));
             continue;
           }
+          existing.display_gene = mergeAliases(existing.display_gene || existing.gene, gene.display_gene || gene.gene);
           for (const target of gene.targets || []) {
-            if (!existing.targets.some(item => item.target_id === target.target_id)) existing.targets.push(structuredClone(target));
+            const matchingTarget = existing.targets.find(item => normalizedSequence(item.sgrna_seq) === normalizedSequence(target.sgrna_seq));
+            if (matchingTarget) matchingTarget.target_id = mergeAliases(matchingTarget.target_id, target.target_id);
+            else existing.targets.push(structuredClone(target));
           }
         }
       }

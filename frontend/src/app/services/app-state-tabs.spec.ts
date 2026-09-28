@@ -84,4 +84,49 @@ describe('analysis tab isolation', () => {
     expect(state.activeMode).toBe('viewer');
     expect(state.analysisSlot).toBe(analysisTab.slot);
   });
+
+  it('merges results by sequences and preserves aliases and same-name different sequences', () => {
+    const state = Object.create(AppStateService.prototype) as AppStateService;
+    const analysisTab = tab('analysis');
+    state.tabs = [analysisTab];
+    state.activeTabId = analysisTab.id;
+    state.analysisSlot = analysisTab.slot;
+    state.activeMode = 'analysis';
+    state.resultsUpdated$ = { next: vi.fn() } as any;
+
+    const target = (targetId: string, sgrna: string, reads: number) => ({
+      target_id: targetId,
+      sgrna_seq: sgrna,
+      summary: { total_reads: reads, matched_reads: reads, aligned_reads: reads },
+      breakdown: { out_of_frame: 0, in_frame: 0, no_indel: reads, substitution: 0, failed: 0 },
+      top_groups: []
+    });
+    const file = (gene: string, reference: string, targetId: string, sgrna: string) => ({
+      multi_reference_result: {
+        ambiguous_read_count: 0,
+        debug: { total_reads_parsed: 1, phred_passed_count: 1, usable_for_assignment_count: 1 },
+        genes: [{
+          gene,
+          reference_sequence: reference,
+          assigned_read_count: 1,
+          ambiguous_excluded: true,
+          analysis_result: { targets: [target(targetId, sgrna, 1)] }
+        }]
+      }
+    });
+
+    state.handleAnalysisComplete({ results: [
+      file('YCO', 'AAAA', 'T1', 'GG'),
+      file('TRY', 'AAAA', 'T2', 'GG'),
+      file('YCO', 'CCCC', 'T1', 'TT')
+    ] });
+
+    expect(state.mergedGenes).toHaveLength(2);
+    expect(state.mergedGenes[0].gene).toBe('YCO/TRY');
+    expect(state.mergedGenes[0].analysis_result.targets).toHaveLength(1);
+    expect(state.mergedGenes[0].analysis_result.targets[0].target_id).toBe('T1/T2');
+    expect(state.mergedGenes[0].assigned_read_count).toBe(2);
+    expect(state.mergedGenes[1].gene).toBe('YCO');
+    expect(state.mergedGenes[1].reference_sequence).toBe('CCCC');
+  });
 });

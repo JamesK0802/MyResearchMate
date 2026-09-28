@@ -57,6 +57,8 @@ describe('Analysis Pipeline End-to-End', () => {
 
     const geneARes = fileResult.multi_reference_result.genes.find(g => g.gene === 'GeneA')!;
     const geneBRes = fileResult.multi_reference_result.genes.find(g => g.gene === 'GeneB')!;
+    expect(geneARes.reference_sequence).toBe(genesPayload[0].sequence);
+    expect(geneBRes.reference_sequence).toBe(genesPayload[1].sequence);
 
     // Gene A has 2 reads assigned
     expect(geneARes.assigned_read_count).toBe(2);

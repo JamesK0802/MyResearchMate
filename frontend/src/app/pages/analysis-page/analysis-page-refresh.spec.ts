@@ -23,4 +23,19 @@ describe('AnalysisPageComponent result rendering', () => {
     resultsUpdated$.next();
     expect(cdr.detectChanges).toHaveBeenCalledOnce();
   });
+
+  it('uses sequences as identity and joins aliases without collapsing different sequences', () => {
+    const component = new AnalysisPageComponent({} as any, {} as any);
+    const payload = (component as any).buildSequenceBasedPayload([
+      { gene_name: 'YCO', gene_reference: 'AAAA', geneTargets: [{ target_id: 'T1', gRNA: 'GG' }] },
+      { gene_name: 'TRY', gene_reference: 'AAAA', geneTargets: [{ target_id: 'T2', gRNA: 'GG' }] },
+      { gene_name: 'YCO', gene_reference: 'CCCC', geneTargets: [{ target_id: 'T1', gRNA: 'TT' }] }
+    ], 90, false, 0, 0);
+
+    expect(payload).toHaveLength(2);
+    expect(payload[0].display_gene).toBe('YCO/TRY');
+    expect(payload[0].targets).toHaveLength(1);
+    expect(payload[0].targets[0].target_id).toBe('T1/T2');
+    expect(payload[1].sequence).toBe('CCCC');
+  });
 });

@@ -213,7 +213,7 @@
               Auto Fill
             </button>
             <button type="button" class="btn-reference-scope" [class.active]="showPerFileReferences" (click)="togglePerFileReferences()">
-              Per Barcode <span *ngIf="customReferenceCount">{{customReferenceCount}}</span>
+              Per File <span *ngIf="customReferenceCount">{{customReferenceCount}}</span>
             </button>
             <button type="button" class="btn-window-check" [class.active]="showWindowCheck" (click)="toggleWindowCheck()">
               Window Check
@@ -223,7 +223,7 @@
         </div>
 
         <div class="autofill-actions-panel" *ngIf="showAutofill">
-          <p class="autofill-hint">Use Default for every barcode, or name a worksheet after a barcode to create an automatic override.</p>
+          <p class="autofill-hint">Use Default for every file, or name a worksheet after a file to create an automatic override.</p>
           <div class="autofill-buttons">
             <button type="button" class="btn-template-download" (click)="downloadTemplate()">
               Download Template
@@ -239,7 +239,7 @@
         </div>
 
         <div class="reference-scope-panel" *ngIf="showPerFileReferences">
-          <div class="reference-scope-tabs" role="tablist" aria-label="Reference configuration by barcode">
+          <div class="reference-scope-tabs" role="tablist" aria-label="Reference configuration by file">
             <button type="button" role="tab" class="reference-scope-tab default-tab"
               [class.active]="state.activeReferenceKey === 'default'" [attr.aria-selected]="state.activeReferenceKey === 'default'"
               (click)="selectReferenceSource('default')">Default</button>
@@ -249,12 +249,12 @@
               (click)="selectReferenceSource(source.key)">{{source.label}}</button>
           </div>
           <div class="reference-scope-status">
-            <span *ngIf="state.activeReferenceKey === 'default'">Used by every barcode without a custom configuration.</span>
-            <span *ngIf="state.activeReferenceKey !== 'default' && !activeReferenceIsCustom">Using Default. Editing any field creates a custom configuration for this barcode.</span>
-            <span *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom">Custom reference configuration for this barcode.</span>
+            <span *ngIf="state.activeReferenceKey === 'default'">Used by every file without a custom configuration.</span>
+            <span *ngIf="state.activeReferenceKey !== 'default' && !activeReferenceIsCustom">Using Default. Editing any field creates a custom configuration for this file.</span>
+            <span *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom">Custom reference configuration for this file.</span>
             <button type="button" *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom" (click)="useDefaultForActiveSource()">Use Default</button>
           </div>
-          <p class="reference-empty-hint" *ngIf="referenceSources.length === 0">Upload FASTQ files to create barcode tabs.</p>
+          <p class="reference-empty-hint" *ngIf="referenceSources.length === 0">Upload FASTQ files to create file tabs.</p>
         </div>
 
         <!-- Window Check Panel -->
