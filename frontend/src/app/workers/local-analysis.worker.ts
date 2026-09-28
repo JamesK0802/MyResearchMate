@@ -155,11 +155,12 @@ addEventListener('message', async (event: MessageEvent) => {
 
   if (type === 'analyze') {
     cancelled = false;
-    const { files, genesPayload, params, illuminaPairs = [] } = payload as {
+    const { files, genesPayload, params, illuminaPairs = [], genesByInput = {} } = payload as {
       files: File[];
       genesPayload: GenePayload[];
       params: AnalysisParams;
       illuminaPairs?: IlluminaFilePair[];
+      genesByInput?: Record<string, GenePayload[]>;
     };
 
     try {
@@ -182,6 +183,7 @@ addEventListener('message', async (event: MessageEvent) => {
           }
 
           const pair = illuminaPairs[i];
+          const inputGenes = genesByInput[pair.id] || genesByInput[pair.name] || genesPayload;
           fileProgress[pair.name] = 5;
           postMessage({
             type: 'progress',
@@ -194,7 +196,7 @@ addEventListener('message', async (event: MessageEvent) => {
           // for every paired sample and was enough for Safari to reload a tab.
           const r1Reads = pair.r1 ? await parseFastqFile(pair.r1) : null;
           const r2Reads = pair.r2 ? await parseFastqFile(pair.r2) : null;
-          const normalized = preprocessIlluminaReads(r1Reads, r2Reads, genesPayload, {
+          const normalized = preprocessIlluminaReads(r1Reads, r2Reads, inputGenes, {
             windowSize: params.windowSize,
             phredThreshold: params.phredThreshold,
             marginThreshold: params.marginThreshold,
@@ -215,7 +217,7 @@ addEventListener('message', async (event: MessageEvent) => {
             fileProgress: { ...fileProgress },
           });
 
-          allResults.push(processFile(pair.name, normalized.reads, genesPayload, params));
+          allResults.push(processFile(pair.name, normalized.reads, inputGenes, params));
           fileProgress[pair.name] = 100;
           postMessage({
             type: 'progress',
@@ -232,6 +234,7 @@ addEventListener('message', async (event: MessageEvent) => {
 
         const file = files[i];
         const fileName = file.name;
+        const inputGenes = genesByInput[fileName] || genesPayload;
 
         // Progress: parsing
         fileProgress[fileName] = 5;
@@ -253,7 +256,7 @@ addEventListener('message', async (event: MessageEvent) => {
           await parseFastqFileInBatches(file, async batch => {
             if (cancelled) throw new Error('Analysis canceled by user.');
             parsedReads += batch.length;
-            merged = mergeFileResult(merged, processFile(fileName, batch, genesPayload, params));
+            merged = mergeFileResult(merged, processFile(fileName, batch, inputGenes, params));
             const batchProgress = Math.min(78, 20 + Math.round((parsedReads / Math.max(1, estimatedBatches * 10000)) * 58));
             fileProgress[fileName] = batchProgress;
             postMessage({
@@ -278,7 +281,7 @@ addEventListener('message', async (event: MessageEvent) => {
             stage: `Analyzing ${reads.length.toLocaleString()} reads from ${fileName} (file ${i + 1}/${totalFiles})…`,
             fileProgress: { ...fileProgress },
           });
-          fileResult = processFile(fileName, reads, genesPayload, params);
+          fileResult = processFile(fileName, reads, inputGenes, params);
         }
 
         // Progress: complete for this file
@@ -303,7 +306,20 @@ addEventListener('message', async (event: MessageEvent) => {
       const inputFilenames = isIllumina
         ? illuminaPairs.flatMap(pair => [pair.r1?.name, pair.r2?.name].filter((name): name is string => Boolean(name)))
         : files.map(f => f.name);
-      const finalPayload = buildFinalPayload(allResults, genesPayload, params, inputFilenames);
+      const allConfiguredGenes = [...genesPayload];
+      for (const configured of Object.values(genesByInput)) {
+        for (const gene of configured) {
+          const existing = allConfiguredGenes.find(item => item.gene === gene.gene);
+          if (!existing) {
+            allConfiguredGenes.push(structuredClone(gene));
+            continue;
+          }
+          for (const target of gene.targets || []) {
+            if (!existing.targets.some(item => item.target_id === target.target_id)) existing.targets.push(structuredClone(target));
+          }
+        }
+      }
+      const finalPayload = buildFinalPayload(allResults, allConfiguredGenes, params, inputFilenames);
 
       postMessage({ type: 'result', payload: finalPayload });
 

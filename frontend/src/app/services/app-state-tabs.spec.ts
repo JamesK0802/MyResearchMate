@@ -1,5 +1,6 @@
 import '@angular/compiler';
 import { describe, expect, it, vi } from 'vitest';
+import { FormBuilder } from '@angular/forms';
 import { AppStateService, AnalysisTab, ResultSlot } from './app-state.service';
 
 function slot(): ResultSlot {
@@ -20,6 +21,30 @@ function tab(id: string): AnalysisTab {
 }
 
 describe('analysis tab isolation', () => {
+  it('inherits the default reference until a barcode configuration is edited', () => {
+    const zone = { run: (callback: () => void) => callback() };
+    const state = new AppStateService(
+      new FormBuilder(), {} as any, {} as any, {} as any, {} as any, {} as any, zone as any
+    );
+    state.setGenesBulk([{ geneName: 'Default gene', geneSeq: 'AACCGG', targetName: 'T1', targetSeq: 'CCGG' }]);
+
+    state.selectReferenceConfig('file:barcode-a');
+    expect(state.activeReferenceInherited).toBe(true);
+    expect(state.hasCustomReferenceConfig('file:barcode-a')).toBe(false);
+    expect(state.geneBlocks.at(0).get('gene_reference')?.value).toBe('AACCGG');
+
+    state.geneBlocks.at(0).get('gene_reference')?.setValue('TTCCGG');
+    expect(state.hasCustomReferenceConfig('file:barcode-a')).toBe(true);
+    state.selectReferenceConfig('default');
+    expect(state.geneBlocks.at(0).get('gene_reference')?.value).toBe('AACCGG');
+    state.selectReferenceConfig('file:barcode-a');
+    expect(state.geneBlocks.at(0).get('gene_reference')?.value).toBe('TTCCGG');
+
+    state.useDefaultReferenceConfig('file:barcode-a');
+    expect(state.hasCustomReferenceConfig('file:barcode-a')).toBe(false);
+    expect(state.geneBlocks.at(0).get('gene_reference')?.value).toBe('AACCGG');
+  });
+
   it('blocks tab creation, switching, and closing while an analysis is running', () => {
     const state = Object.create(AppStateService.prototype) as AppStateService;
     const first = tab('first');

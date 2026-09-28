@@ -59,6 +59,20 @@ export interface PairwiseComparisonData {
   totalLen: number;
 }
 
+interface ReferenceSource {
+  key: string;
+  label: string;
+  workerKey: string;
+  aliases: string[];
+}
+
+interface ReferenceExcelRow {
+  geneName: string;
+  geneSeq: string;
+  targetName: string;
+  targetSeq: string;
+}
+
 @Component({
   selector: 'app-analysis-page',
   standalone: true,
@@ -68,6 +82,7 @@ export interface PairwiseComparisonData {
 export class AnalysisPageComponent implements OnInit, OnDestroy {
   isSaving = false;
   showAutofill = false;
+  showPerFileReferences = false;
   showSimilarWindowSettings = false;
 
   // ── Tab Rename State ──
@@ -138,7 +153,55 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     return displayIlluminaPairName(pair);
   }
 
+  get referenceSources(): ReferenceSource[] {
+    if (this.sequencingPlatform === 'illumina') {
+      return this.state.illuminaPairs
+        .filter(pair => pair.r1 || pair.r2)
+        .map(pair => {
+          const label = this.barcodeName(displayIlluminaPairName(pair));
+          return {
+            key: `pair:${pair.id}`,
+            label,
+            workerKey: pair.id,
+            aliases: [label, pair.name, displayIlluminaPairName(pair), pair.r1?.name || '', pair.r2?.name || '']
+          };
+        });
+    }
+    return this.state.selectedFiles.map(file => ({
+      key: `file:${file.name}:${file.size}:${file.lastModified}`,
+      label: this.barcodeName(file.name),
+      workerKey: file.name,
+      aliases: [file.name, this.barcodeName(file.name)]
+    }));
+  }
+
+  get customReferenceCount(): number {
+    return this.referenceSources.filter(source => this.state.hasCustomReferenceConfig(source.key)).length;
+  }
+
+  get activeReferenceIsCustom(): boolean {
+    return this.state.hasCustomReferenceConfig(this.state.activeReferenceKey);
+  }
+
+  togglePerFileReferences() {
+    this.showPerFileReferences = !this.showPerFileReferences;
+    if (!this.showPerFileReferences && this.state.activeReferenceKey !== 'default') this.state.selectReferenceConfig('default');
+  }
+
+  selectReferenceSource(key: string) {
+    this.state.selectReferenceConfig(key);
+    if (this.showWindowCheck) this.recalculateWindowCheck();
+  }
+
+  useDefaultForActiveSource() {
+    const key = this.state.activeReferenceKey;
+    if (key === 'default') return;
+    this.state.useDefaultReferenceConfig(key);
+    if (this.showWindowCheck) this.recalculateWindowCheck();
+  }
+
   setSequencingPlatform(platform: SequencingPlatform): void {
+    if (this.state.activeReferenceKey !== 'default') this.state.selectReferenceConfig('default');
     this.state.analysisForm.get('sequencingPlatform')?.setValue(platform);
   }
 
@@ -426,47 +489,100 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   async downloadTemplate() {
+    await this.downloadReferenceWorkbook(false);
+  }
+
+  async downloadCurrentSetup() {
+    this.state.saveActiveReferenceConfig();
+    await this.downloadReferenceWorkbook(true);
+  }
+
+  private async downloadReferenceWorkbook(includeCurrent: boolean) {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('References');
-    worksheet.columns = [
+    const usedNames = new Set<string>();
+    const addSheet = (name: string, genes: any[] = []) => {
+      const worksheet = workbook.addWorksheet(this.safeWorksheetName(name, usedNames));
+      worksheet.columns = [
       { header: 'Gene Name', key: 'geneName', width: 20 },
       { header: 'Gene Sequence', key: 'geneSeq', width: 50 },
       { header: 'Target Name', key: 'targetName', width: 20 },
       { header: 'gRNA Sequence', key: 'targetSeq', width: 30 }
-    ];
-    
+      ];
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+      for (const row of this.genesToRows(genes)) worksheet.addRow(row);
+    };
+
+    addSheet('Default', includeCurrent ? this.state.referenceGenes('default') : []);
+    for (const source of this.referenceSources) {
+      if (!includeCurrent || this.state.hasCustomReferenceConfig(source.key)) {
+        addSheet(source.label, includeCurrent ? this.state.referenceGenes(source.key) : []);
+      }
+    }
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), 'CRISPR_Reference_Template.xlsx');
+    saveAs(new Blob([buffer]), includeCurrent ? 'CRISPR_Reference_Setup.xlsx' : 'CRISPR_Reference_Template.xlsx');
   }
 
   async onTemplateUpload(event: any) {
-    const file = event.target.files[0];
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) return;
-    const workbook = new ExcelJS.Workbook();
-    const reader = new FileReader();
-    reader.onload = async (e: any) => {
-      const buffer = e.target.result;
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
-      const worksheet = workbook.getWorksheet(1);
-      const rows: any[] = [];
-      worksheet?.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        const geneName = row.getCell(1).text;
-        const geneSeq = row.getCell(2).text;
-        const targetName = row.getCell(3).text;
-        const targetSeq = row.getCell(4).text;
-        if (geneName && geneSeq && targetSeq) rows.push({ geneName, geneSeq, targetName, targetSeq });
-      });
-      if (rows.length > 0) {
-        this.state.setGenesBulk(rows);
-        this.showAutofill = false;
-        this.cdr.detectChanges();
-        alert(`Successfully loaded ${rows.length} reference targets!`);
-      } else {
-        alert('No valid data found in Excel. Please check the template.');
+      const sourceByAlias = new Map<string, ReferenceSource>();
+      for (const source of this.referenceSources) {
+        for (const alias of [...source.aliases, this.safeWorksheetBase(source.label)]) {
+          if (alias) sourceByAlias.set(this.normalizedBarcode(alias), source);
+        }
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      let loadedRows = 0;
+      let defaultLoaded = false;
+      const customSources: ReferenceSource[] = [];
+      const unmatchedSheets: string[] = [];
+      for (const worksheet of workbook.worksheets) {
+        const rows = this.worksheetRows(worksheet);
+        if (!rows.length) continue;
+        const normalizedName = this.normalizedBarcode(worksheet.name);
+        const isDefault = ['default', 'references', 'reference'].includes(normalizedName);
+        if (isDefault || (workbook.worksheets.length === 1 && !sourceByAlias.has(normalizedName))) {
+          this.state.setReferenceConfig('default', this.rowsToGenes(rows));
+          defaultLoaded = true;
+          loadedRows += rows.length;
+          continue;
+        }
+        const source = sourceByAlias.get(normalizedName);
+        if (!source) {
+          unmatchedSheets.push(worksheet.name);
+          continue;
+        }
+        this.state.setReferenceConfig(source.key, this.rowsToGenes(rows));
+        customSources.push(source);
+        loadedRows += rows.length;
+      }
+
+      if (!loadedRows) {
+        alert('No valid reference rows were found. Use Default or a sheet named after a barcode.');
+        return;
+      }
+      if (customSources.length) {
+        this.showPerFileReferences = true;
+        this.state.selectReferenceConfig(customSources[0].key);
+      } else if (defaultLoaded) {
+        this.state.selectReferenceConfig('default');
+      }
+      this.showAutofill = false;
+      this.cdr.detectChanges();
+      const skipped = unmatchedSheets.length ? ` Skipped unmatched sheets: ${unmatchedSheets.join(', ')}.` : '';
+      alert(`Loaded ${loadedRows} reference target${loadedRows === 1 ? '' : 's'}${customSources.length ? ` with ${customSources.length} barcode override${customSources.length === 1 ? '' : 's'}` : ''}.${skipped}`);
+    } catch (error) {
+      console.error('Failed to import reference workbook', error);
+      alert('The Excel file could not be read. Please check the workbook format.');
+    } finally {
+      input.value = '';
+    }
   }
 
   onFileSelected(event: any) {
@@ -484,7 +600,11 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   onDragOver(event: DragEvent) { event.preventDefault(); this.state.isDragging = true; }
   onDragLeave(event: DragEvent) { event.preventDefault(); this.state.isDragging = false; }
-  removeFile(i: number) { this.state.selectedFiles.splice(i, 1); }
+  removeFile(i: number) {
+    const removed = this.referenceSources[i];
+    this.state.selectedFiles.splice(i, 1);
+    if (removed?.key === this.state.activeReferenceKey) this.state.selectReferenceConfig('default');
+  }
 
   private addSequencingFiles(files: File[]): void {
     const fastqFiles = files.filter(file => /\.(?:fastq|fq)(?:\.gz)?$/i.test(file.name));
@@ -501,6 +621,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     pair[slot] = null;
     if (!pair.r1 && !pair.r2) {
       this.state.illuminaPairs = this.state.illuminaPairs.filter(item => item.id !== pairId);
+      if (`pair:${pairId}` === this.state.activeReferenceKey) this.state.selectReferenceConfig('default');
     } else {
       pair.name = deriveIlluminaPairName(pair);
     }
@@ -538,13 +659,18 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   runAnalysis() {
+    this.state.saveActiveReferenceConfig();
     const rawValue = this.state.analysisForm.value;
-    const formInvalid = this.state.analysisForm.get('genes')?.invalid || this.state.analysisForm.get('interestRegion')?.invalid;
+    const formInvalid = this.state.analysisForm.get('interestRegion')?.invalid;
 
     const platform: SequencingPlatform = rawValue.sequencingPlatform === 'illumina' ? 'illumina' : 'nanopore';
     const inputCount = platform === 'illumina' ? this.illuminaUnitCount : this.state.selectedFiles.length;
-    if (formInvalid || inputCount === 0) {
-      this.state.error = 'Validation failed. Check files and parameters.';
+    const invalidSource = [{ key: 'default', label: 'Default' }, ...this.referenceSources]
+      .find(source => (source.key === 'default' || this.state.hasCustomReferenceConfig(source.key)) && !this.validGenes(this.state.referenceGenes(source.key)));
+    if (formInvalid || inputCount === 0 || invalidSource) {
+      this.state.error = invalidSource
+        ? `Reference configuration for ${invalidSource.label} is incomplete.`
+        : 'Validation failed. Check files and parameters.';
       return;
     }
 
@@ -581,7 +707,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       fileCount: inputCount
     };
 
-    const genesPayload = rawValue.genes.map((g: any, gi: number) => ({
+    const toPayload = (genes: any[]) => genes.map((g: any, gi: number) => ({
       gene: g.gene_name?.trim() || `G${gi + 1}`,
       sequence: g.gene_reference,
       targets: g.geneTargets.map((t: any, ti: number) => ({
@@ -593,6 +719,11 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         window_right: customWindowEnabled ? customWindowRight : undefined
       }))
     }));
+    const genesPayload = toPayload(this.state.referenceGenes('default'));
+    const genesByInput: Record<string, any[]> = {};
+    for (const source of this.referenceSources) {
+      if (this.state.hasCustomReferenceConfig(source.key)) genesByInput[source.workerKey] = toPayload(this.state.referenceGenes(source.key));
+    }
 
     // ── Local Mode: run entirely in browser ──────────────────────────────────
     this.state.runLocalAnalysis(
@@ -610,7 +741,73 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         cutSiteExclusionFlank: exclusionFlank,
         sequencingPlatform: platform,
       },
-      platform === 'illumina' ? this.state.illuminaPairs.map(pair => ({ ...pair })) : []
+      platform === 'illumina' ? this.state.illuminaPairs.map(pair => ({ ...pair })) : [],
+      genesByInput
+    );
+  }
+
+  private barcodeName(filename: string): string {
+    return filename.replace(/\.(?:fastq|fq)(?:\.gz)?$/i, '') || filename;
+  }
+
+  private normalizedBarcode(value: string): string {
+    return this.barcodeName(value).trim().toLowerCase().replace(/[\s._-]+/g, '');
+  }
+
+  private safeWorksheetBase(value: string): string {
+    return (value.replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Barcode').slice(0, 31);
+  }
+
+  private safeWorksheetName(value: string, used: Set<string>): string {
+    const base = this.safeWorksheetBase(value);
+    let name = base;
+    let suffix = 2;
+    while (used.has(name.toLowerCase())) {
+      const tail = ` ${suffix++}`;
+      name = `${base.slice(0, 31 - tail.length)}${tail}`;
+    }
+    used.add(name.toLowerCase());
+    return name;
+  }
+
+  private worksheetRows(worksheet: ExcelJS.Worksheet): ReferenceExcelRow[] {
+    const rows: ReferenceExcelRow[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const item = {
+        geneName: row.getCell(1).text.trim(),
+        geneSeq: row.getCell(2).text.replace(/\s+/g, '').toUpperCase(),
+        targetName: row.getCell(3).text.trim(),
+        targetSeq: row.getCell(4).text.replace(/\s+/g, '').toUpperCase()
+      };
+      if (item.geneName && item.geneSeq && item.targetSeq) rows.push(item);
+    });
+    return rows;
+  }
+
+  private rowsToGenes(rows: ReferenceExcelRow[]): any[] {
+    const genes = new Map<string, { gene_name: string; gene_reference: string; geneTargets: any[] }>();
+    for (const row of rows) {
+      if (!genes.has(row.geneName)) genes.set(row.geneName, { gene_name: row.geneName, gene_reference: row.geneSeq, geneTargets: [] });
+      genes.get(row.geneName)!.geneTargets.push({
+        target_id: row.targetName || `T${genes.get(row.geneName)!.geneTargets.length + 1}`,
+        gRNA: row.targetSeq
+      });
+    }
+    return [...genes.values()];
+  }
+
+  private genesToRows(genes: any[]): ReferenceExcelRow[] {
+    return genes.flatMap(gene => (gene.geneTargets || []).map((target: any) => ({
+      geneName: gene.gene_name || '', geneSeq: gene.gene_reference || '',
+      targetName: target.target_id || '', targetSeq: target.gRNA || ''
+    })));
+  }
+
+  private validGenes(genes: any[]): boolean {
+    return genes.length > 0 && genes.every(gene =>
+      Boolean(gene.gene_reference?.trim()) && Array.isArray(gene.geneTargets) && gene.geneTargets.length > 0 &&
+      gene.geneTargets.every((target: any) => Boolean(target.gRNA?.trim()))
     );
   }
 }

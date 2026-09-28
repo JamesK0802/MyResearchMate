@@ -5,6 +5,34 @@
   font-family: var(--font-sans);
 }
 
+/* Per-barcode CRISPR reference configuration */
+.analysis-page .btn-reference-scope {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:8px 14px;
+  border:1px solid #86efac;border-radius:8px;background:#f0fdf4;color:#166534;
+  font-family:inherit;font-size:.85rem;font-weight:700;line-height:1;cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease;
+}
+.analysis-page .btn-reference-scope:hover,.analysis-page .btn-reference-scope.active{background:#dcfce7;border-color:#22c55e}
+.analysis-page .btn-reference-scope span{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#7c3aed;color:#fff;font-size:.66rem}
+.analysis-page .reference-scope-panel{margin:-4px 0 16px;padding:10px;border:1px solid #bbebce;border-radius:11px;background:#f8fcf9}
+.analysis-page .reference-scope-tabs{display:flex;gap:6px;overflow-x:auto;padding:1px 1px 7px;scrollbar-width:thin}
+.analysis-page .reference-scope-tab{flex:0 0 auto;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 12px;border:1px solid #86c99f;border-radius:8px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:.78rem;font-weight:750;line-height:1.2;cursor:pointer}
+.analysis-page .reference-scope-tab.active{background:#166534;border-color:#166534;color:#fff;box-shadow:0 2px 5px #1665342b}
+.analysis-page .reference-scope-tab.custom{background:#f5f3ff;border-color:#a78bfa;color:#6d28d9}
+.analysis-page .reference-scope-tab.custom.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.analysis-page .reference-scope-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 2px 0;color:#64748b;font-size:.73rem}
+.analysis-page .reference-scope-status button{flex:none;padding:5px 8px;border:1px solid #c4b5fd;border-radius:6px;background:#fff;color:#6d28d9;font-family:inherit;font-size:.7rem;font-weight:700;line-height:1;cursor:pointer}
+.analysis-page .reference-empty-hint{margin:3px 2px 0;color:#64748b;font-size:.74rem}
+
+@media(max-width:700px){
+  .analysis-page .section-header .header-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .analysis-page .btn-reference-scope{min-height:34px;padding:7px 5px;font-size:.72rem}
+  .analysis-page .autofill-buttons{display:grid;grid-template-columns:1fr 1fr}
+  .analysis-page .autofill-buttons .btn-template-upload{grid-column:1/-1}
+  .analysis-page .reference-scope-panel{margin-bottom:10px;padding:7px}
+  .analysis-page .reference-scope-tab{max-width:160px;padding:6px 9px;font-size:.68rem}
+  .analysis-page .reference-scope-status{align-items:flex-start;font-size:.66rem;line-height:1.35}
+}
+
 @media (max-width: 600px) {
   app-tool-directory .directory { padding: 16px 12px; }
   app-tool-directory .directory header { gap: 12px; margin-bottom: 14px; justify-content: space-between; }
@@ -5058,4 +5086,8 @@ select.form-control {
   .merge-output-card,
   .merge-filter-diagnostics { padding: 12px; }
   .merge-reason-grid { gap: 5px; }
+}
+
+@media(max-width:700px){
+  body .analysis-page .section-header .header-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
