@@ -12,7 +12,7 @@ import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-c
 import { AuthService } from '../../services/auth.service';
 import { LabService } from '../../services/lab.service';
 import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/experiment-route';
-import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
+import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readMyDataViewMode, saveMyDataViewMode } from '../../components/my-data-list.component';
 import { ActivatedRoute, Router } from '@angular/router';
 import { OverflowTooltipDirective } from '../../components/overflow-tooltip.directive';
 
@@ -56,6 +56,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   saving = false;
   searchQuery = '';
   sortMode: 'updated-desc' | 'updated-asc' | 'name-asc' = 'updated-desc';
+  viewMode: MyDataViewMode = readMyDataViewMode();
   showCreatePanel = false;
   selectedExperiment: any = null;
   completionExperiment: any = null;
@@ -308,6 +309,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   }
 
   setTab(tab: ExperimentTab) { this.activeTab = tab; this.selectedExperiment = null; }
+  setViewMode(mode: MyDataViewMode) { this.viewMode = mode; saveMyDataViewMode(mode); }
   openExperiment(exp: any) { void this.router.navigate(['/data/experiment-logs',exp.id]); }
   private selectRouteExperiment() {
     const current=this.currentExperiments.find(exp=>String(exp.id) === this.detailExperimentId);

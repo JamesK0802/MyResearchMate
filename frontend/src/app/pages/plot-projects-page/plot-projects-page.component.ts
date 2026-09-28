@@ -1,5 +1,5 @@
 import { MyDataCardComponent } from '../../components/my-data-card.component';
-import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
+import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readMyDataViewMode, saveMyDataViewMode } from '../../components/my-data-list.component';
 import { MyDataPageComponent } from '../../components/my-data-page.component';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -17,11 +17,11 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
   template: `
     <app-my-data-page>
       <app-my-data-header title="R-Plot Studio"></app-my-data-header>
-      <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]" [activeTab]="activeTab" (tabChange)="setTab($event)"></app-my-data-list-controls>
+      <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]" [activeTab]="activeTab" (tabChange)="setTab($event)" [viewMode]="viewMode" (viewModeChange)="setViewMode($event)"></app-my-data-list-controls>
 
       <div *ngIf="loading" class="loading-spinner"><div class="spinner"></div><p>Loading R-Plot Studio projects...</p></div>
-      <app-my-data-grid *ngIf="!loading && projects.length">
-        <app-my-data-card *ngFor="let project of projects" [title]="project.title"
+      <app-my-data-grid *ngIf="!loading && projects.length" [viewMode]="viewMode">
+        <app-my-data-card *ngFor="let project of projects" [title]="project.title" [viewMode]="viewMode"
           [badges]="getCardBadges(project)" [meta]="['📅 ' + ((project.updated_at || project.created_at) | date:'mediumDate'), '📈 ' + getPlotCount(project) + ' Plot' + (getPlotCount(project) === 1 ? '' : 's')]"
           [shared]="!!project.is_shared" primaryLabel="Open Plot" [showShare]="isOwner(project)" [showDelete]="isOwner(project)"
           (open)="open(project)" (share)="openShare(project)" (remove)="remove(project)">
@@ -65,10 +65,12 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
 })
 export class PlotProjectsPageComponent implements OnInit {
   projects: PlotProjectRecord[] = []; loading = true; activeTab: 'all' | 'my' | 'shared' = 'all'; sharingProject: PlotProjectRecord | null = null; myLabs: any[] = []; selectedLabIds: string[] = [];
+  viewMode: MyDataViewMode = readMyDataViewMode();
   constructor(private projectService: PlotProjectService, private router: Router, public auth: AuthService, private labs: LabService, private cdr: ChangeDetectorRef) {}
   ngOnInit() { void this.load(); }
   async load() { this.loading = true; this.cdr.detectChanges(); try { this.projects = this.auth.isDemo ? [] : await this.projectService.getProjects(this.activeTab); } catch (error) { console.error('Failed to load plot projects', error); this.projects = []; } finally { this.loading = false; this.cdr.detectChanges(); } }
   setTab(tab: 'all' | 'my' | 'shared') { this.activeTab = tab; void this.load(); }
+  setViewMode(mode: MyDataViewMode) { this.viewMode = mode; saveMyDataViewMode(mode); }
   isOwner(project: PlotProjectRecord) { return String(project.owner_user_id) === String(this.auth.currentProfile?.id); }
   getCardBadges(project: PlotProjectRecord): import('../../components/my-data-card.component').MyDataCardBadge[] {
     return [...(this.isOwner(project) ? [{label:'OWNER', tone:'owner' as const}] : []), ...(project.is_shared ? [{label:'SHARED', tone:'shared' as const}] : [])];

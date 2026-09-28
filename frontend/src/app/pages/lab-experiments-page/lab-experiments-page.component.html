@@ -3,7 +3,7 @@
   <app-my-data-list-controls [tabs]="[{value:'current',label:'Current (' + currentExperiments.length + ')'}, {value:'completed',label:'Completed (' + completedExperiments.length + ')'}]"
     [activeTab]="activeTab" (tabChange)="setTab($event)" [searchable]="true" [(query)]="searchQuery"
     [sort]="sortMode" (sortChange)="sortMode = $event" [sortOptions]="[{value:'updated-desc',label:'Newest first'},{value:'updated-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'}]"
-    createLabel="New" (create)="openCreatePanel()"></app-my-data-list-controls>
+    createLabel="New" (create)="openCreatePanel()" [viewMode]="viewMode" (viewModeChange)="setViewMode($event)"></app-my-data-list-controls>
 
   <section *ngIf="showCreatePanel" class="create-panel" aria-label="Create experiment log">
     <div class="create-heading"><h2>New experiment</h2><button type="button" class="icon-close" (click)="closeCreatePanel()" aria-label="Close">×</button></div>
@@ -20,9 +20,9 @@
   </section>
 
   <div *ngIf="loading" class="loading-state"><span class="spinner"></span><p>Loading…</p></div>
-  <app-my-data-grid *ngIf="!loading && displayExperiments.length">
+  <app-my-data-grid *ngIf="!loading && displayExperiments.length" [viewMode]="viewMode">
     <app-my-data-card *ngFor="let exp of displayExperiments"
-      [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="isExperimentShared(exp)"
+      [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="isExperimentShared(exp)" [viewMode]="viewMode"
       [syncLabel]="syncStates[exp.id] === 'error' ? 'Save failed' : ''" [syncError]="syncStates[exp.id] === 'error'"
       [primaryLabel]="activeTab === 'current' ? 'Continue' : 'Review'" [showShare]="!exp._shared" [showDelete]="!exp._shared"
       (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">

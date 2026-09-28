@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OverflowTooltipDirective } from './overflow-tooltip.directive';
+import type { MyDataViewMode } from './my-data-list.component';
 
 export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'active' | 'completed'; }
 
@@ -10,7 +11,7 @@ export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'a
   imports: [CommonModule, OverflowTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <article class="data-card" [class.shared-card]="shared" [class.muted-card]="muted">
+    <article class="data-card" [class.shared-card]="shared" [class.muted-card]="muted" [class.list-card]="viewMode === 'list'">
       <button *ngIf="showPin" type="button" class="pin" [class.pinned]="pinned" (click)="pin.emit($event)" [attr.aria-label]="pinned ? 'Unpin from top' : 'Pin to top'">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Zm3 11h2v7l-1-1-1 1v-7Z"></path></svg>
       </button>
@@ -62,7 +63,12 @@ export interface MyDataCardBadge { label: string; tone?: 'owner' | 'shared' | 'a
     .secondary { padding:8px 11px; border:1px solid #86c99f; background:#f0fdf4; color:#15803d; }
     .icon { display:grid; place-items:center; flex:0 0 40px; width:40px; height:40px; padding:9px; box-sizing:border-box; border-radius:var(--radius-md); }
     .icon svg { width:18px; height:18px; }.share{border:1px solid var(--color-border-light);background:var(--color-surface-alt);color:var(--color-text-secondary)}.delete{border:1px solid var(--color-error-border);background:var(--color-error-bg);color:#ef4444}.readonly{border:1px solid var(--color-border-light);background:var(--color-surface-alt);font-size:.85rem}
+    .list-card{display:grid;grid-template-columns:minmax(220px,1.35fr) minmax(170px,.75fr) minmax(190px,1fr) auto;grid-template-areas:"heading meta content actions" "description meta content actions";align-items:center;column-gap:20px;row-gap:3px;height:auto;min-height:88px;padding:14px 16px;border-radius:var(--radius-lg)}
+    .list-card:hover{transform:none;box-shadow:var(--shadow-md)}
+    .list-card .heading{grid-area:heading;min-width:0;margin:0}.list-card .description{grid-area:description;min-height:0;margin:2px 0 0;-webkit-line-clamp:1}.list-card .meta{grid-area:meta;min-width:0;margin:0}.list-card .content{grid-area:content;min-width:0}.list-card .actions{grid-area:actions;align-items:center;min-width:220px;margin:0;padding:0}.list-card .pin{top:8px;right:8px}
+    @media(max-width:980px){.list-card{grid-template-columns:minmax(190px,1fr) minmax(150px,.7fr) minmax(180px,.9fr);grid-template-areas:"heading meta content" "description meta content" "actions actions actions"}.list-card .actions{justify-self:end;width:min(100%,320px);padding-top:8px}}
     @media(max-width:600px){.data-card{padding:13px 14px;border-radius:12px}.data-card:hover{transform:none}.description{min-height:0}.actions{gap:6px;padding-top:10px}.heading{gap:7px;margin-bottom:8px}h2{font-size:1rem}.badge{font-size:.58rem;padding:2px 6px}.meta{font-size:.7rem;gap:5px 11px;margin-bottom:3px}.actions button.primary,.actions button.secondary{font-size:.76rem;min-height:36px;line-height:1.2;padding:7px 9px}.icon{width:36px;height:36px;flex-basis:36px;min-height:36px!important}}
+    @media(max-width:600px){.list-card{grid-template-columns:minmax(0,1fr);grid-template-areas:"heading" "description" "meta" "content" "actions";gap:5px;min-height:0;padding:10px 12px}.list-card .heading{margin:0}.list-card .description{margin:0}.list-card .meta{margin:0}.list-card .actions{justify-self:stretch;width:100%;min-width:0;padding-top:5px}}
   `]
 })
 export class MyDataCardComponent {
@@ -81,6 +87,7 @@ export class MyDataCardComponent {
   @Input() showShare = false;
   @Input() showDelete = false;
   @Input() readOnly = false;
+  @Input() viewMode: MyDataViewMode = 'card';
   @Output() open = new EventEmitter<void>();
   @Output() secondary = new EventEmitter<void>();
   @Output() share = new EventEmitter<void>();

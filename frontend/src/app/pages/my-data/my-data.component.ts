@@ -12,7 +12,7 @@ import { NamuStorageService } from '../../services/namu-storage.service';
 import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
-import { MyDataGridComponent, MyDataListControlsComponent } from '../../components/my-data-list.component';
+import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readMyDataViewMode, saveMyDataViewMode } from '../../components/my-data-list.component';
 
 @Component({
   selector: 'app-my-data',
@@ -26,7 +26,8 @@ import { MyDataGridComponent, MyDataListControlsComponent } from '../../componen
       <!-- Navigation and compact list controls -->
       <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]"
         [activeTab]="activeTab" (tabChange)="setTab($event)" [sort]="sortMode" (sortChange)="sortMode = $event; applySorting()"
-        [sortOptions]="[{value:'date-desc',label:'Newest first'},{value:'date-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'},{value:'name-desc',label:'Name Z–A'}]"></app-my-data-list-controls>
+        [sortOptions]="[{value:'date-desc',label:'Newest first'},{value:'date-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'},{value:'name-desc',label:'Name Z–A'}]"
+        [viewMode]="viewMode" (viewModeChange)="setViewMode($event)"></app-my-data-list-controls>
 
       <div *ngIf="loading" class="loading-spinner">
         <div class="spinner"></div>
@@ -34,10 +35,11 @@ import { MyDataGridComponent, MyDataListControlsComponent } from '../../componen
       </div>
 
       <!-- Results Grid -->
-      <app-my-data-grid *ngIf="!loading && displayResults.length > 0">
+      <app-my-data-grid *ngIf="!loading && displayResults.length > 0" [viewMode]="viewMode">
         <app-my-data-card *ngFor="let res of displayResults"
           [title]="getItemTitle(res)" [badges]="getCardBadges(res)" [meta]="getCardMeta(res)"
           [shared]="!!res.is_shared" [muted]="resource === 'pcr' && isSystemPreset(res)"
+          [viewMode]="viewMode"
           [showPin]="true" [pinned]="isPinned(res)" [primaryLabel]="resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'View Crispr Analysis'"
           [showShare]="canManage(res)" [showDelete]="canManage(res)" [readOnly]="!!res.is_shared && !isOwner(res)"
           (pin)="togglePin(res, $event)" (open)="loadItem(res)" (share)="openShareModal(res)" (remove)="deleteItem(res.id || '')">
@@ -258,6 +260,7 @@ export class MyDataComponent implements OnInit {
   resource: 'crispr' | 'protocol' | 'pcr' = 'crispr';
   activeTab: 'all' | 'my' | 'shared' = 'all';
   sortMode: 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' = 'date-desc';
+  viewMode: MyDataViewMode = readMyDataViewMode();
   loading: boolean = true;
   private pinnedIds = new Set<string>();
   
@@ -328,6 +331,8 @@ export class MyDataComponent implements OnInit {
     this.activeTab = tab;
     this.loadData();
   }
+
+  setViewMode(mode: MyDataViewMode) { this.viewMode = mode; saveMyDataViewMode(mode); }
 
   isPinned(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean {
     return this.pinnedIds.has(String((res as any).id || ''));
