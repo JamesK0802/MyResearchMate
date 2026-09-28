@@ -69,6 +69,17 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               </div>
             </a>
+            <a routerLink="/tools/pdf-editor" class="tool-card">
+              <div class="card-body">
+                <h3>PDF Editor (Beta)</h3>
+                <p>Edit, sign, organize, save, and export PDF documents.</p>
+                <div class="tag-row">
+                  <span>Text Editing</span>
+                  <span>Saved Signatures</span>
+                  <span>My Data</span>
+                </div>
+              </div>
+            </a>
             <a routerLink="/tools/sequence-viewer" class="tool-card">
               <div class="card-body">
                 <h3>Sequence Viewer</h3>
@@ -87,18 +98,6 @@ import { AuthService } from '../../services/auth.service';
                 <div class="tag-row">
                   <span>Photo Sets</span>
                   <span>Side-by-side</span>
-                  <span>PDF Export</span>
-                </div>
-              </div>
-            </a>
-            <a routerLink="/tools/pdf-editor" class="tool-card">
-              <div class="card-body">
-                <h3>PDF Editor</h3>
-                <p>Organize, reorder, rotate, annotate, draw, insert signatures and text, and export multi-page PDF documents client-side.</p>
-                <div class="tag-row">
-                  <span>Page Reorder</span>
-                  <span>Annotation & Draw</span>
-                  <span>Signatures</span>
                   <span>PDF Export</span>
                 </div>
               </div>

@@ -9,8 +9,11 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PDFDocument, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
+import { AuthService } from '../../services/auth.service';
+import { PdfDocumentService, SavedSignature } from '../../services/pdf-document.service';
 
 // Configure PDF.js worker (CDN fallback with local asset)
 if (typeof window !== 'undefined') {
@@ -96,6 +99,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   @ViewChild('canvasViewport') canvasViewportRef!: ElementRef<HTMLDivElement>;
   @ViewChild('imageInput') imageInputRef!: ElementRef<HTMLInputElement>;
   @ViewChild('signatureCanvas') signatureCanvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('signatureImageInput') signatureImageInputRef!: ElementRef<HTMLInputElement>;
 
   // Document State
   fileName: string = 'Untitled.pdf';
@@ -148,15 +152,38 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   // Signature Modal
   showSignatureModal: boolean = false;
   private isSigning: boolean = false;
+  signaturePreviewUrl: string = '';
+  savedSignatures: SavedSignature[] = [];
+  currentDocumentId: string | null = null;
+  isSavingDocument = false;
 
   // Undo / Redo History
   private history: string[] = [];
   private historyIndex: number = -1;
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router,
+    private pdfDocuments: PdfDocumentService,
+    public auth: AuthService
+  ) {}
 
-  ngOnInit() {
-    this.loadSampleDocument();
+  async ngOnInit() {
+    const documentId = this.route.snapshot.queryParamMap.get('document');
+    if (documentId && this.auth.isLoggedIn && !this.auth.isDemo) await this.loadSavedDocument(documentId);
+    else this.createEmptyDocument();
+    if (this.auth.isLoggedIn && !this.auth.isDemo) void this.loadSavedSignatures();
+  }
+
+  private createEmptyDocument() {
+    this.fileName = 'Untitled.pdf';
+    this.pages = [];
+    this.sourcePdfDocs.clear();
+    this.currentDocumentId = null;
+    this.history = [];
+    this.historyIndex = -1;
+    this.addBlankPage();
   }
 
   ngAfterViewInit() {
@@ -298,7 +325,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
       const docId = `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const loadingTask = pdfjsLib.getDocument({ data: uint8 });
+      const loadingTask = pdfjsLib.getDocument({ data: uint8.slice() });
       const pdfJsDoc = await loadingTask.promise;
 
       this.sourcePdfDocs.set(docId, {
@@ -328,6 +355,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       for (let i = 1; i <= pdfJsDoc.numPages; i++) {
         const page = await pdfJsDoc.getPage(i);
         const viewport = page.getViewport({ scale: 1.0 });
+        const editableText = await this.extractEditableText(page, viewport);
 
         // Generate clean proportional thumbnail (140x198 standard A4 ratio)
         const thumbCanvas = document.createElement('canvas');
@@ -359,7 +387,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
           sourceDocId: docId,
           sourceType: 'pdf',
           sourceFileName: file.name,
-          annotations: []
+          annotations: editableText
         };
         this.pages.push(pageItem);
       }
@@ -377,6 +405,30 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     } finally {
       this.isLoading = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  private async extractEditableText(page: any, viewport: any): Promise<AnnotationItem[]> {
+    try {
+      const content = await page.getTextContent();
+      return (content.items || []).filter((item: any) => String(item.str || '').trim()).map((item: any, index: number) => {
+        const fontHeight = Math.max(7, Math.abs(Number(item.transform?.[3] || item.height || 12)));
+        return {
+          id: `pdf-text-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 5)}`,
+          type: 'text' as ToolType,
+          x: Number(item.transform?.[4] || 0),
+          y: Math.max(0, viewport.height - Number(item.transform?.[5] || 0) - fontHeight),
+          width: Math.max(12, Number(item.width || String(item.str).length * fontHeight * 0.55)),
+          height: fontHeight * 1.35,
+          text: String(item.str),
+          fontSize: fontHeight,
+          fontFamily: 'Arial, sans-serif',
+          color: '#0f172a',
+          backgroundColor: '#ffffff'
+        };
+      });
+    } catch {
+      return [];
     }
   }
 
@@ -581,86 +633,8 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   // Load Sample Document
   async loadSampleDocument() {
-    this.isLoading = true;
-    this.loadingMessage = 'Generating sample research protocol…';
-    this.cdr.detectChanges();
-
-    try {
-      const sampleDoc = await PDFDocument.create();
-      sampleDoc.addPage([595, 842]);
-      sampleDoc.addPage([595, 842]);
-      sampleDoc.addPage([595, 842]);
-
-      const pdfBytes = await sampleDoc.save();
-      const docId = 'sample_protocol';
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBytes) });
-      const pdfJsDoc = await loadingTask.promise;
-
-      this.sourcePdfDocs.clear();
-      this.sourcePdfDocs.set(docId, {
-        fileName: 'Sample_Research_Protocol.pdf',
-        pdfBytes: new Uint8Array(pdfBytes),
-        pdfJsDoc
-      });
-
-      this.fileName = 'Sample_Research_Protocol.pdf';
-      this.pages = [];
-
-      for (let i = 1; i <= 3; i++) {
-        const thumbCanvas = document.createElement('canvas');
-        thumbCanvas.width = 140;
-        thumbCanvas.height = 198;
-        const thumbCtx = thumbCanvas.getContext('2d')!;
-
-        // Fill edge-to-edge clean white background
-        thumbCtx.fillStyle = '#ffffff';
-        thumbCtx.fillRect(0, 0, 140, 198);
-
-        // Document placeholder header and lines
-        thumbCtx.fillStyle = '#166534';
-        thumbCtx.fillRect(14, 16, 112, 12);
-        thumbCtx.fillStyle = '#cbd5e1';
-        thumbCtx.fillRect(14, 36, 95, 6);
-        thumbCtx.fillRect(14, 48, 112, 6);
-        thumbCtx.fillRect(14, 60, 80, 6);
-
-        if (i === 2) {
-          thumbCtx.fillStyle = '#94a3b8';
-          thumbCtx.fillRect(14, 80, 50, 40);
-          thumbCtx.fillRect(74, 80, 50, 40);
-        } else if (i === 3) {
-          thumbCtx.fillStyle = '#22c55e';
-          thumbCtx.fillRect(14, 80, 112, 8);
-          thumbCtx.fillStyle = '#cbd5e1';
-          thumbCtx.fillRect(14, 96, 100, 6);
-        }
-
-        this.pages.push({
-          id: `sample_p${i}`,
-          originalPageIndex: i - 1,
-          displayNumber: i,
-          rotation: 0,
-          thumbnailUrl: thumbCanvas.toDataURL('image/jpeg', 0.85),
-          width: 595,
-          height: 842,
-          aspectRatio: 595 / 842,
-          sourceDocId: docId,
-          sourceType: 'pdf',
-          sourceFileName: 'Sample_Research_Protocol.pdf',
-          annotations: []
-        });
-      }
-
-      this.activePageIndex = 0;
-      this.activeMode = 'edit';
-      this.saveHistory();
-      setTimeout(() => this.fitToWidth(), 50);
-    } catch (err) {
-      console.error('Failed to load sample doc:', err);
-    } finally {
-      this.isLoading = false;
-      this.cdr.detectChanges();
-    }
+    this.createEmptyDocument();
+    setTimeout(() => this.fitToWidth(), 30);
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1018,6 +992,10 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       }
 
       case 'text': {
+        if (ann.backgroundColor) {
+          ctx.fillStyle = ann.backgroundColor;
+          ctx.fillRect(ann.x - 1, ann.y - 1, ann.width + 2, ann.height + 2);
+        }
         ctx.fillStyle = ann.color || this.textColor;
         const fontStyle = `${ann.italic ? 'italic ' : ''}${ann.bold ? 'bold ' : ''}`;
         const fontSize = ann.fontSize || 18;
@@ -1382,6 +1360,17 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.renderAnnotationCanvas();
   }
 
+  editSelectedText() {
+    const annotation = this.selectedAnnotation;
+    if (!annotation || annotation.type !== 'text') return;
+    const next = prompt('Edit text', annotation.text || '');
+    if (next === null) return;
+    annotation.text = next;
+    annotation.width = Math.max(annotation.width, (annotation.fontSize || 18) * Math.max(3, next.length) * 0.55);
+    this.saveHistory();
+    this.renderAnnotationCanvas();
+  }
+
   // ═════════════════════════════════════════════════════════════════════════════
   // IMAGE & SIGNATURE STAMP INSERTION
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1416,6 +1405,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   openSignatureModal() {
     this.showSignatureModal = true;
+    this.signaturePreviewUrl = '';
     setTimeout(() => {
       if (this.signatureCanvasRef) {
         const c = this.signatureCanvasRef.nativeElement;
@@ -1467,12 +1457,13 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
+    this.signaturePreviewUrl = '';
   }
 
   applySignature() {
-    if (!this.signatureCanvasRef || !this.activePage) return;
-    const canvas = this.signatureCanvasRef.nativeElement;
-    const sigDataUrl = canvas.toDataURL('image/png');
+    if (!this.activePage) return;
+    const sigDataUrl = this.signaturePreviewUrl || this.signatureCanvasRef?.nativeElement.toDataURL('image/png');
+    if (!sigDataUrl) return;
 
     const newSig: AnnotationItem = {
       id: `sig-${Date.now()}`,
@@ -1488,6 +1479,139 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.showSignatureModal = false;
     this.saveHistory();
     this.renderAnnotationCanvas();
+  }
+
+  onSignatureImageSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1000 / Math.max(image.width, image.height));
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < pixels.data.length; i += 4) {
+          const r = pixels.data[i], g = pixels.data[i + 1], b = pixels.data[i + 2];
+          const brightness = (r + g + b) / 3;
+          if (brightness > 238 && Math.max(r, g, b) - Math.min(r, g, b) < 24) pixels.data[i + 3] = 0;
+        }
+        ctx.putImageData(pixels, 0, 0);
+        this.signaturePreviewUrl = canvas.toDataURL('image/png');
+        this.cdr.detectChanges();
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  async loadSavedSignatures() {
+    try { this.savedSignatures = await this.pdfDocuments.listSignatures(); }
+    catch { this.savedSignatures = []; }
+    this.cdr.detectChanges();
+  }
+
+  useSavedSignature(signature: SavedSignature) {
+    const imageUrl = signature.document_json?.image_url;
+    if (imageUrl) this.signaturePreviewUrl = imageUrl;
+  }
+
+  async saveCurrentSignature() {
+    if (!this.auth.isLoggedIn || this.auth.isDemo) return;
+    const imageUrl = this.signaturePreviewUrl || this.signatureCanvasRef?.nativeElement.toDataURL('image/png');
+    if (!imageUrl) return;
+    const title = prompt('Signature name', 'My signature')?.trim();
+    if (!title) return;
+    await this.pdfDocuments.saveSignature(title, imageUrl);
+    await this.loadSavedSignatures();
+  }
+
+  private bytesToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    return btoa(binary);
+  }
+
+  private base64ToBytes(value: string): Uint8Array {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  private async serializeDocument(): Promise<Record<string, unknown>> {
+    const pdfBytes = await this.buildPdfBytes();
+    return {
+      version: 1,
+      fileName: this.fileName,
+      pages: this.pages,
+      sources: [...this.sourcePdfDocs.entries()].map(([id, source]) => ({ id, fileName: source.fileName, pdfBase64: this.bytesToBase64(source.pdfBytes) })),
+      pdf_base64: this.bytesToBase64(pdfBytes)
+    };
+  }
+
+  async saveToMyData() {
+    if (!this.auth.isLoggedIn) { alert('Please sign in to save PDF documents to My Data.'); return; }
+    if (this.auth.isDemo) { this.auth.notifyDemoUnavailable('Saving PDF documents to My Data'); return; }
+    const title = prompt(this.currentDocumentId ? 'Update PDF document' : 'Save PDF document to My Data', this.fileName.replace(/\.pdf$/i, ''))?.trim();
+    if (!title) return;
+    this.isSavingDocument = true;
+    try {
+      const document = await this.serializeDocument();
+      const wasUpdate = !!this.currentDocumentId;
+      const record = this.currentDocumentId
+        ? await this.pdfDocuments.update(this.currentDocumentId, title, document)
+        : await this.pdfDocuments.save(title, document);
+      this.currentDocumentId = record.id;
+      this.fileName = `${title}.pdf`;
+      void this.router.navigate([], { relativeTo: this.route, queryParams: { document: record.id }, replaceUrl: true });
+      alert(wasUpdate ? 'PDF document updated in My Data.' : 'PDF document saved to My Data.');
+    } catch (error) {
+      console.error('Failed to save PDF document', error);
+      alert('Could not save the PDF document. Please try again.');
+    } finally {
+      this.isSavingDocument = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async loadSavedDocument(id: string) {
+    this.isLoading = true;
+    this.loadingMessage = 'Opening PDF document…';
+    try {
+      const record = await this.pdfDocuments.get(id);
+      const document = (record.document_json || {}) as any;
+      this.fileName = document.fileName || `${record.title}.pdf`;
+      this.pages = Array.isArray(document.pages) ? document.pages : [];
+      this.sourcePdfDocs.clear();
+      for (const source of document.sources || []) {
+        const bytes = this.base64ToBytes(source.pdfBase64);
+        const pdfJsDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+        this.sourcePdfDocs.set(source.id, { fileName: source.fileName, pdfBytes: bytes, pdfJsDoc });
+      }
+      if (!this.pages.length) this.addBlankPage();
+      this.currentDocumentId = record.id;
+      this.activePageIndex = 0;
+      this.activeMode = 'edit';
+      this.history = [];
+      this.historyIndex = -1;
+      this.saveHistory();
+      setTimeout(() => this.fitToWidth(), 30);
+    } catch (error) {
+      console.error('Failed to open PDF document', error);
+      alert('Could not open this PDF document. A new blank document has been created.');
+      this.createEmptyDocument();
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1544,6 +1668,38 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   // ═════════════════════════════════════════════════════════════════════════════
   // EXPORT / DOWNLOAD PDF (MULTI-DOC MERGE SUPPORT)
   // ═════════════════════════════════════════════════════════════════════════════
+
+  private async buildPdfBytes(): Promise<Uint8Array> {
+    const outputDoc = await PDFDocument.create();
+    for (const entry of this.sourcePdfDocs.values()) {
+      if (!entry.pdfDocInstance) entry.pdfDocInstance = await PDFDocument.load(entry.pdfBytes, { ignoreEncryption: true });
+    }
+    for (const pageItem of this.pages) {
+      let outPage: any;
+      if (pageItem.sourceType === 'pdf' && pageItem.sourceDocId && pageItem.originalPageIndex >= 0) {
+        const entry = this.sourcePdfDocs.get(pageItem.sourceDocId);
+        if (entry?.pdfDocInstance) {
+          const [copiedPage] = await outputDoc.copyPages(entry.pdfDocInstance, [pageItem.originalPageIndex]);
+          outPage = outputDoc.addPage(copiedPage);
+        } else outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
+      } else if (pageItem.imageBackgroundUrl) {
+        outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
+        const embedded = pageItem.imageBackgroundUrl.startsWith('data:image/png')
+          ? await outputDoc.embedPng(pageItem.imageBackgroundUrl)
+          : await outputDoc.embedJpg(pageItem.imageBackgroundUrl);
+        outPage.drawImage(embedded, { x: 0, y: 0, width: outPage.getWidth(), height: outPage.getHeight() });
+      } else outPage = outputDoc.addPage([pageItem.width, pageItem.height]);
+      if (pageItem.rotation) outPage.setRotation(degrees((outPage.getRotation().angle + pageItem.rotation) % 360));
+      if (pageItem.annotations?.length) {
+        const overlay = await this.renderAnnotationLayerToImage(pageItem);
+        if (overlay) {
+          const png = await outputDoc.embedPng(overlay);
+          outPage.drawImage(png, { x: 0, y: 0, width: outPage.getWidth(), height: outPage.getHeight() });
+        }
+      }
+    }
+    return outputDoc.save();
+  }
 
   async exportPdf() {
     if (this.pages.length === 0) return;

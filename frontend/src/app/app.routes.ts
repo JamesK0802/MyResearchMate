@@ -76,6 +76,11 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'data/pdf-documents',
+    loadComponent: () => import('./pages/pdf-documents-page/pdf-documents-page.component').then(m => m.PdfDocumentsPageComponent),
+    canActivate: [authGuard]
+  },
+  {
     path: 'data/experiment-logs/:experimentId',
     loadComponent: () => import('./pages/lab-experiments-page/lab-experiments-page.component').then(m => m.LabExperimentsPageComponent),
     canActivate: [authGuard]

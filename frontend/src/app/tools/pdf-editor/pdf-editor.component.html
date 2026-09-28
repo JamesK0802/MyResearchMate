@@ -10,7 +10,7 @@
       </button>
 
       <div class="title-block">
-        <span class="app-badge app-badge-green">PDF</span>
+        <span class="app-badge app-badge-green">PDF Editor (Beta)</span>
         <h1 class="document-title" [title]="fileName">{{ fileName }}</h1>
       </div>
 
@@ -27,9 +27,6 @@
           <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
         </label>
 
-        <button type="button" class="app-btn app-btn-ghost app-btn-xs desktop-only" (click)="loadSampleDocument()" title="Load Sample Protocol PDF">
-          Sample
-        </button>
       </div>
     </div>
 
@@ -62,6 +59,9 @@
 
     <!-- Export Action -->
     <div class="header-right">
+      <button type="button" class="app-btn app-btn-secondary app-btn-sm save-btn" (click)="saveToMyData()" [disabled]="isSavingDocument" [title]="auth.isLoggedIn ? 'Save this document in My Data' : 'Sign in to save'">
+        <span>{{ isSavingDocument ? 'Saving…' : (currentDocumentId ? 'Update My Data' : 'Save to My Data') }}</span>
+      </button>
       <button type="button" class="app-btn app-btn-primary app-btn-sm export-btn" (click)="exportPdf()" [disabled]="isExporting || pages.length === 0">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         <span>{{ isExporting ? 'Exporting…' : 'Export PDF' }}</span>
@@ -160,7 +160,7 @@
                (dblclick)="openEditModeForPage(i)">
 
             <div class="grid-card-header">
-              <span class="grid-card-pill">Page {{ p.displayNumber }}</span>
+              <span class="grid-card-number">{{ p.displayNumber }}</span>
               <div class="grid-card-actions">
                 <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="movePageUp(i)" [disabled]="i === 0" title="Move Left">◀</button>
                 <button type="button" class="app-btn app-btn-ghost app-btn-xs" (click)="movePageDown(i)" [disabled]="i === pages.length - 1" title="Move Right">▶</button>
@@ -185,8 +185,7 @@
           <div class="grid-add-card" (click)="addBlankPage()">
             <div class="grid-add-inner">
               <span class="grid-add-icon">＋</span>
-              <strong>Add Page</strong>
-              <small>Insert blank sheet</small>
+              <strong>Add blank page</strong>
             </div>
           </div>
         </div>
@@ -319,7 +318,8 @@
                     class="annotation-canvas"
                     (pointerdown)="onPointerDownCanvas($event)"
                     (pointermove)="onPointerMoveCanvas($event)"
-                    (pointerup)="onPointerUpCanvas()"></canvas>
+                    (pointerup)="onPointerUpCanvas()"
+                    (dblclick)="editSelectedText()"></canvas>
           </div>
 
           <div *ngIf="!activePage" class="empty-page-state">
@@ -352,12 +352,25 @@
     <div class="app-modal signature-modal" (click)="$event.stopPropagation()">
       <div class="app-modal-header">
         <div>
-          <h2>Draw Your Signature</h2>
-          <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 4px 0 0;">Sign with your mouse or finger below.</p>
+          <h2>Add signature</h2>
+          <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 4px 0 0;">Draw a signature or upload a photo. Light backgrounds are removed automatically.</p>
         </div>
         <button class="app-modal-close" (click)="closeSignatureModal()">✕</button>
       </div>
       <div class="app-modal-body">
+        <div class="signature-source-actions">
+          <label class="app-btn app-btn-secondary app-btn-sm">
+            Upload signature photo
+            <input #signatureImageInput type="file" accept="image/*" (change)="onSignatureImageSelected($event)" hidden>
+          </label>
+          <button *ngIf="auth.isLoggedIn && !auth.isDemo" type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="saveCurrentSignature()">Save signature</button>
+        </div>
+        <div class="saved-signatures" *ngIf="savedSignatures.length">
+          <button type="button" *ngFor="let signature of savedSignatures" (click)="useSavedSignature(signature)" [class.active]="signaturePreviewUrl === signature.document_json.image_url">
+            <img [src]="signature.document_json.image_url" alt=""><span>{{ signature.title }}</span>
+          </button>
+        </div>
+        <div class="signature-preview" *ngIf="signaturePreviewUrl"><img [src]="signaturePreviewUrl" alt="Extracted signature preview"></div>
         <div class="signature-canvas-wrap">
           <canvas #signatureCanvas
                   width="440"
