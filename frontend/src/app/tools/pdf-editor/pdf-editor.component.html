@@ -139,22 +139,6 @@
 
       <!-- ─── MODE 1: ORGANIZE / VIEW ALL GRID ─── -->
       <section *ngIf="activeMode === 'view'" class="organize-view-container">
-        <div class="organize-banner">
-          <div>
-            <h2>Document Overview ({{ pages.length }} Pages)</h2>
-            <p>Drag pages to reorder, rotate, or duplicate. <strong>Double-click any page to edit.</strong></p>
-          </div>
-          <div class="organize-actions">
-            <label class="app-btn app-btn-secondary app-btn-xs upload-btn">
-              <span>＋ Add File</span>
-              <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
-            </label>
-            <button type="button" class="app-btn app-btn-secondary app-btn-xs" (click)="addBlankPage()">
-              ＋ Blank Sheet
-            </button>
-          </div>
-        </div>
-
         <div class="organize-grid">
           <div *ngFor="let p of pages; let i = index"
                class="grid-page-card"
