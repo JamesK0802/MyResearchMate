@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
-import { Observable, firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom, take } from 'rxjs';
 
 export interface CrisprResult {
   id: string;
@@ -28,10 +28,18 @@ export class ResultsService {
   constructor(private http: HttpClient, private auth: AuthService) {}
 
   private async getAuthHeaders() {
+    await firstValueFrom(this.auth.loading$.pipe(filter(loading => !loading), take(1)));
     const session = await this.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication is not ready');
     return new HttpHeaders({
-      'Authorization': `Bearer ${session?.access_token}`
+      'Authorization': `Bearer ${session.access_token}`,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
     });
+  }
+
+  private freshUrl(path: string): string {
+    return `${this.apiUrl}${path}?_=${Date.now()}`;
   }
 
   async saveResult(title: string, metadata: any, result: any): Promise<CrisprResult> {
@@ -48,21 +56,21 @@ export class ResultsService {
   async getMyResults(): Promise<CrisprResult[]> {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
-      this.http.get<CrisprResult[]>(`${this.apiUrl}/my`, { headers })
+      this.http.get<CrisprResult[]>(this.freshUrl('/my'), { headers })
     );
   }
 
   async getSharedResults(): Promise<CrisprResult[]> {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
-      this.http.get<CrisprResult[]>(`${this.apiUrl}/shared`, { headers })
+      this.http.get<CrisprResult[]>(this.freshUrl('/shared'), { headers })
     );
   }
 
   async getAllResults(): Promise<CrisprResult[]> {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
-      this.http.get<CrisprResult[]>(`${this.apiUrl}/all`, { headers })
+      this.http.get<CrisprResult[]>(this.freshUrl('/all'), { headers })
     );
   }
 

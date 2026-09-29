@@ -119,15 +119,19 @@ export class AuthService {
     // Listen for auth state changes (login, logout, token refresh)
     this.supabase.auth.onAuthStateChange((event, session) => {
       if (this.demoSession) return;
+      this.setLoading(true);
       this.setSession(session);
 
       if (session) {
-        this.fetchProfile();
+        // A restored Supabase session is not fully ready until the matching
+        // application profile has been loaded. Route guards and data pages use
+        // loading$ as their readiness signal, so keep it true until that work
+        // has completed instead of allowing their first API call to race it.
+        void this.fetchProfile().finally(() => this.setLoading(false));
       } else {
         this.setProfile(null);
+        this.setLoading(false);
       }
-
-      this.setLoading(false);
     });
 
     // Initial session check
