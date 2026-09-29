@@ -93,6 +93,9 @@ class WorkflowShareUpdate(BaseModel):
     read_only_lab_ids: List[str] = Field(default_factory=list)
     edit_lab_ids: List[str] = Field(default_factory=list)
     user_ids: List[str] = Field(default_factory=list)
+    view_lab_ids: List[str] = Field(default_factory=list)
+    view_user_ids: List[str] = Field(default_factory=list)
+    edit_user_ids: List[str] = Field(default_factory=list)
 
 
 import re
@@ -1140,9 +1143,12 @@ async def get_workflow_shares(
     shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
     return {
         "lab_ids": [str(s.lab_id) for s in shares if s.lab_id],
-        "read_only_lab_ids": [str(s.lab_id) for s in shares if s.lab_id and s.access_level != "edit"],
+        "view_lab_ids": [str(s.lab_id) for s in shares if s.lab_id],
+        "read_only_lab_ids": [str(s.lab_id) for s in shares if s.lab_id],
         "edit_lab_ids": [str(s.lab_id) for s in shares if s.lab_id and s.access_level == "edit"],
-        "user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+        "user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id],
+        "view_user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id],
+        "edit_user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id and s.access_level == "edit"]
     }
 
 @router.put("/experiments/{exp_id}/shares")
@@ -1162,31 +1168,23 @@ async def update_workflow_shares(
     db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).delete()
     
     # Create new lab shares. Older clients send lab_ids, which remain read-only.
-    read_ids = payload.read_only_lab_ids or payload.lab_ids
-    for access_level, lab_ids in (("read", read_ids), ("edit", payload.edit_lab_ids)):
-        for lab_id_str in lab_ids:
-            if access_level == "read" and lab_id_str in payload.edit_lab_ids:
-                continue
-            try:
-                db.add(WorkflowShare(
-                    workflow_id=exp_id,
-                    workflow_type=payload.workflow_type,
-                    lab_id=uuid.UUID(lab_id_str),
-                    shared_by_user_id=current_user["id"],
-                    access_level=access_level,
-                ))
-            except Exception:
-                continue
+    read_ids = payload.view_lab_ids or payload.read_only_lab_ids or payload.lab_ids
+    for lab_id_str in read_ids:
+        try:
+            db.add(WorkflowShare(workflow_id=exp_id, workflow_type=payload.workflow_type, lab_id=uuid.UUID(lab_id_str), shared_by_user_id=current_user["id"], access_level="edit" if lab_id_str in payload.edit_lab_ids else "read"))
+        except Exception:
+            continue
             
     # Create new individual user shares
-    for user_id_str in payload.user_ids:
+    view_user_ids = payload.view_user_ids or payload.user_ids
+    for user_id_str in view_user_ids:
         try:
             db.add(WorkflowShare(
                 workflow_id=exp_id,
                 workflow_type=payload.workflow_type,
                 shared_with_user_id=int(user_id_str),
                 shared_by_user_id=current_user["id"],
-                access_level="read",
+                access_level="edit" if user_id_str in payload.edit_user_ids else "read",
             ))
         except Exception as e:
             continue

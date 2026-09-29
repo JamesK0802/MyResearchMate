@@ -229,16 +229,17 @@ export class LabNotebookService {
   // --- Lab & Individual Sharing ---
   async getWorkflowShares(workflowId: string) {
     const headers = await this.getAuthHeaders();
-    return firstValueFrom(this.http.get<{ lab_ids: string[], read_only_lab_ids: string[], edit_lab_ids: string[], user_ids: string[] }>(`${this.apiUrl}/experiments/${workflowId}/shares`, { headers }));
+    return firstValueFrom(this.http.get<{ lab_ids:string[],view_lab_ids:string[],edit_lab_ids:string[],user_ids:string[],view_user_ids:string[],edit_user_ids:string[] }>(`${this.apiUrl}/experiments/${workflowId}/shares`, { headers }));
   }
 
-  async updateWorkflowShares(workflowId: string, workflowType: string, readOnlyLabIds: string[], editLabIds: string[], userIds: string[] = []) {
+  async updateWorkflowShares(workflowId:string,workflowType:string,viewLabIds:string[],editLabIds:string[],viewUserIds:string[]=[],editUserIds:string[]=[]) {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(this.http.put<any>(`${this.apiUrl}/experiments/${workflowId}/shares`, { 
       workflow_type: workflowType, 
-      read_only_lab_ids: readOnlyLabIds,
+      view_lab_ids: viewLabIds,
       edit_lab_ids: editLabIds,
-      user_ids: userIds
+      view_user_ids: viewUserIds,
+      edit_user_ids: editUserIds
     }, { headers }));
   }
 

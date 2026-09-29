@@ -33,21 +33,23 @@ describe('experiment creation snapshot', () => {
   });
   it('preserves existing individual shares when lab sharing changes', async () => {
     const notebook={getWorkflowShares:vi.fn().mockResolvedValue({lab_ids:['lab-1'],user_ids:['42']}), updateWorkflowShares:vi.fn().mockResolvedValue({})};
-    const page=new LabExperimentsPageComponent(notebook as any,{} as any,{} as any,{detectChanges(){}} as any,{getMyLabs:vi.fn().mockResolvedValue([{id:'lab-1'},{id:'lab-2'}])} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);
+    const page=new LabExperimentsPageComponent(notebook as any,{} as any,{} as any,{detectChanges(){}} as any,{getMyLabs:vi.fn().mockResolvedValue([{id:'lab-1'},{id:'lab-2'}]),getAllUsers:vi.fn().mockResolvedValue([{id:'42',name:'A user'}])} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);
     page.loadExperiments=vi.fn().mockResolvedValue(undefined);
     await page.openSharing({id:'run'});
-    page.toggleSharingLab('lab-2');
+    page.changeSharingAccess({kind:'labs',id:'lab-2',permission:'view',checked:true});
     await page.saveSharing();
-    expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],[],['42']);
+    expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],[],['42'],[]);
     expect(page.loadExperiments).toHaveBeenCalled();
   });
-  it('keeps each lab in only one permission group', () => {
+  it('keeps edit dependent on view', () => {
     const page=new LabExperimentsPageComponent({} as any,{} as any,{} as any,{detectChanges(){}} as any,{} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);
     page.sharingLabIds=['lab-1'];
-    page.sharingPermissionTab='edit';
-    page.toggleSharingLab('lab-1');
-    expect(page.sharingLabIds).toEqual([]);
+    page.changeSharingAccess({kind:'labs',id:'lab-1',permission:'edit',checked:true});
+    expect(page.sharingLabIds).toEqual(['lab-1']);
     expect(page.sharingEditLabIds).toEqual(['lab-1']);
+    page.changeSharingAccess({kind:'labs',id:'lab-1',permission:'view',checked:false});
+    expect(page.sharingLabIds).toEqual([]);
+    expect(page.sharingEditLabIds).toEqual([]);
   });
   it('shows owner and shared state for an experiment shared with a lab', () => {
     const page=new LabExperimentsPageComponent({} as any,{} as any,{} as any,{detectChanges(){}} as any,{} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);

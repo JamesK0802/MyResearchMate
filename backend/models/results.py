@@ -26,6 +26,7 @@ class CrisprResultInDB(CrisprResultBase):
     shared_by_name: Optional[str] = None
     lab_name: Optional[str] = None
     shared_with_labs: Optional[List[str]] = None
+    shared_with_users: Optional[List[str]] = None
 
     class Config:
         from_attributes = True
@@ -38,4 +39,6 @@ class ResultShare(BaseModel):
     created_at: datetime
 
 class ResultShareUpdate(BaseModel):
-    lab_ids: List[str]
+    lab_ids: List[str] = Field(default_factory=list)
+    view_lab_ids: List[str] = Field(default_factory=list)
+    view_user_ids: List[str] = Field(default_factory=list)

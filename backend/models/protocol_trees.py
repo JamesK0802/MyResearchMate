@@ -22,6 +22,7 @@ class ProtocolTreeInDB(ProtocolTreeCreate):
     is_shared: Optional[bool] = False
     shared_by_name: Optional[str] = None
     shared_with_labs: Optional[List[str]] = None
+    shared_with_users: Optional[List[str]] = None
     share_access: Optional[str] = None
     can_edit: bool = False
 

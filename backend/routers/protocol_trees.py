@@ -7,6 +7,7 @@ from database.db import get_db
 from database.models import ProtocolTree, ProtocolTreeShare, Lab, LabMember, User
 from models.protocol_trees import ProtocolTreeCreate, ProtocolTreeUpdate, ProtocolTreeInDB
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy import or_
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/protocol-trees", tags=["protocol-trees"])
@@ -25,11 +26,9 @@ def access_for_tree(tree: ProtocolTree, db: Session, current_user: dict) -> str 
     if tree.owner_user_id == current_user["id"]:
         return "owner"
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    if not lab_ids:
-        return None
     levels = [row[0] for row in db.query(ProtocolTreeShare.access_level).filter(
         ProtocolTreeShare.protocol_tree_id == tree.id,
-        ProtocolTreeShare.lab_id.in_(lab_ids),
+        or_(ProtocolTreeShare.lab_id.in_(lab_ids) if lab_ids else False, ProtocolTreeShare.shared_with_user_id == current_user["id"]),
     ).all()]
     if "edit" in levels:
         return "edit"
@@ -42,7 +41,9 @@ def attach_share_metadata(tree: ProtocolTree, db: Session, current_user: dict):
     ).filter(ProtocolTreeShare.protocol_tree_id == tree.id).all()
     hydrate_tree(tree)
     tree.shared_with_labs = [item.Lab.lab_name for item in shares]
-    tree.is_shared = bool(shares)
+    user_shares = db.query(ProtocolTreeShare, User).join(User, ProtocolTreeShare.shared_with_user_id == User.id).filter(ProtocolTreeShare.protocol_tree_id == tree.id).all()
+    tree.shared_with_users = [item.User.name or item.User.email for item in user_shares]
+    tree.is_shared = bool(shares or user_shares)
     tree.share_access = access_for_tree(tree, db, current_user)
     tree.can_edit = tree.share_access in ("owner", "edit")
     return tree
@@ -68,15 +69,13 @@ async def create_protocol_tree(
 def owner_trees(db: Session, current_user: dict):
     return db.query(ProtocolTree).filter(
         ProtocolTree.owner_user_id == current_user["id"]
-    ).order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
+    ).distinct().order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
 
 
 def shared_trees(db: Session, current_user: dict):
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    if not lab_ids:
-        return []
     return db.query(ProtocolTree).join(ProtocolTreeShare).filter(
-        ProtocolTreeShare.lab_id.in_(lab_ids),
+        or_(ProtocolTreeShare.lab_id.in_(lab_ids) if lab_ids else False, ProtocolTreeShare.shared_with_user_id == current_user["id"]),
         ProtocolTree.owner_user_id != current_user["id"],
     ).order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
 
@@ -147,8 +146,10 @@ async def get_protocol_tree_shares(tree_id: UUID, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="Not authorized")
     shares = db.query(ProtocolTreeShare).filter(ProtocolTreeShare.protocol_tree_id == tree_id).all()
     return {
-        "read_only_lab_ids": [str(share.lab_id) for share in shares if share.access_level != "edit"],
-        "edit_lab_ids": [str(share.lab_id) for share in shares if share.access_level == "edit"],
+        "view_lab_ids": [str(share.lab_id) for share in shares if share.lab_id],
+        "edit_lab_ids": [str(share.lab_id) for share in shares if share.lab_id and share.access_level == "edit"],
+        "view_user_ids": [str(share.shared_with_user_id) for share in shares if share.shared_with_user_id],
+        "edit_user_ids": [str(share.shared_with_user_id) for share in shares if share.shared_with_user_id and share.access_level == "edit"],
     }
 
 
@@ -158,16 +159,22 @@ async def update_protocol_tree_shares(tree_id: UUID, payload: dict, db: Session 
     if not tree:
         raise HTTPException(status_code=403, detail="Not authorized")
     db.query(ProtocolTreeShare).filter(ProtocolTreeShare.protocol_tree_id == tree_id).delete()
-    read_ids = payload.get("read_only_lab_ids", payload.get("lab_ids", []))
+    read_ids = payload.get("view_lab_ids", list(dict.fromkeys(payload.get("read_only_lab_ids", []) + payload.get("edit_lab_ids", []))))
     edit_ids = payload.get("edit_lab_ids", [])
-    for access_level, lab_ids in (("read", read_ids), ("edit", edit_ids)):
-        for lab_id in lab_ids:
-            if access_level == "read" and lab_id in edit_ids:
-                continue
-            try:
-                db.add(ProtocolTreeShare(protocol_tree_id=tree_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"], access_level=access_level))
-            except (ValueError, TypeError):
-                continue
+    for lab_id in read_ids:
+        try:
+            db.add(ProtocolTreeShare(protocol_tree_id=tree_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"], access_level="edit" if lab_id in edit_ids else "read"))
+        except (ValueError, TypeError):
+            continue
+    view_user_ids = payload.get("view_user_ids", [])
+    edit_user_ids = {str(item) for item in payload.get("edit_user_ids", [])}
+    for user_id in view_user_ids:
+        try:
+            target_id = int(user_id)
+            if target_id != current_user["id"]:
+                db.add(ProtocolTreeShare(protocol_tree_id=tree_id, shared_with_user_id=target_id, shared_by_user_id=current_user["id"], access_level="edit" if str(user_id) in edit_user_ids else "read"))
+        except (ValueError, TypeError):
+            continue
     db.commit()
     return {"message": "Shares updated successfully"}
 

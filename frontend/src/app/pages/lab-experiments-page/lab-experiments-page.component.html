@@ -97,12 +97,7 @@
     <h2>Share {{sharingExperiment.title}}</h2>
     <p *ngIf="sharingBusy">Loading…</p>
     <p *ngIf="sharingError" role="alert" class="create-error">{{sharingError}}</p>
-    <div class="share-permission-tabs" *ngIf="!sharingBusy" role="tablist"><button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab='read'">Read only <span>{{sharingLabIds.length}}</span></button><button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab='edit'">Edit <span>{{sharingEditLabIds.length}}</span></button></div>
-    <p class="share-permission-help" *ngIf="!sharingBusy">{{sharingPermissionTab === 'read' ? 'Can review the log, but cannot update it.' : 'Can add notes and update the original log.'}}</p>
-    <div class="branch-options" *ngIf="!sharingBusy">
-      <label *ngFor="let lab of sharingLabs"><input type="checkbox" [checked]="isSharingLabSelected(''+lab.id)" [disabled]="!!lab.archive_deletion_at || !!sharingError" (change)="toggleSharingLab(''+lab.id)"><span>{{lab.name || lab.lab_name}}{{lab.archive_deletion_at ? ' — unavailable' : ''}}</span></label>
-    </div>
-    <p *ngIf="!sharingBusy && !sharingError && !sharingLabs.length">No labs available to share with.</p>
+    <app-share-access-matrix *ngIf="!sharingBusy" [labs]="sharingLabs" [users]="sharingUsers" [viewLabIds]="sharingLabIds" [editLabIds]="sharingEditLabIds" [viewUserIds]="sharingUserIds" [editUserIds]="sharingEditUserIds" (change)="changeSharingAccess($event)"></app-share-access-matrix>
     <div class="form-actions"><button class="secondary-action" [disabled]="sharingBusy" (click)="sharingExperiment=null">Cancel</button><button class="primary-action" [disabled]="sharingBusy || !!sharingError" (click)="saveSharing()">Save</button></div>
   </section>
 </div>

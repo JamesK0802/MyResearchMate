@@ -9,11 +9,12 @@ import { AuthService } from '../../services/auth.service';
 import { LabService } from '../../services/lab.service';
 import { PlotProjectRecord, PlotProjectService } from '../../services/plot-project.service';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
+import { ShareAccessMatrixComponent } from '../../components/share-access-matrix.component';
 
 @Component({
   selector: 'app-plot-projects-page',
   standalone: true,
-  imports: [MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent],
+  imports: [MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, ShareAccessMatrixComponent],
   template: `
     <app-my-data-page>
       <app-my-data-header title="R-Plot Studio"></app-my-data-header>
@@ -25,7 +26,7 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
           [badges]="getCardBadges(project)" [meta]="['📅 ' + ((project.updated_at || project.created_at) | date:'mediumDate'), '📈 ' + getPlotCount(project) + ' Plot' + (getPlotCount(project) === 1 ? '' : 's')]"
           [shared]="!!project.is_shared" [readOnly]="!isOwner(project) && !project.can_edit" primaryLabel="Open Plot" [showShare]="isOwner(project)" [showDelete]="isOwner(project)"
           (open)="open(project)" (share)="openShare(project)" (remove)="remove(project)">
-          <div card-content *ngIf="project.is_shared" class="sharing-info">{{isOwner(project) ? 'Shared with: ' + (project.shared_with_labs || []).join(', ') : 'Shared by: ' + (project.shared_by_name || 'Lab member')}}</div>
+          <div card-content *ngIf="project.is_shared" class="sharing-info">{{isOwner(project) ? 'Shared with: ' + sharingTargets(project) : 'Shared by: ' + (project.shared_by_name || 'Lab member')}}</div>
         </app-my-data-card>
       </app-my-data-grid>
       <div *ngIf="!loading && !projects.length" class="empty-state"><div class="empty-icon">📁</div><h3>No R-Plot Studio projects found</h3><p>Save an R-Plot Studio project to keep its data, layout, and R script together.</p><button *ngIf="activeTab !== 'shared'" class="btn-primary" (click)="createNew()">Open R-Plot Studio</button></div>
@@ -34,19 +35,8 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
         <div class="modal-content" (click)="$event.stopPropagation()">
           <div class="modal-header"><h2>Share Plot Project</h2><button class="close-btn" (click)="closeShare()">×</button></div>
           <div class="modal-body">
-            <p class="modal-sub">Select the labs you want to share "<strong>{{ sharingProject.title }}</strong>" with.</p>
-            <div class="permission-tabs" role="tablist" aria-label="Sharing permission"><button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab='read'">Read only <span>{{selectedLabIds.length}}</span></button><button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab='edit'">Edit <span>{{selectedEditLabIds.length}}</span></button></div>
-            <p class="permission-help">{{sharingPermissionTab === 'read' ? 'Can open and copy, but cannot update the original.' : 'Can edit and update the original for everyone.'}}</p>
-            <div *ngIf="myLabs.length === 0" class="no-labs-warning">You don't belong to any labs yet. Please register or join a lab first.</div>
-            <div class="labs-list">
-              <div *ngFor="let lab of myLabs" class="lab-item">
-                <label class="checkbox-container">
-                  <input type="checkbox" [checked]="isSelectedLab(lab.id)" (change)="toggleLab(lab.id)">
-                  <span class="checkmark"></span>
-                  <div class="lab-info"><span class="lab-name">{{ lab.lab_name }}</span><span class="lab-role">{{ (lab.my_role || lab.role_in_lab) | titlecase }}</span></div>
-                </label>
-              </div>
-            </div>
+            <p class="modal-sub">Choose who can view or edit "<strong>{{ sharingProject.title }}</strong>".</p>
+            <app-share-access-matrix [labs]="myLabs" [users]="shareUsers" [viewLabIds]="selectedLabIds" [editLabIds]="selectedEditLabIds" [viewUserIds]="selectedUserIds" [editUserIds]="selectedEditUserIds" (change)="changeAccess($event)"></app-share-access-matrix>
           </div>
           <div class="modal-footer"><button class="btn-cancel" (click)="closeShare()">Cancel</button><button class="btn-save-share" (click)="saveShare()">Update Sharing</button></div>
         </div>
@@ -67,7 +57,7 @@ import { MyDataHeaderComponent } from '../../components/my-data-header.component
   `]
 })
 export class PlotProjectsPageComponent implements OnInit {
-  projects: PlotProjectRecord[] = []; loading = true; activeTab: 'all' | 'my' | 'shared' = 'all'; sharingProject: PlotProjectRecord | null = null; myLabs: any[] = []; selectedLabIds: string[] = []; selectedEditLabIds: string[] = []; sharingPermissionTab: 'read' | 'edit' = 'read';
+  projects: PlotProjectRecord[] = []; loading = true; activeTab: 'all' | 'my' | 'shared' = 'all'; sharingProject: PlotProjectRecord | null = null; myLabs: any[] = []; shareUsers:any[]=[]; selectedLabIds: string[] = []; selectedEditLabIds: string[] = []; selectedUserIds:string[]=[];selectedEditUserIds:string[]=[];
   viewMode: MyDataViewMode = readMyDataViewMode();
   constructor(private projectService: PlotProjectService, private router: Router, public auth: AuthService, private labs: LabService, private cdr: ChangeDetectorRef) {}
   ngOnInit() { void this.load(); }
@@ -79,11 +69,11 @@ export class PlotProjectsPageComponent implements OnInit {
     return [...(this.isOwner(project) ? [{label:'OWNER', tone:'owner' as const}] : []), ...(project.is_shared ? [{label:'SHARED', tone:'shared' as const}] : [])];
   }
   getPlotCount(project: PlotProjectRecord) { return project.project_json?.plots?.length || 1; }
+  sharingTargets(project:PlotProjectRecord){return [...(project.shared_with_labs||[]),...(project.shared_with_users||[])].join(', ');}
   createNew() { void this.router.navigate(['/tools/plot-generator']); } open(project: PlotProjectRecord) { this.projectService.queueOpen(project); void this.router.navigate(['/tools/plot-generator']); }
   async remove(project: PlotProjectRecord) { if (!confirm(`Delete "${project.title}"?`)) return; await this.projectService.delete(project.id); this.projects = this.projects.filter(item => item.id !== project.id); this.cdr.detectChanges(); }
-  async openShare(project: PlotProjectRecord) { if (this.auth.isDemo) { this.auth.notifyDemoUnavailable('Sharing saved My Data'); return; } this.sharingProject = project; const shares = await this.projectService.getShares(project.id); this.selectedLabIds = shares.read_only_lab_ids || []; this.selectedEditLabIds = shares.edit_lab_ids || []; this.sharingPermissionTab = 'read'; this.myLabs = await this.labs.getMyLabs(); this.cdr.detectChanges(); }
-  closeShare() { this.sharingProject = null; this.selectedLabIds = []; this.selectedEditLabIds = []; }
-  isSelectedLab(id:string) { return (this.sharingPermissionTab === 'edit' ? this.selectedEditLabIds : this.selectedLabIds).includes(id); }
-  toggleLab(id: string) { const selected = this.isSelectedLab(id); if (this.sharingPermissionTab === 'edit') { this.selectedEditLabIds = selected ? this.selectedEditLabIds.filter(item => item !== id) : [...this.selectedEditLabIds, id]; if (!selected) this.selectedLabIds = this.selectedLabIds.filter(item => item !== id); } else { this.selectedLabIds = selected ? this.selectedLabIds.filter(item => item !== id) : [...this.selectedLabIds, id]; if (!selected) this.selectedEditLabIds = this.selectedEditLabIds.filter(item => item !== id); } }
-  async saveShare() { if (!this.sharingProject) return; await this.projectService.updateShares(this.sharingProject.id, this.selectedLabIds, this.selectedEditLabIds); this.closeShare(); await this.load(); }
+  async openShare(project: PlotProjectRecord) { if (this.auth.isDemo) { this.auth.notifyDemoUnavailable('Sharing saved My Data'); return; } this.sharingProject = project; const [shares,labs,users]=await Promise.all([this.projectService.getShares(project.id),this.labs.getMyLabs(),this.labs.getAllUsers()]);this.myLabs=labs;this.shareUsers=users.filter(u=>String(u.id)!==String(this.auth.currentProfile?.id));this.selectedLabIds=shares.view_lab_ids||[];this.selectedEditLabIds=shares.edit_lab_ids||[];this.selectedUserIds=shares.view_user_ids||[];this.selectedEditUserIds=shares.edit_user_ids||[];this.cdr.detectChanges(); }
+  closeShare() { this.sharingProject = null; this.selectedLabIds=[];this.selectedEditLabIds=[];this.selectedUserIds=[];this.selectedEditUserIds=[]; }
+  changeAccess(e:{kind:'labs'|'users';id:string;permission:'view'|'edit';checked:boolean}){let view=e.kind==='labs'?this.selectedLabIds:this.selectedUserIds,edit=e.kind==='labs'?this.selectedEditLabIds:this.selectedEditUserIds;if(e.permission==='edit'){edit=e.checked?[...new Set([...edit,e.id])]:edit.filter(x=>x!==e.id);if(e.checked)view=[...new Set([...view,e.id])];}else{view=e.checked?[...new Set([...view,e.id])]:view.filter(x=>x!==e.id);if(!e.checked)edit=edit.filter(x=>x!==e.id);}if(e.kind==='labs'){this.selectedLabIds=view;this.selectedEditLabIds=edit;}else{this.selectedUserIds=view;this.selectedEditUserIds=edit;}}
+  async saveShare() { if (!this.sharingProject) return; await this.projectService.updateShares(this.sharingProject.id,{view_lab_ids:this.selectedLabIds,edit_lab_ids:this.selectedEditLabIds,view_user_ids:this.selectedUserIds,edit_user_ids:this.selectedEditUserIds});this.closeShare();await this.load(); }
 }

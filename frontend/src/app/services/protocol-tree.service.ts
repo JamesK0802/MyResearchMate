@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
 import { NamuDocument } from '../models/namu.model';
+import { ShareAccessSettings } from '../models/share-access.model';
 
 export interface ProtocolTreeRecord {
   id: string;
@@ -15,6 +16,7 @@ export interface ProtocolTreeRecord {
   is_shared?: boolean;
   shared_by_name?: string;
   shared_with_labs?: string[];
+  shared_with_users?: string[];
   share_access?: 'owner' | 'read' | 'edit';
   can_edit?: boolean;
 }
@@ -50,11 +52,11 @@ export class ProtocolTreeService {
     return firstValueFrom(this.http.delete(`${this.apiUrl}/${id}`, { headers: await this.headers() }));
   }
 
-  async getShares(id: string): Promise<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }> {
-    return firstValueFrom(this.http.get<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }>(`${this.apiUrl}/${id}/shares`, { headers: await this.headers() }));
+  async getShares(id: string): Promise<ShareAccessSettings> {
+    return firstValueFrom(this.http.get<ShareAccessSettings>(`${this.apiUrl}/${id}/shares`, { headers: await this.headers() }));
   }
 
-  async updateShares(id: string, readOnlyLabIds: string[], editLabIds: string[]) {
-    return firstValueFrom(this.http.put(`${this.apiUrl}/${id}/shares`, { read_only_lab_ids: readOnlyLabIds, edit_lab_ids: editLabIds }, { headers: await this.headers() }));
+  async updateShares(id: string, settings: ShareAccessSettings) {
+    return firstValueFrom(this.http.put(`${this.apiUrl}/${id}/shares`, settings, { headers: await this.headers() }));
   }
 }

@@ -7,6 +7,7 @@ from database.models import PcrPreset, User, PcrPresetTransfer, PcrPresetLabShar
 from pydantic import BaseModel
 import uuid
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy import or_
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/pcr-presets", tags=["pcr"])
@@ -142,6 +143,7 @@ def preset_data(preset: PcrPreset, db: Session, current_user: dict):
     shares = db.query(PcrPresetLabShare, Lab).join(Lab, PcrPresetLabShare.lab_id == Lab.id).filter(
         PcrPresetLabShare.preset_id == preset.id
     ).all()
+    user_shares = db.query(PcrPresetLabShare, User).join(User, PcrPresetLabShare.shared_with_user_id == User.id).filter(PcrPresetLabShare.preset_id == preset.id).all()
     return {
         "id": str(preset.id), "owner_user_id": preset.owner_user_id,
         "title": preset.name, "name": preset.name, "category": preset.category,
@@ -149,7 +151,8 @@ def preset_data(preset: PcrPreset, db: Session, current_user: dict):
         "components": preset.components_json or [], "defaultReactionVolume": preset_default_reaction_volume(preset),
         "allowedReactionVolumes": getattr(preset, "file_allowed_reaction_volumes", []),
         "created_at": preset.created_at, "updated_at": preset.updated_at,
-        "is_shared": bool(shares), "shared_with_labs": [share.Lab.lab_name for share in shares]
+        "is_shared": bool(shares or user_shares), "shared_with_labs": [share.Lab.lab_name for share in shares],
+        "shared_with_users": [share.User.name or share.User.email for share in user_shares]
     }
 
 def data_scope_presets(scope: str, db: Session, current_user: dict):
@@ -157,11 +160,9 @@ def data_scope_presets(scope: str, db: Session, current_user: dict):
     owner_id = current_user["id"]
     if scope == "shared":
         lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
-        if not lab_ids:
-            return []
         presets = db.query(PcrPreset).join(PcrPresetLabShare).filter(
-            PcrPresetLabShare.lab_id.in_(lab_ids), PcrPreset.owner_user_id != owner_id
-        ).all()
+            or_(PcrPresetLabShare.lab_id.in_(lab_ids) if lab_ids else False, PcrPresetLabShare.shared_with_user_id == owner_id), PcrPreset.owner_user_id != owner_id
+        ).distinct().all()
     else:
         owned = db.query(PcrPreset).filter((PcrPreset.owner_user_id == owner_id) | (PcrPreset.is_system == True)).all()
         if scope == "my":
@@ -169,8 +170,8 @@ def data_scope_presets(scope: str, db: Session, current_user: dict):
         else:
             lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
             shared = db.query(PcrPreset).join(PcrPresetLabShare).filter(
-                PcrPresetLabShare.lab_id.in_(lab_ids), PcrPreset.owner_user_id != owner_id
-            ).all() if lab_ids else []
+                or_(PcrPresetLabShare.lab_id.in_(lab_ids) if lab_ids else False, PcrPresetLabShare.shared_with_user_id == owner_id), PcrPreset.owner_user_id != owner_id
+            ).distinct().all()
             presets = owned + shared
     seen = set()
     result = []
@@ -193,7 +194,11 @@ async def list_data_presets(scope: str, db: Session = Depends(get_db), current_u
 
 @router.get("/data/{preset_id}/shares")
 async def get_data_preset_shares(preset_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    return [str(row.lab_id) for row in db.query(PcrPresetLabShare).filter(PcrPresetLabShare.preset_id == preset_id).all()]
+    preset = db.query(PcrPreset).filter(PcrPreset.id == preset_id, PcrPreset.owner_user_id == current_user["id"]).first()
+    if not preset:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    shares = db.query(PcrPresetLabShare).filter(PcrPresetLabShare.preset_id == preset_id).all()
+    return {"view_lab_ids": [str(row.lab_id) for row in shares if row.lab_id], "view_user_ids": [str(row.shared_with_user_id) for row in shares if row.shared_with_user_id]}
 
 @router.put("/data/{preset_id}/shares")
 async def update_data_preset_shares(preset_id: str, payload: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -201,9 +206,16 @@ async def update_data_preset_shares(preset_id: str, payload: dict, db: Session =
     if not preset:
         raise HTTPException(status_code=403, detail="Not authorized")
     db.query(PcrPresetLabShare).filter(PcrPresetLabShare.preset_id == preset.id).delete()
-    for lab_id in payload.get("lab_ids", []):
+    for lab_id in payload.get("view_lab_ids", payload.get("lab_ids", [])):
         try:
             db.add(PcrPresetLabShare(preset_id=preset.id, lab_id=uuid.UUID(lab_id), shared_by_user_id=current_user["id"]))
+        except (ValueError, TypeError):
+            continue
+    for user_id in payload.get("view_user_ids", []):
+        try:
+            target_id = int(user_id)
+            if target_id != current_user["id"]:
+                db.add(PcrPresetLabShare(preset_id=preset.id, shared_with_user_id=target_id, shared_by_user_id=current_user["id"]))
         except (ValueError, TypeError):
             continue
     db.commit()
@@ -248,11 +260,14 @@ async def list_presets(
 ):
     """Lists my presets, system presets, and incoming shared ones."""
     ensure_system_presets(db)
+    lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
+    shared_preset_ids = [row[0] for row in db.query(PcrPresetLabShare.preset_id).filter(or_(PcrPresetLabShare.lab_id.in_(lab_ids) if lab_ids else False, PcrPresetLabShare.shared_with_user_id == current_user["id"])).all()]
     # 1. Fetch system & user presets
     presets = db.query(PcrPreset).filter(
         (PcrPreset.owner_user_id == current_user["id"]) | 
         (PcrPreset.is_system == True) |
-        (PcrPreset.is_public == True)
+        (PcrPreset.is_public == True) |
+        (PcrPreset.id.in_(shared_preset_ids) if shared_preset_ids else False)
     ).order_by(PcrPreset.is_system.desc(), PcrPreset.created_at.desc()).all()
     
     # 2. Fetch incoming transfers

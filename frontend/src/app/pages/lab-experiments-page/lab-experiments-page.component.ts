@@ -15,6 +15,7 @@ import { experimentId, experimentRoute, planExperimentRoute } from '../../utils/
 import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readMyDataViewMode, saveMyDataViewMode } from '../../components/my-data-list.component';
 import { ActivatedRoute, Router } from '@angular/router';
 import { OverflowTooltipDirective } from '../../components/overflow-tooltip.directive';
+import { ShareAccessMatrixComponent } from '../../components/share-access-matrix.component';
 
 type ExperimentTab = 'current' | 'completed';
 type StepStatus = 'pending' | 'active' | 'completed' | 'skipped';
@@ -41,7 +42,7 @@ interface ExperimentStep {
 @Component({
   selector: 'app-lab-experiments-page',
   standalone: true,
-  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, OverflowTooltipDirective],
+  imports: [MyDataPageComponent, CommonModule, FormsModule, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, OverflowTooltipDirective, ShareAccessMatrixComponent],
   templateUrl: './lab-experiments-page.component.html',
   styleUrl: './lab-experiments-page.component.css'
 })
@@ -79,8 +80,9 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   sharingLabs:any[] = [];
   sharingLabIds:string[] = [];
   sharingEditLabIds:string[] = [];
-  sharingPermissionTab:'read'|'edit' = 'read';
   sharingUserIds:string[] = [];
+  sharingEditUserIds:string[] = [];
+  sharingUsers:any[] = [];
   sharingBusy = false;
   sharingError = '';
   private saveSubject = new Subject<any>();
@@ -359,18 +361,17 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     if (this.auth.isDemo) { this.auth.notifyDemoUnavailable('Sharing experiment logs'); return; }
     this.sharingExperiment=exp; this.sharingBusy=true; this.sharingError='';
     try {
-      const [labs,shares]=await Promise.all([this.labs.getMyLabs(),this.notebook.getWorkflowShares(exp.id)]);
-      this.sharingLabs=labs; this.sharingLabIds=[...(shares.read_only_lab_ids || shares.lab_ids || [])]; this.sharingEditLabIds=[...(shares.edit_lab_ids || [])]; this.sharingUserIds=[...shares.user_ids]; this.sharingPermissionTab='read';
+      const [labs,shares,users]=await Promise.all([this.labs.getMyLabs(),this.notebook.getWorkflowShares(exp.id),this.labs.getAllUsers()]);
+      this.sharingLabs=labs;this.sharingUsers=users.filter(u=>String(u.id)!==String(this.auth.currentProfile?.id));this.sharingLabIds=[...(shares.view_lab_ids||shares.lab_ids||[])];this.sharingEditLabIds=[...(shares.edit_lab_ids||[])];this.sharingUserIds=[...(shares.view_user_ids||shares.user_ids||[])];this.sharingEditUserIds=[...(shares.edit_user_ids||[])];
     } catch { this.sharingError='Could not load sharing settings. Close and try again.'; }
     finally {this.sharingBusy=false; this.cdr.detectChanges();}
   }
-  isSharingLabSelected(id:string) { return (this.sharingPermissionTab === 'edit' ? this.sharingEditLabIds : this.sharingLabIds).includes(id); }
-  toggleSharingLab(id:string) { const selected=this.isSharingLabSelected(id); if(this.sharingPermissionTab==='edit'){this.sharingEditLabIds=selected?this.sharingEditLabIds.filter(item=>item!==id):[...this.sharingEditLabIds,id];if(!selected)this.sharingLabIds=this.sharingLabIds.filter(item=>item!==id);}else{this.sharingLabIds=selected?this.sharingLabIds.filter(item=>item!==id):[...this.sharingLabIds,id];if(!selected)this.sharingEditLabIds=this.sharingEditLabIds.filter(item=>item!==id);} }
+  changeSharingAccess(e:{kind:'labs'|'users';id:string;permission:'view'|'edit';checked:boolean}){let view=e.kind==='labs'?this.sharingLabIds:this.sharingUserIds,edit=e.kind==='labs'?this.sharingEditLabIds:this.sharingEditUserIds;if(e.permission==='edit'){edit=e.checked?[...new Set([...edit,e.id])]:edit.filter(x=>x!==e.id);if(e.checked)view=[...new Set([...view,e.id])];}else{view=e.checked?[...new Set([...view,e.id])]:view.filter(x=>x!==e.id);if(!e.checked)edit=edit.filter(x=>x!==e.id);}if(e.kind==='labs'){this.sharingLabIds=view;this.sharingEditLabIds=edit;}else{this.sharingUserIds=view;this.sharingEditUserIds=edit;}}
   async saveSharing() {
     if (!this.sharingExperiment || this.sharingBusy || this.sharingError) return;
     this.sharingBusy=true;
     try {
-      await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingEditLabIds,this.sharingUserIds);
+      await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingEditLabIds,this.sharingUserIds,this.sharingEditUserIds);
       this.sharingExperiment=null;
       await this.loadExperiments();
     } catch { this.sharingError='Could not save sharing settings. Close and try again.'; }

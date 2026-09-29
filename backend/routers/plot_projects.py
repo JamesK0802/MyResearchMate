@@ -9,6 +9,7 @@ from database.db import get_db
 from database.models import PlotProject, PlotProjectShare, Lab, LabMember, User
 from models.plot_projects import PlotProjectCreate, PlotProjectInDB, PlotProjectUpdate
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy import or_
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 
@@ -28,11 +29,9 @@ def access_for_project(project: PlotProject, db: Session, current_user: dict) ->
     if project.owner_user_id == current_user["id"]:
         return "owner"
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    if not lab_ids:
-        return None
     levels = [row[0] for row in db.query(PlotProjectShare.access_level).filter(
         PlotProjectShare.plot_project_id == project.id,
-        PlotProjectShare.lab_id.in_(lab_ids),
+        or_(PlotProjectShare.lab_id.in_(lab_ids) if lab_ids else False, PlotProjectShare.shared_with_user_id == current_user["id"]),
     ).all()]
     if "edit" in levels:
         return "edit"
@@ -45,7 +44,9 @@ def attach_share_metadata(project: PlotProject, db: Session, current_user: dict)
     ).all()
     hydrate_project(project)
     project.shared_with_labs = [item.Lab.lab_name for item in shares]
-    project.is_shared = bool(shares)
+    user_shares = db.query(PlotProjectShare, User).join(User, PlotProjectShare.shared_with_user_id == User.id).filter(PlotProjectShare.plot_project_id == project.id).all()
+    project.shared_with_users = [item.User.name or item.User.email for item in user_shares]
+    project.is_shared = bool(shares or user_shares)
     project.share_access = access_for_project(project, db, current_user)
     project.can_edit = project.share_access in ("owner", "edit")
     return project
@@ -59,11 +60,9 @@ def owner_projects(db: Session, current_user: dict):
 
 def shared_projects(db: Session, current_user: dict):
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    if not lab_ids:
-        return []
     return db.query(PlotProject).join(PlotProjectShare).filter(
-        PlotProjectShare.lab_id.in_(lab_ids), PlotProject.owner_user_id != current_user["id"]
-    ).order_by(PlotProject.updated_at.desc(), PlotProject.created_at.desc()).all()
+        or_(PlotProjectShare.lab_id.in_(lab_ids) if lab_ids else False, PlotProjectShare.shared_with_user_id == current_user["id"]), PlotProject.owner_user_id != current_user["id"]
+    ).distinct().order_by(PlotProject.updated_at.desc(), PlotProject.created_at.desc()).all()
 
 
 @router.post("", response_model=PlotProjectInDB)
@@ -143,8 +142,10 @@ async def get_plot_project_shares(project_id: UUID, db: Session = Depends(get_db
         raise HTTPException(status_code=403, detail="Not authorized")
     shares = db.query(PlotProjectShare).filter(PlotProjectShare.plot_project_id == project_id).all()
     return {
-        "read_only_lab_ids": [str(share.lab_id) for share in shares if share.access_level != "edit"],
-        "edit_lab_ids": [str(share.lab_id) for share in shares if share.access_level == "edit"],
+        "view_lab_ids": [str(share.lab_id) for share in shares if share.lab_id],
+        "edit_lab_ids": [str(share.lab_id) for share in shares if share.lab_id and share.access_level == "edit"],
+        "view_user_ids": [str(share.shared_with_user_id) for share in shares if share.shared_with_user_id],
+        "edit_user_ids": [str(share.shared_with_user_id) for share in shares if share.shared_with_user_id and share.access_level == "edit"],
     }
 
 
@@ -154,16 +155,22 @@ async def update_plot_project_shares(project_id: UUID, payload: dict, db: Sessio
     if not project:
         raise HTTPException(status_code=403, detail="Not authorized")
     db.query(PlotProjectShare).filter(PlotProjectShare.plot_project_id == project_id).delete()
-    read_ids = payload.get("read_only_lab_ids", payload.get("lab_ids", []))
+    read_ids = payload.get("view_lab_ids", list(dict.fromkeys(payload.get("read_only_lab_ids", []) + payload.get("edit_lab_ids", []))))
     edit_ids = payload.get("edit_lab_ids", [])
-    for access_level, lab_ids in (("read", read_ids), ("edit", edit_ids)):
-        for lab_id in lab_ids:
-            if access_level == "read" and lab_id in edit_ids:
-                continue
-            try:
-                db.add(PlotProjectShare(plot_project_id=project_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"], access_level=access_level))
-            except (ValueError, TypeError):
-                continue
+    for lab_id in read_ids:
+        try:
+            db.add(PlotProjectShare(plot_project_id=project_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"], access_level="edit" if lab_id in edit_ids else "read"))
+        except (ValueError, TypeError):
+            continue
+    view_user_ids = payload.get("view_user_ids", [])
+    edit_user_ids = {str(item) for item in payload.get("edit_user_ids", [])}
+    for user_id in view_user_ids:
+        try:
+            target_id = int(user_id)
+            if target_id != current_user["id"]:
+                db.add(PlotProjectShare(plot_project_id=project_id, shared_with_user_id=target_id, shared_by_user_id=current_user["id"], access_level="edit" if str(user_id) in edit_user_ids else "read"))
+        except (ValueError, TypeError):
+            continue
     db.commit()
     return {"message": "Shares updated successfully"}
 

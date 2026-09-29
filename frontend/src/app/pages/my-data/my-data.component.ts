@@ -51,6 +51,7 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
                   <div *ngFor="let lab of res.shared_with_labs" class="lab-tag">
                     <span class="dot"></span> {{ lab }}
                   </div>
+                  <div *ngFor="let user of res.shared_with_users || []" class="lab-tag"><span class="dot"></span> {{ user }}</div>
                 </div>
               </div>
               
@@ -65,6 +66,7 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
                   <div *ngFor="let lab of res.shared_with_labs || []" class="lab-tag">
                     <span class="dot"></span> {{ lab }}
                   </div>
+                  <div *ngFor="let user of res.shared_with_users || []" class="lab-tag"><span class="dot"></span> {{ user }}</div>
                 </div>
               </div>
           </div>
@@ -86,32 +88,23 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
             <button class="close-btn" (click)="closeShareModal()">×</button>
           </div>
           <div class="modal-body">
-            <p class="modal-sub">Select the labs you want to share "<strong>{{ getItemTitle(sharingResult) }}</strong>" with.</p>
-
-            <div *ngIf="resource === 'protocol'" class="permission-tabs" role="tablist" aria-label="Sharing permission">
-              <button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab = 'read'">Read only <span>{{selectedLabIds.length}}</span></button>
-              <button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab = 'edit'">Edit <span>{{selectedEditLabIds.length}}</span></button>
+            <p class="modal-sub">Choose who can access "<strong>{{ getItemTitle(sharingResult) }}</strong>".</p>
+            <div class="permission-tabs" role="tablist" aria-label="Share with labs or users">
+              <button type="button" [class.active]="sharingTargetTab === 'labs'" (click)="sharingTargetTab = 'labs'">Labs <span>{{selectedLabIds.length}}</span></button>
+              <button type="button" [class.active]="sharingTargetTab === 'users'" (click)="sharingTargetTab = 'users'">Users <span>{{selectedUserIds.length}}</span></button>
             </div>
-            <p *ngIf="resource === 'protocol'" class="permission-help">{{sharingPermissionTab === 'read' ? 'Can open and copy, but cannot update the original.' : 'Can edit and update the original for everyone.'}}</p>
             
-            <div *ngIf="myLabs.length === 0" class="no-labs-warning">
+            <div *ngIf="sharingTargetTab === 'labs' && myLabs.length === 0" class="no-labs-warning">
               You don't belong to any labs yet. Please register or join a lab first.
             </div>
 
-            <div class="labs-list">
-              <div *ngFor="let lab of myLabs" class="lab-item" [class.lab-unavailable]="isLabUnavailable(lab)">
-                <label class="checkbox-container">
-                  <input type="checkbox" 
-                         [checked]="isLabSelected(lab.id)"
-                         [disabled]="isLabUnavailable(lab)"
-                         (change)="toggleLabShare(lab.id)">
-                  <span class="checkmark"></span>
-                  <div class="lab-info">
-                    <span class="lab-name">{{ lab.lab_name }}</span>
-                    <span class="lab-role">{{ (lab.my_role || lab.role_in_lab) | titlecase }}</span>
-                    <span *ngIf="isLabUnavailable(lab)" class="lab-deletion-status">Deletion scheduled — sharing unavailable</span>
-                  </div>
-                </label>
+            <div *ngIf="sharingTargetTab === 'users' && shareUsers.length === 0" class="no-labs-warning">No other users are available.</div>
+            <div class="share-matrix" [class.view-only]="resource !== 'protocol'">
+              <div class="share-matrix-head"><span></span><span>View</span><span *ngIf="resource === 'protocol'">Edit</span></div>
+              <div *ngFor="let item of sharingTargetTab === 'labs' ? myLabs : shareUsers" class="share-matrix-row" [class.lab-unavailable]="sharingTargetTab === 'labs' && isLabUnavailable(item)">
+                <div class="share-subject"><strong>{{sharingTargetTab === 'labs' ? item.lab_name : (item.name || item.email)}}</strong><small>{{sharingTargetTab === 'labs' ? ((item.my_role || item.role_in_lab) | titlecase) : item.email}}</small></div>
+                <input type="checkbox" aria-label="View access" [checked]="hasView(item.id, sharingTargetTab)" [disabled]="sharingTargetTab === 'labs' && isLabUnavailable(item)" (change)="toggleView(item.id, sharingTargetTab, $any($event.target).checked)">
+                <input *ngIf="resource === 'protocol'" type="checkbox" aria-label="Edit access" [checked]="hasEdit(item.id, sharingTargetTab)" [disabled]="sharingTargetTab === 'labs' && isLabUnavailable(item)" (change)="toggleEdit(item.id, sharingTargetTab, $any($event.target).checked)">
               </div>
             </div>
           </div>
@@ -195,6 +188,7 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
     .modal-sub { color: var(--color-text-secondary); margin-bottom: var(--space-6); font-size: var(--text-md); }
     .permission-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:-4px 0 8px;padding:4px;border:1px solid var(--color-border-light);border-radius:10px;background:var(--color-surface-alt)}
     .permission-tabs button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--color-text-secondary);font-weight:700;cursor:pointer}.permission-tabs button.active{background:var(--color-surface);color:var(--color-primary);box-shadow:var(--shadow-xs)}.permission-tabs span{margin-left:4px;font-size:.72rem;opacity:.7}.permission-help{margin:0 0 14px;color:var(--color-text-tertiary);font-size:var(--text-sm)}
+    .share-matrix{border:1px solid var(--color-border);border-radius:12px;overflow:hidden;max-height:300px;overflow-y:auto}.share-matrix-head,.share-matrix-row{display:grid;grid-template-columns:minmax(0,1fr) 64px 64px;align-items:center}.share-matrix.view-only .share-matrix-head,.share-matrix.view-only .share-matrix-row{grid-template-columns:minmax(0,1fr) 64px}.share-matrix-head{min-height:36px;background:var(--color-surface-alt);color:var(--color-text-secondary);font-size:.72rem;font-weight:800;text-align:center}.share-matrix-row{min-height:54px;padding:6px 0 6px 14px;border-top:1px solid var(--color-border-light)}.share-matrix-row input{width:18px;height:18px;justify-self:center;accent-color:var(--color-primary)}.share-subject{min-width:0;display:flex;flex-direction:column}.share-subject strong,.share-subject small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.share-subject small{color:var(--color-text-tertiary);font-size:.7rem;margin-top:2px}
     .labs-list { display: flex; flex-direction: column; gap: var(--space-3); max-height: 300px; overflow-y: auto; padding-right: var(--space-2); }
     .lab-item { padding: var(--space-4); border: 1.5px solid var(--color-border); border-radius: var(--radius-lg); transition: var(--transition-fast); }
     .lab-item:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
@@ -277,7 +271,10 @@ export class MyDataComponent implements OnInit {
   myLabs: any[] = [];
   selectedLabIds: string[] = [];
   selectedEditLabIds: string[] = [];
-  sharingPermissionTab: 'read' | 'edit' = 'read';
+  selectedUserIds: string[] = [];
+  selectedEditUserIds: string[] = [];
+  shareUsers: any[] = [];
+  sharingTargetTab: 'labs' | 'users' = 'labs';
   savingShares = false;
 
   constructor(
@@ -300,7 +297,10 @@ export class MyDataComponent implements OnInit {
     this.loadPinnedIds();
     await this.loadData();
     // Pre-load labs for sharing modal
-    if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
+    if (!this.auth.isDemo) {
+      [this.myLabs, this.shareUsers] = await Promise.all([this.labService.getMyLabs(), this.labService.getAllUsers()]);
+      this.shareUsers = this.shareUsers.filter(user => String(user.id) !== String(this.auth.currentProfile?.id));
+    }
     this.labService.labsChanged$.subscribe(async () => {
       if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
       if (this.sharingResult) this.selectedLabIds = this.selectedLabIds.filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
@@ -537,20 +537,19 @@ export class MyDataComponent implements OnInit {
     this.sharingResult = result;
     this.selectedLabIds = [];
     this.selectedEditLabIds = [];
-    this.sharingPermissionTab = 'read';
+    this.selectedUserIds = [];
+    this.selectedEditUserIds = [];
+    this.sharingTargetTab = 'labs';
     try {
       const shares = this.resource === 'protocol'
         ? await this.protocolTreeService.getShares(String(result.id || ''))
         : this.resource === 'pcr'
           ? await this.pcrPresetService.getDataPresetShares(result.id!)
           : await this.resultsService.getResultShares(String(result.id || ''));
-      // Backend returns string[] of lab_ids
-      if (this.resource === 'protocol' && !Array.isArray(shares)) {
-        this.selectedLabIds = (shares.read_only_lab_ids || []).filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
-        this.selectedEditLabIds = (shares.edit_lab_ids || []).filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
-      } else if (Array.isArray(shares)) {
-        this.selectedLabIds = shares.filter(id => typeof id === 'string' && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
-      }
+      this.selectedLabIds = (shares.view_lab_ids || []).map(String).filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === id)));
+      this.selectedEditLabIds = ((shares as any).edit_lab_ids || []).map(String);
+      this.selectedUserIds = (shares.view_user_ids || []).map(String);
+      this.selectedEditUserIds = ((shares as any).edit_user_ids || []).map(String);
     } catch (err) {
       console.error('Failed to load current shares', err);
     }
@@ -561,33 +560,18 @@ export class MyDataComponent implements OnInit {
     this.sharingResult = null;
     this.selectedLabIds = [];
     this.selectedEditLabIds = [];
+    this.selectedUserIds = [];
+    this.selectedEditUserIds = [];
   }
 
-  isLabSelected(labId: string): boolean {
-    if (!labId) return false;
-    const selected = this.resource === 'protocol' && this.sharingPermissionTab === 'edit' ? this.selectedEditLabIds : this.selectedLabIds;
-    const isSelected = selected.some(id => String(id) === String(labId));
-    return isSelected;
-  }
+  private arraysFor(kind: 'labs'|'users') { return kind === 'labs' ? {view:this.selectedLabIds, edit:this.selectedEditLabIds} : {view:this.selectedUserIds, edit:this.selectedEditUserIds}; }
+  hasView(id:any, kind:'labs'|'users') { return this.arraysFor(kind).view.includes(String(id)); }
+  hasEdit(id:any, kind:'labs'|'users') { return this.arraysFor(kind).edit.includes(String(id)); }
+  private setArrays(kind:'labs'|'users', view:string[], edit:string[]) { if(kind==='labs'){this.selectedLabIds=view;this.selectedEditLabIds=edit;}else{this.selectedUserIds=view;this.selectedEditUserIds=edit;} }
+  toggleView(id:any, kind:'labs'|'users', checked:boolean) { const key=String(id), a=this.arraysFor(kind); this.setArrays(kind, checked?[...new Set([...a.view,key])]:a.view.filter(x=>x!==key), checked?a.edit:a.edit.filter(x=>x!==key)); }
+  toggleEdit(id:any, kind:'labs'|'users', checked:boolean) { const key=String(id), a=this.arraysFor(kind); this.setArrays(kind, checked?[...new Set([...a.view,key])]:a.view, checked?[...new Set([...a.edit,key])]:a.edit.filter(x=>x!==key)); }
 
   isLabUnavailable(lab: any): boolean { return !!lab?.archive_deletion_at; }
-
-  toggleLabShare(labId: string) {
-    if (!labId) return;
-    if (this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(labId)))) return;
-    if (this.resource === 'protocol' && this.sharingPermissionTab === 'edit') {
-      if (this.isLabSelected(labId)) this.selectedEditLabIds = this.selectedEditLabIds.filter(id => id !== labId);
-      else {
-        this.selectedEditLabIds.push(labId);
-        this.selectedLabIds = this.selectedLabIds.filter(id => id !== labId);
-      }
-    } else if (this.isLabSelected(labId)) {
-      this.selectedLabIds = this.selectedLabIds.filter(id => id !== labId);
-    } else {
-      this.selectedLabIds.push(labId);
-      if (this.resource === 'protocol') this.selectedEditLabIds = this.selectedEditLabIds.filter(id => id !== labId);
-    }
-  }
 
   async saveSharing() {
     if (!this.sharingResult) return;
@@ -602,9 +586,9 @@ export class MyDataComponent implements OnInit {
     
     this.savingShares = true;
     try {
-      if (this.resource === 'protocol') await this.protocolTreeService.updateShares(String(this.sharingResult.id || ''), cleanLabIds, cleanEditLabIds);
-      else if (this.resource === 'pcr') await this.pcrPresetService.updateDataPresetShares(this.sharingResult.id!, cleanLabIds);
-      else await this.resultsService.updateResultShares(String(this.sharingResult.id || ''), cleanLabIds);
+      if (this.resource === 'protocol') await this.protocolTreeService.updateShares(String(this.sharingResult.id || ''), {view_lab_ids:cleanLabIds,edit_lab_ids:cleanEditLabIds,view_user_ids:this.selectedUserIds,edit_user_ids:this.selectedEditUserIds});
+      else if (this.resource === 'pcr') await this.pcrPresetService.updateDataPresetShares(this.sharingResult.id!, cleanLabIds, this.selectedUserIds);
+      else await this.resultsService.updateResultShares(String(this.sharingResult.id || ''), cleanLabIds, this.selectedUserIds);
       this.closeShareModal();
       await this.loadData();
     } catch (err) {

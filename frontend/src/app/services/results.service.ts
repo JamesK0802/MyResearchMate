@@ -16,6 +16,7 @@ export interface CrisprResult {
   shared_by_name?: string;
   lab_name?: string;
   shared_with_labs?: string[];
+  shared_with_users?: string[];
 }
 
 @Injectable({
@@ -80,17 +81,17 @@ export class ResultsService {
   }
 
   // --- Sharing ---
-  async getResultShares(id: string): Promise<any[]> {
+  async getResultShares(id: string): Promise<{ view_lab_ids: string[]; view_user_ids: string[] }> {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
-      this.http.get<any[]>(`${this.apiUrl}/${id}/shares`, { headers })
+      this.http.get<{ view_lab_ids: string[]; view_user_ids: string[] }>(`${this.apiUrl}/${id}/shares`, { headers })
     );
   }
 
-  async updateResultShares(id: string, labIds: string[]): Promise<any> {
+  async updateResultShares(id: string, labIds: string[], userIds: string[]): Promise<any> {
     const headers = await this.getAuthHeaders();
     return firstValueFrom(
-      this.http.put(`${this.apiUrl}/${id}/shares`, { lab_ids: labIds }, { headers })
+      this.http.put(`${this.apiUrl}/${id}/shares`, { view_lab_ids: labIds, view_user_ids: userIds }, { headers })
     );
   }
 

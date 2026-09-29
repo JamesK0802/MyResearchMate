@@ -8,11 +8,12 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
 import { PdfDocumentRecord, PdfDocumentService } from '../../services/pdf-document.service';
 import { AuthService } from '../../services/auth.service';
 import { LabService } from '../../services/lab.service';
+import { ShareAccessMatrixComponent } from '../../components/share-access-matrix.component';
 
 @Component({
   selector: 'app-pdf-documents-page',
   standalone: true,
-  imports: [CommonModule, MyDataPageComponent, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent],
+  imports: [CommonModule, MyDataPageComponent, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, ShareAccessMatrixComponent],
   template: `
     <app-my-data-page>
       <app-my-data-header title="PDF Editor (Beta)"></app-my-data-header>
@@ -26,7 +27,7 @@ import { LabService } from '../../services/lab.service';
           [badges]="badges(document)" [meta]="meta(document)" [viewMode]="viewMode" [shared]="!!document.is_shared" [readOnly]="!isOwner(document) && !document.can_edit"
           primaryLabel="Open PDF" [showDelete]="isOwner(document)" [showShare]="isOwner(document)" [showPin]="false"
           (open)="open(document)" (share)="openShare(document)" (remove)="remove(document)">
-          <div card-content *ngIf="document.is_shared" class="sharing-info">{{isOwner(document) ? 'Shared with: ' + (document.shared_with_labs || []).join(', ') : 'Shared by: ' + (document.shared_by_name || 'Lab member')}}</div>
+          <div card-content *ngIf="document.is_shared" class="sharing-info">{{isOwner(document) ? 'Shared with: ' + sharingTargets(document) : 'Shared by: ' + (document.shared_by_name || 'Lab member')}}</div>
         </app-my-data-card>
       </app-my-data-grid>
       <div class="empty" *ngIf="!loading && !documents.length">
@@ -39,10 +40,7 @@ import { LabService } from '../../services/lab.service';
           <header><h2>Share PDF Document</h2><button type="button" (click)="closeShare()" aria-label="Close">×</button></header>
           <div class="modal-body">
             <p>Choose who can read or edit “<strong>{{sharingDocument.title}}</strong>”.</p>
-            <div class="permission-tabs" role="tablist"><button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab='read'">Read only <span>{{selectedLabIds.length}}</span></button><button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab='edit'">Edit <span>{{selectedEditLabIds.length}}</span></button></div>
-            <small>{{sharingPermissionTab === 'read' ? 'Can open and save a copy, but cannot update the original.' : 'Can edit and update the original for everyone.'}}</small>
-            <div class="labs-list"><label *ngFor="let lab of myLabs" [class.disabled]="!!lab.archive_deletion_at"><input type="checkbox" [checked]="isSelectedLab(lab.id)" [disabled]="!!lab.archive_deletion_at" (change)="toggleLab(lab.id)"><span>{{lab.lab_name}}</span><em>{{(lab.my_role || lab.role_in_lab) | titlecase}}</em></label></div>
-            <p *ngIf="!myLabs.length" class="empty-labs">No labs available to share with.</p>
+            <app-share-access-matrix [labs]="myLabs" [users]="shareUsers" [viewLabIds]="selectedLabIds" [editLabIds]="selectedEditLabIds" [viewUserIds]="selectedUserIds" [editUserIds]="selectedEditUserIds" (change)="changeAccess($event)"></app-share-access-matrix>
           </div>
           <footer><button type="button" class="secondary" (click)="closeShare()">Cancel</button><button type="button" class="primary" [disabled]="savingShares" (click)="saveShare()">{{savingShares ? 'Saving…' : 'Update Sharing'}}</button></footer>
         </section>
@@ -66,7 +64,7 @@ export class PdfDocumentsPageComponent implements OnInit {
   myLabs: any[] = [];
   selectedLabIds: string[] = [];
   selectedEditLabIds: string[] = [];
-  sharingPermissionTab: 'read' | 'edit' = 'read';
+  shareUsers:any[]=[];selectedUserIds:string[]=[];selectedEditUserIds:string[]=[];
   savingShares = false;
   constructor(private service: PdfDocumentService, private router: Router, private cdr: ChangeDetectorRef, public auth: AuthService, private labs: LabService) {}
   async ngOnInit() { await this.load(); }
@@ -88,15 +86,15 @@ export class PdfDocumentsPageComponent implements OnInit {
   isOwner(document: PdfDocumentRecord) { return String(document.owner_user_id) === String(this.auth.currentProfile?.id); }
   badges(document: PdfDocumentRecord): any[] { return [...(this.isOwner(document) ? [{label:'OWNER',tone:'owner'}] : []), ...(document.is_shared ? [{label:'SHARED',tone:'shared'}] : [])]; }
   meta(document: PdfDocumentRecord) { return [`📅 ${new Date(document.updated_at || document.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, '📄 PDF document']; }
+  sharingTargets(document:PdfDocumentRecord){return [...(document.shared_with_labs||[]),...(document.shared_with_users||[])].join(', ');}
   open(document: PdfDocumentRecord) { this.router.navigate(['/tools/pdf-editor'], { queryParams: { document: document.id } }); }
   newDocument() { this.router.navigate(['/tools/pdf-editor']); }
   async remove(document: PdfDocumentRecord) {
     if (!confirm(`Delete “${document.title}”?`)) return;
     await this.service.delete(document.id); await this.load();
   }
-  async openShare(document: PdfDocumentRecord) { this.sharingDocument = document; this.sharingPermissionTab = 'read'; const [shares, labs] = await Promise.all([this.service.getShares(document.id), this.labs.getMyLabs()]); this.selectedLabIds = shares.read_only_lab_ids || []; this.selectedEditLabIds = shares.edit_lab_ids || []; this.myLabs = labs; this.cdr.detectChanges(); }
-  closeShare() { this.sharingDocument = null; this.selectedLabIds = []; this.selectedEditLabIds = []; }
-  isSelectedLab(id:string) { return (this.sharingPermissionTab === 'edit' ? this.selectedEditLabIds : this.selectedLabIds).includes(String(id)); }
-  toggleLab(id:string) { id=String(id); const selected=this.isSelectedLab(id); if(this.sharingPermissionTab==='edit'){this.selectedEditLabIds=selected?this.selectedEditLabIds.filter(item=>item!==id):[...this.selectedEditLabIds,id];if(!selected)this.selectedLabIds=this.selectedLabIds.filter(item=>item!==id);}else{this.selectedLabIds=selected?this.selectedLabIds.filter(item=>item!==id):[...this.selectedLabIds,id];if(!selected)this.selectedEditLabIds=this.selectedEditLabIds.filter(item=>item!==id);} }
-  async saveShare() { if(!this.sharingDocument)return;this.savingShares=true;try{await this.service.updateShares(this.sharingDocument.id,this.selectedLabIds,this.selectedEditLabIds);this.closeShare();await this.load();}finally{this.savingShares=false;this.cdr.detectChanges();} }
+  async openShare(document: PdfDocumentRecord) { this.sharingDocument=document;const [shares,labs,users]=await Promise.all([this.service.getShares(document.id),this.labs.getMyLabs(),this.labs.getAllUsers()]);this.myLabs=labs;this.shareUsers=users.filter(u=>String(u.id)!==String(this.auth.currentProfile?.id));this.selectedLabIds=shares.view_lab_ids||[];this.selectedEditLabIds=shares.edit_lab_ids||[];this.selectedUserIds=shares.view_user_ids||[];this.selectedEditUserIds=shares.edit_user_ids||[];this.cdr.detectChanges(); }
+  closeShare(){this.sharingDocument=null;this.selectedLabIds=[];this.selectedEditLabIds=[];this.selectedUserIds=[];this.selectedEditUserIds=[];}
+  changeAccess(e:{kind:'labs'|'users';id:string;permission:'view'|'edit';checked:boolean}){let view=e.kind==='labs'?this.selectedLabIds:this.selectedUserIds,edit=e.kind==='labs'?this.selectedEditLabIds:this.selectedEditUserIds;if(e.permission==='edit'){edit=e.checked?[...new Set([...edit,e.id])]:edit.filter(x=>x!==e.id);if(e.checked)view=[...new Set([...view,e.id])];}else{view=e.checked?[...new Set([...view,e.id])]:view.filter(x=>x!==e.id);if(!e.checked)edit=edit.filter(x=>x!==e.id);}if(e.kind==='labs'){this.selectedLabIds=view;this.selectedEditLabIds=edit;}else{this.selectedUserIds=view;this.selectedEditUserIds=edit;}}
+  async saveShare(){if(!this.sharingDocument)return;this.savingShares=true;try{await this.service.updateShares(this.sharingDocument.id,{view_lab_ids:this.selectedLabIds,edit_lab_ids:this.selectedEditLabIds,view_user_ids:this.selectedUserIds,edit_user_ids:this.selectedEditUserIds});this.closeShare();await this.load();}finally{this.savingShares=false;this.cdr.detectChanges();}}
 }

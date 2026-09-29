@@ -38,6 +38,7 @@ export interface PCRPreset {
   is_shared?: boolean;
   shared_by_name?: string;
   shared_with_labs?: string[];
+  shared_with_users?: string[];
 }
 
 @Injectable({
@@ -138,12 +139,12 @@ export class PcrPresetService {
     return firstValueFrom(this.http.get<PCRPreset[]>(`${this.apiUrl}/data/${scope}`, { headers: await this.getHeaders() }));
   }
 
-  async getDataPresetShares(id: string): Promise<string[]> {
-    return firstValueFrom(this.http.get<string[]>(`${this.apiUrl}/data/${id}/shares`, { headers: await this.getHeaders() }));
+  async getDataPresetShares(id: string): Promise<{ view_lab_ids: string[]; view_user_ids: string[] }> {
+    return firstValueFrom(this.http.get<{ view_lab_ids: string[]; view_user_ids: string[] }>(`${this.apiUrl}/data/${id}/shares`, { headers: await this.getHeaders() }));
   }
 
-  async updateDataPresetShares(id: string, labIds: string[]): Promise<any> {
-    return firstValueFrom(this.http.put(`${this.apiUrl}/data/${id}/shares`, { lab_ids: labIds }, { headers: await this.getHeaders() }));
+  async updateDataPresetShares(id: string, labIds: string[], userIds: string[]): Promise<any> {
+    return firstValueFrom(this.http.put(`${this.apiUrl}/data/${id}/shares`, { view_lab_ids: labIds, view_user_ids: userIds }, { headers: await this.getHeaders() }));
   }
 
   openPresetInCalculator(id: string) { this.pendingOpenPresetId = id; }

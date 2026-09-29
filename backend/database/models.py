@@ -125,7 +125,8 @@ class CrisprResultShare(Base):
     __tablename__ = "crispr_result_shares"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     result_id = Column(UUID(as_uuid=True), ForeignKey("crispr_results.id", ondelete="CASCADE"))
-    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -143,7 +144,8 @@ class ProtocolTreeShare(Base):
     __tablename__ = "protocol_tree_shares"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     protocol_tree_id = Column(UUID(as_uuid=True), ForeignKey("protocol_trees.id", ondelete="CASCADE"))
-    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -162,7 +164,8 @@ class PlotProjectShare(Base):
     __tablename__ = "plot_project_shares"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     plot_project_id = Column(UUID(as_uuid=True), ForeignKey("plot_projects.id", ondelete="CASCADE"))
-    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -211,7 +214,8 @@ class PcrPresetLabShare(Base):
     __tablename__ = "pcr_preset_lab_shares"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     preset_id = Column(UUID(as_uuid=True), ForeignKey("pcr_presets.id", ondelete="CASCADE"))
-    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -299,7 +303,28 @@ class PdfDocumentShare(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     owner_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=False)
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=True)
+    shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PdfDocument(Base):
+    __tablename__ = "pdf_documents"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    document_json = Column(JSON, nullable=False, default=dict)
+    storage_path = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class PdfSignature(Base):
+    __tablename__ = "pdf_signatures"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    storage_path = Column(Text, nullable=False)
+    mime_type = Column(String, nullable=False, default="image/png")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
