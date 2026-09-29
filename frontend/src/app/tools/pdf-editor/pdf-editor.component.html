@@ -11,23 +11,26 @@
 
       <div class="title-block">
         <span class="app-badge app-badge-green">PDF Editor (Beta)</span>
-        <h1 class="document-title" [title]="fileName">{{ fileName }}</h1>
+        <button type="button" class="document-title" [attr.aria-expanded]="showTitlePopover" (click)="showTitlePopover = !showTitlePopover">{{ fileName }}</button>
+        <div class="title-popover" *ngIf="showTitlePopover">
+          <strong>{{ fileName }}</strong>
+          <button type="button" (click)="renameDocumentTitle()">Rename</button>
+        </div>
       </div>
+    </div>
 
-      <div class="doc-actions-group">
-        <!-- Open (New / Replace) -->
-        <label class="app-btn app-btn-secondary app-btn-xs upload-btn" title="Open PDF, Word (.docx), or Images (Replaces current document)">
-          <span>📂 Open</span>
-          <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onOpenFilesSelected($event)" style="display: none;" />
-        </label>
+    <div class="doc-actions-group">
+      <!-- Open (New / Replace) -->
+      <label class="app-btn app-btn-secondary app-btn-xs upload-btn" title="Open PDF, Word (.docx), or Images (Replaces current document)">
+        <span>📂 Open</span>
+        <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onOpenFilesSelected($event)" style="display: none;" />
+      </label>
 
-        <!-- Add files to the current document -->
-        <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add PDF, Word (.docx), or images to the current document">
-          <span>＋ Add File</span>
-          <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
-        </label>
-
-      </div>
+      <!-- Add files to the current document -->
+      <label class="app-btn app-btn-primary-subtle app-btn-xs upload-btn merge-btn" title="Add PDF, Word (.docx), or images to the current document">
+        <span>＋ Add File</span>
+        <input type="file" accept=".pdf,.docx,image/*" multiple (change)="onMergeFilesSelected($event)" style="display: none;" />
+      </label>
     </div>
 
     <!-- Mode Switcher: View / Organize vs Single Page Edit -->
@@ -325,7 +328,8 @@
                     class="annotation-canvas"
                     (pointerdown)="onPointerDownCanvas($event)"
                     (pointermove)="onPointerMoveCanvas($event)"
-                    (pointerup)="onPointerUpCanvas()"
+                    (pointerup)="onPointerUpCanvas($event)"
+                    (pointercancel)="onPointerUpCanvas($event)"
                     (dblclick)="editSelectedText()"></canvas>
           </div>
 

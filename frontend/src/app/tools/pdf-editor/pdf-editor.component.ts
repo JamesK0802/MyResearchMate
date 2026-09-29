@@ -117,6 +117,20 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   // Mobile Drawer State
   isMobileSidebarOpen: boolean = false;
+  showTitlePopover = false;
+
+  // Multi-touch canvas zoom state
+  private canvasPointers = new Map<number, { x: number; y: number }>();
+  private suppressedCanvasPointers = new Set<number>();
+  private isPinchingCanvas = false;
+  private pinchStartDistance = 0;
+  private pinchStartZoom = 1;
+  private pinchPageX = 0;
+  private pinchPageY = 0;
+  private pinchClientX = 0;
+  private pinchClientY = 0;
+  private pinchFrame: number | null = null;
+  private pendingPinchZoom = 1;
 
   // View / Edit Settings & Zoom
   zoom: number = 1.0;
@@ -236,6 +250,14 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   closeMobileSidebar() {
     this.isMobileSidebarOpen = false;
+  }
+
+  renameDocumentTitle() {
+    const current = this.fileName.replace(/\.pdf$/i, '');
+    const next = prompt('Document name', current)?.trim();
+    if (!next) return;
+    this.fileName = `${next.replace(/\.pdf$/i, '')}.pdf`;
+    this.showTitlePopover = false;
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -913,7 +935,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.cdr.detectChanges();
   }
 
-  renderAnnotationCanvas() {
+  renderAnnotationCanvas(showSelection: boolean = true) {
     if (!this.activePage || !this.annotationCanvasRef) return;
     const page = this.activePage;
     const canvas = this.annotationCanvasRef.nativeElement;
@@ -934,7 +956,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
     // Render annotations
     for (const ann of page.annotations) {
-      this.drawSingleAnnotation(ctx, ann, ann.id === this.selectedAnnotationId);
+      this.drawSingleAnnotation(ctx, ann, showSelection && ann.id === this.selectedAnnotationId);
     }
 
     // Render preview shape while drawing
@@ -1135,6 +1157,26 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   onPointerDownCanvas(event: PointerEvent) {
     if (!this.activePage || !this.annotationCanvasRef) return;
     const canvas = this.annotationCanvasRef.nativeElement;
+    if (event.pointerType === 'touch') {
+      event.preventDefault();
+      canvas.setPointerCapture?.(event.pointerId);
+      this.canvasPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (this.canvasPointers.size === 2) {
+        this.isPinchingCanvas = true;
+        for (const pointerId of this.canvasPointers.keys()) this.suppressedCanvasPointers.add(pointerId);
+        this.pinchStartDistance = this.canvasPointerDistance();
+        this.pinchStartZoom = this.zoom;
+        const midpoint = this.canvasPointerMidpoint();
+        const pageRect = canvas.getBoundingClientRect();
+        this.pinchClientX = midpoint.x;
+        this.pinchClientY = midpoint.y;
+        this.pinchPageX = (midpoint.x - pageRect.left) / this.zoom;
+        this.pinchPageY = (midpoint.y - pageRect.top) / this.zoom;
+        this.cancelCanvasInteraction();
+        return;
+      }
+      if (this.isPinchingCanvas) return;
+    }
     const rect = canvas.getBoundingClientRect();
     const scale = this.activePage.width / rect.width;
 
@@ -1231,6 +1273,19 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   onPointerMoveCanvas(event: PointerEvent) {
     if (!this.activePage || !this.annotationCanvasRef) return;
+    if (event.pointerType === 'touch' && this.canvasPointers.has(event.pointerId)) {
+      event.preventDefault();
+      this.canvasPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (this.isPinchingCanvas && this.canvasPointers.size >= 2) {
+        const distance = this.canvasPointerDistance();
+        const midpoint = this.canvasPointerMidpoint();
+        this.pinchClientX = midpoint.x;
+        this.pinchClientY = midpoint.y;
+        if (this.pinchStartDistance > 0) this.queuePinchZoom(this.pinchStartZoom * distance / this.pinchStartDistance);
+        return;
+      }
+      if (this.isPinchingCanvas || this.suppressedCanvasPointers.has(event.pointerId)) return;
+    }
     const canvas = this.annotationCanvasRef.nativeElement;
     const rect = canvas.getBoundingClientRect();
     const scale = this.activePage.width / rect.width;
@@ -1326,7 +1381,20 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     }
   }
 
-  onPointerUpCanvas() {
+  onPointerUpCanvas(event?: PointerEvent) {
+    if (event?.pointerType === 'touch') {
+      const wasSuppressed = this.suppressedCanvasPointers.has(event.pointerId);
+      this.canvasPointers.delete(event.pointerId);
+      this.suppressedCanvasPointers.delete(event.pointerId);
+      if (this.isPinchingCanvas || wasSuppressed) {
+        if (this.canvasPointers.size === 0) {
+          this.isPinchingCanvas = false;
+          this.suppressedCanvasPointers.clear();
+          void this.renderActivePage();
+        }
+        return;
+      }
+    }
     if (this.activeTool === 'eraser' && this.isDrawing) {
       this.isDrawing = false;
       if (this.eraserChanged) {
@@ -1378,6 +1446,55 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       this.renderAnnotationCanvas();
       this.refreshActiveThumbnail();
     }
+  }
+
+  private canvasPointerDistance(): number {
+    const points = [...this.canvasPointers.values()];
+    if (points.length < 2) return 0;
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+  }
+
+  private canvasPointerMidpoint(): { x: number; y: number } {
+    const points = [...this.canvasPointers.values()];
+    if (points.length < 2) return points[0] || { x: 0, y: 0 };
+    return { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 };
+  }
+
+  private cancelCanvasInteraction() {
+    this.isDrawing = false;
+    this.isResizing = false;
+    this.resizeHandle = null;
+    this.isDraggingAnnotation = false;
+    this.previewShape = null;
+    this.currentPoints = [];
+    this.renderAnnotationCanvas();
+  }
+
+  private queuePinchZoom(value: number) {
+    this.pendingPinchZoom = Math.max(0.25, Math.min(3, value));
+    if (this.pinchFrame !== null) return;
+    this.pinchFrame = requestAnimationFrame(() => {
+      this.pinchFrame = null;
+      this.zoom = Math.round(this.pendingPinchZoom * 100) / 100;
+      const page = this.activePage;
+      const base = this.pageCanvasRef?.nativeElement;
+      const annotations = this.annotationCanvasRef?.nativeElement;
+      if (page && base && annotations) {
+        const width = `${page.width * this.zoom}px`;
+        const height = `${page.height * this.zoom}px`;
+        base.style.width = width;
+        base.style.height = height;
+        annotations.style.width = width;
+        annotations.style.height = height;
+      }
+      this.cdr.detectChanges();
+      const viewport = this.canvasViewportRef?.nativeElement;
+      if (viewport && base) {
+        const pageRect = base.getBoundingClientRect();
+        viewport.scrollLeft += pageRect.left + this.pinchPageX * this.zoom - this.pinchClientX;
+        viewport.scrollTop += pageRect.top + this.pinchPageY * this.zoom - this.pinchClientY;
+      }
+    });
   }
 
   private snapLineDelta(width: number, height: number): { width: number; height: number } {
@@ -1663,6 +1780,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     const annotations = this.annotationCanvasRef?.nativeElement;
     if (!page || !base || !annotations || !base.width || !base.height) return;
     requestAnimationFrame(() => {
+      this.renderAnnotationCanvas(false);
       const thumbnail = document.createElement('canvas');
       thumbnail.width = 140;
       thumbnail.height = 198;
@@ -1673,6 +1791,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       ctx.drawImage(base, 0, 0, thumbnail.width, thumbnail.height);
       ctx.drawImage(annotations, 0, 0, thumbnail.width, thumbnail.height);
       page.thumbnailUrl = thumbnail.toDataURL('image/jpeg', 0.88);
+      this.renderAnnotationCanvas();
       this.cdr.detectChanges();
     });
   }
