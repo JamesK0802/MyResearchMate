@@ -1245,11 +1245,17 @@
   .organize-actions .app-btn { width:100%; min-width:0; min-height:44px; }
 
   .organize-grid {
-    grid-template-columns: repeat(2, 1fr);
+    /* `1fr` has an automatic minimum width. On an odd final page the
+       neighbouring Add blank card then made the two tracks resolve to
+       different sizes. Allow each track to shrink evenly instead. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
   .grid-page-card {
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
     padding: 6px;
   }
 
@@ -1259,9 +1265,15 @@
   }
 
   .grid-add-card {
-    width: auto;
+    /* Keep the Add tile inside its own grid track. With width:auto plus an
+       aspect ratio, stretch-derived height could calculate a wider box and
+       overflow beside the final odd-numbered page. */
+    width:100%;
+    min-width:0;
     height: auto;
     min-height: 0;
+    align-self:start;
+    box-sizing:border-box;
     aspect-ratio: 1 / 1.4142;
   }
 }
