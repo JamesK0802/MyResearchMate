@@ -367,7 +367,7 @@
   </div>
 
   <!-- HIDDEN IMAGE INPUT -->
-  <input #imageInput type="file" accept="image/*" (change)="onImageInserted($event)" style="display: none;" />
+  <input #imageInput type="file" accept="image/*" (change)="onImageInserted($event)" (cancel)="setTool('select')" style="display: none;" />
 
   <!-- ═══ SIGNATURE MODAL ═══ -->
   <div class="app-modal-overlay" *ngIf="showSignatureModal" (click)="closeSignatureModal()">
@@ -382,7 +382,7 @@
       <div class="app-modal-body">
         <div class="signature-source-actions">
           <label class="app-btn app-btn-secondary app-btn-sm">
-            Upload signature photo
+            Upload photo
             <input #signatureImageInput type="file" accept="image/*" (change)="onSignatureImageSelected($event)" hidden>
           </label>
           <button *ngIf="auth.isLoggedIn && !auth.isDemo" type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="saveCurrentSignature()">Save signature</button>

@@ -1284,6 +1284,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       };
       this.activePage.annotations.push(newText);
       this.selectedAnnotationId = newText.id;
+      this.activeTool = 'select';
       this.isDrawing = false;
       this.saveHistory();
       this.renderAnnotationCanvas();
@@ -1446,6 +1447,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.isDrawing = false;
 
     if (this.previewShape) {
+      let createdAnnotation: AnnotationItem | null = null;
       if (this.activeTool === 'pen' || this.activeTool === 'highlight') {
         if (this.currentPoints.length > 1) {
           const newAnn: AnnotationItem = {
@@ -1461,17 +1463,24 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
             strokeOpacity: this.activeTool === 'highlight' ? 0.35 : 1.0
           };
           this.activePage.annotations.push(newAnn);
+          createdAnnotation = newAnn;
         }
       } else {
         if (Math.abs(this.previewShape.width) > 3 || Math.abs(this.previewShape.height) > 3) {
-          this.activePage.annotations.push({
+          const newAnn: AnnotationItem = {
             ...this.previewShape,
             id: `shape-${Date.now()}`
-          });
+          };
+          this.activePage.annotations.push(newAnn);
+          createdAnnotation = newAnn;
         }
       }
       this.previewShape = null;
       this.currentPoints = [];
+      if (createdAnnotation) {
+        this.selectedAnnotationId = createdAnnotation.id;
+        this.activeTool = 'select';
+      }
       this.saveHistory();
       this.renderAnnotationCanvas();
       this.refreshActiveThumbnail();
@@ -1651,6 +1660,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
           };
           this.activePage.annotations.push(newImg);
           this.selectedAnnotationId = newImg.id;
+          this.activeTool = 'select';
           this.saveHistory();
           this.renderAnnotationCanvas();
           this.refreshActiveThumbnail();
@@ -1678,6 +1688,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   closeSignatureModal() {
     this.showSignatureModal = false;
+    this.activeTool = 'select';
   }
 
   onSignPointerDown(event: PointerEvent) {
@@ -1734,6 +1745,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     };
     this.activePage.annotations.push(newSig);
     this.selectedAnnotationId = newSig.id;
+    this.activeTool = 'select';
     this.showSignatureModal = false;
     this.saveHistory();
     this.renderAnnotationCanvas();
