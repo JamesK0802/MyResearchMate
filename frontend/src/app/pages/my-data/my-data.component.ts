@@ -1,5 +1,5 @@
 import { MyDataPageComponent } from '../../components/my-data-page.component';
-import { Component, OnInit, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, NgZone, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ResultsService, CrisprResult } from '../../services/results.service';
@@ -13,6 +13,8 @@ import { PcrPresetService, PCRPreset } from '../../services/pcr-preset.service';
 import { MyDataHeaderComponent } from '../../components/my-data-header.component';
 import { MyDataCardBadge, MyDataCardComponent } from '../../components/my-data-card.component';
 import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readMyDataViewMode, saveMyDataViewMode } from '../../components/my-data-list.component';
+import { firstValueFrom, filter } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-my-data',
@@ -276,6 +278,7 @@ export class MyDataComponent implements OnInit {
   shareUsers: any[] = [];
   sharingTargetTab: 'labs' | 'users' = 'labs';
   savingShares = false;
+  private loadRequestId = 0;
 
   constructor(
     private resultsService: ResultsService, 
@@ -288,10 +291,12 @@ export class MyDataComponent implements OnInit {
     private state: AppStateService,
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private destroyRef: DestroyRef
   ) {}
 
   async ngOnInit() {
+    await firstValueFrom(this.auth.loading$.pipe(filter(loading => !loading)));
     const resource = this.route.snapshot.data['resource'];
     if (resource === 'protocol' || resource === 'pcr' || resource === 'crispr') this.resource = resource;
     this.loadPinnedIds();
@@ -301,7 +306,16 @@ export class MyDataComponent implements OnInit {
       [this.myLabs, this.shareUsers] = await Promise.all([this.labService.getMyLabs(), this.labService.getAllUsers()]);
       this.shareUsers = this.shareUsers.filter(user => String(user.id) !== String(this.auth.currentProfile?.id));
     }
-    this.labService.labsChanged$.subscribe(async () => {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(data => {
+      const next = data['resource'];
+      if ((next === 'protocol' || next === 'pcr' || next === 'crispr') && next !== this.resource) {
+        this.resource = next;
+        this.activeTab = 'all';
+        this.loadPinnedIds();
+        void this.loadData();
+      }
+    });
+    this.labService.labsChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(async () => {
       if (!this.auth.isDemo) this.myLabs = await this.labService.getMyLabs();
       if (this.sharingResult) this.selectedLabIds = this.selectedLabIds.filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
       this.cdr.detectChanges();
@@ -309,31 +323,34 @@ export class MyDataComponent implements OnInit {
   }
 
   async loadData() {
-    this.loading = true;
-    this.cdr.detectChanges();
+    const requestId = ++this.loadRequestId;
+    this.ngZone.run(() => { this.loading = true; this.cdr.detectChanges(); });
     try {
+      let results: Array<CrisprResult | ProtocolTreeRecord | PCRPreset>;
       if (this.auth.isDemo) {
-        this.allResults = this.getDemoItems();
-        this.applySorting();
-        return;
-      }
-      if (this.resource === 'protocol') {
-        this.allResults = await this.protocolTreeService.getTrees(this.activeTab);
+        results = this.getDemoItems();
+      } else if (this.resource === 'protocol') {
+        results = await this.protocolTreeService.getTrees(this.activeTab);
       } else if (this.resource === 'pcr') {
-        this.allResults = await this.pcrPresetService.getDataPresets(this.activeTab);
+        results = await this.pcrPresetService.getDataPresets(this.activeTab);
       } else if (this.activeTab === 'all') {
-        this.allResults = await this.resultsService.getAllResults();
+        results = await this.resultsService.getAllResults();
       } else if (this.activeTab === 'my') {
-        this.allResults = await this.resultsService.getMyResults();
+        results = await this.resultsService.getMyResults();
       } else {
-        this.allResults = await this.resultsService.getSharedResults();
+        results = await this.resultsService.getSharedResults();
       }
-      this.applySorting();
+      if (requestId !== this.loadRequestId) return;
+      this.ngZone.run(() => {
+        this.allResults = results;
+        this.applySorting();
+        this.loading = false;
+        this.cdr.detectChanges();
+      });
     } catch (err) {
       console.error('Failed to load results:', err);
     } finally {
-      this.loading = false;
-      this.cdr.detectChanges();
+      if (requestId === this.loadRequestId && this.loading) this.ngZone.run(() => { this.loading = false; this.cdr.detectChanges(); });
     }
   }
 

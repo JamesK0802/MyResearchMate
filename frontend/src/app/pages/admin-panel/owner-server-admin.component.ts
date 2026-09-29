@@ -43,6 +43,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   rootExpanded = true;
   dataTotalSize: number | null = null;
   tableSearch = '';
+  tableGroup = 'All';
   showEmptyTables = false;
   showLegacyTables = false;
   wrapCells = false;
@@ -63,9 +64,18 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
     return this.tables.filter(table =>
       (this.showLegacyTables || table.managed) &&
       (this.showEmptyTables || table.row_count > 0) &&
-      (!query || table.name.toLowerCase().includes(query))
+      (this.tableGroup === 'All' || table.group === this.tableGroup) &&
+      (!query || table.name.toLowerCase().includes(query) || table.display_name.toLowerCase().includes(query))
     );
   }
+  get tableGroups(): string[] {
+    const preferred = ['Research data', 'Access & sharing', 'People & labs', 'Storage & files', 'Booking', 'System & tools', 'Legacy'];
+    return preferred.filter(group => this.tables.some(table => table.group === group && (group !== 'Legacy' || this.showLegacyTables)));
+  }
+  get groupedTables(): Array<{name:string; tables:DatabaseTableSummary[]}> {
+    return this.tableGroups.map(name => ({name, tables:this.filteredTables.filter(table => table.group === name)})).filter(group => group.tables.length);
+  }
+  tableKindLabel(table: DatabaseTableSummary): string { return table.kind === 'relation' ? 'access' : table.kind === 'request' ? 'request' : table.kind === 'legacy' ? 'legacy' : 'data'; }
   get cleanupSelectionCount(): number {
     return this.selectedDataRoots.size + this.selectedLegacyTables.size + this.selectedLegacyColumns.size;
   }
@@ -263,7 +273,7 @@ export class OwnerServerAdminComponent implements OnInit, OnChanges {
   refreshDatabase(): void { void this.loadTables(); }
   toggleEmptyTables(): void { this.showEmptyTables = !this.showEmptyTables; this.ensureVisibleSelection(); }
   toggleLegacyTables(): void { this.showLegacyTables = !this.showLegacyTables; this.ensureVisibleSelection(); }
-  private ensureVisibleSelection(): void {
+  ensureVisibleSelection(): void {
     if (!this.filteredTables.some(table => table.name === this.selectedTable)) {
       const next = this.filteredTables[0];
       if (next) void this.selectTable(next.name);

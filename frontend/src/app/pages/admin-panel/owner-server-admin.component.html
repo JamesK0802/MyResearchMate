@@ -66,6 +66,7 @@
 
   <div class="database-toolbar">
     <input type="search" [(ngModel)]="tableSearch" placeholder="Find a table…" aria-label="Find a database table">
+    <select [(ngModel)]="tableGroup" (ngModelChange)="ensureVisibleSelection()" aria-label="Filter database tables by group"><option value="All">All groups</option><option *ngFor="let group of tableGroups" [value]="group">{{group}}</option></select>
     <button [class.active]="showEmptyTables" (click)="toggleEmptyTables()">{{ showEmptyTables ? 'Hide' : 'Show' }} empty ({{ emptyTableCount }})</button>
     <button [class.active]="showLegacyTables" (click)="toggleLegacyTables()">{{ showLegacyTables ? 'Hide' : 'Review' }} legacy ({{ legacyTableCount }})</button>
     <button [class.active]="wrapCells" (click)="wrapCells = !wrapCells">{{ wrapCells ? 'Clip' : 'Wrap' }} cells</button>
@@ -73,17 +74,20 @@
 
   <div class="database-layout">
     <aside class="table-list">
-      <label for="mobile-table">Table</label><select id="mobile-table" [(ngModel)]="selectedTable" (ngModelChange)="selectTable($event)"><option *ngFor="let table of filteredTables" [value]="table.name">{{ table.name }} ({{ table.row_count }})</option></select>
+      <label for="mobile-table">Table</label><select id="mobile-table" [(ngModel)]="selectedTable" (ngModelChange)="selectTable($event)"><option *ngFor="let table of filteredTables" [value]="table.name">{{ table.group }} · {{ table.display_name }} ({{ table.row_count }})</option></select>
       <div class="table-list-scroll">
-        <div class="table-option" *ngFor="let table of filteredTables" [class.active]="selectedTable === table.name" [class.legacy-table]="!table.managed">
-          <input *ngIf="!table.managed" type="checkbox" [checked]="selectedLegacyTables.has(table.name)" (change)="toggleLegacyTable(table)" [attr.aria-label]="'Select legacy table ' + table.name">
-          <button (click)="selectTable(table.name)"><span>{{ table.name }}</span><small>{{ table.row_count }}</small></button>
-        </div><p class="empty" *ngIf="!filteredTables.length">No tables match these filters.</p>
+        <ng-container *ngFor="let group of groupedTables">
+          <h3 class="table-group-title">{{group.name}} <span>{{group.tables.length}}</span></h3>
+          <div class="table-option" *ngFor="let table of group.tables" [class.active]="selectedTable === table.name" [class.legacy-table]="!table.managed">
+            <input *ngIf="!table.managed" type="checkbox" [checked]="selectedLegacyTables.has(table.name)" (change)="toggleLegacyTable(table)" [attr.aria-label]="'Select legacy table ' + table.name">
+            <button (click)="selectTable(table.name)"><span><strong>{{ table.display_name }}</strong><em>{{tableKindLabel(table)}}</em></span><small>{{ table.row_count }}</small></button>
+          </div>
+        </ng-container><p class="empty" *ngIf="!filteredTables.length">No tables match these filters.</p>
       </div>
     </aside>
 
     <section class="panel database-panel" *ngIf="preview" [class.is-loading]="databaseLoading">
-      <div class="panel-heading table-title"><div><span class="eyebrow">{{ tableSummary(preview.table)?.managed ? 'Application table' : 'Legacy table' }}</span><h2>{{ preview.table }}</h2></div><label class="select-current-table" *ngIf="tableSummary(preview.table) as currentTable"><input *ngIf="!currentTable.managed" type="checkbox" [checked]="selectedLegacyTables.has(currentTable.name)" (change)="toggleLegacyTable(currentTable)"><span *ngIf="!currentTable.managed">Remove table</span></label><strong class="row-count">{{ preview.total }} rows</strong></div>
+      <div class="panel-heading table-title"><div><span class="eyebrow">{{ tableSummary(preview.table)?.group || 'Database table' }}</span><h2>{{ tableSummary(preview.table)?.display_name || preview.table }} <small>{{preview.table}}</small></h2></div><label class="select-current-table" *ngIf="tableSummary(preview.table) as currentTable"><input *ngIf="!currentTable.managed" type="checkbox" [checked]="selectedLegacyTables.has(currentTable.name)" (change)="toggleLegacyTable(currentTable)"><span *ngIf="!currentTable.managed">Remove table</span></label><strong class="row-count">{{ preview.total }} rows</strong></div>
       <div class="column-chips"><label *ngFor="let column of tableSummary(preview.table)?.columns" [class.primary-key]="column.primary_key" [class.legacy-column]="!column.managed"><input *ngIf="!column.managed" type="checkbox" [checked]="selectedLegacyColumns.has(preview.table + '.' + column.name)" (change)="toggleLegacyColumn(preview.table, column.name)"><strong>{{ column.name }}</strong><span>{{ column.type }}</span><em *ngIf="!column.managed">legacy</em></label></div>
       <div class="data-scroll" [class.wrap-cells]="wrapCells"><table><thead><tr><th *ngFor="let column of preview.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of preview.rows"><td *ngFor="let column of preview.columns" [title]="displayCell(row[column])">{{ displayCell(row[column]) }}</td></tr></tbody></table><p class="empty" *ngIf="!preview.rows.length">This table has no rows.</p></div>
       <div class="pagination" *ngIf="preview.total > preview.limit"><button class="quiet" (click)="selectTable(preview.table, preview.offset - preview.limit)" [disabled]="preview.offset === 0">Previous</button><span>{{ preview.offset + 1 }}–{{ pageEnd() }} of {{ preview.total }}</span><button class="quiet" (click)="selectTable(preview.table, preview.offset + preview.limit)" [disabled]="preview.offset + preview.limit >= preview.total">Next</button></div>

@@ -15,6 +15,9 @@ export interface ServerDataEntry {
 
 export interface DatabaseTableSummary {
   name: string;
+  display_name: string;
+  group: string;
+  kind: 'entity' | 'relation' | 'request' | 'legacy';
   row_count: number;
   managed: boolean;
   columns: { name: string; type: string; nullable: boolean; primary_key: boolean; managed: boolean }[];

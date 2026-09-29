@@ -45,6 +45,21 @@ APP_TABLE_COLUMNS = {
 MANAGED_DATA_ROOTS = frozenset({"personal", "lab", "server-backups", "deployment-update"})
 
 
+def _database_table_group(name: str) -> tuple[str, str]:
+    """Return a stable UI group/kind using conventions so new tables classify themselves."""
+    if name.endswith("_shares") or name.endswith("_transfers"):
+        return "Access & sharing", "relation"
+    if name.startswith("facility_") or "booking" in name:
+        return "Booking", "entity"
+    if name.startswith("storage_") or name.startswith("sequence_workspace"):
+        return "Storage & files", "entity"
+    if name in {"users", "labs", "lab_members"} or name.startswith("lab_"):
+        return "People & labs", "request" if name.endswith("_requests") else "entity"
+    if any(token in name for token in ("result", "protocol", "project", "preset", "document", "signature", "workflow")):
+        return "Research data", "entity"
+    return "System & tools", "entity"
+
+
 def _start_operation(kind: str, label: str, stage: str) -> None:
     with _operation_lock:
         _operation_state.clear()
@@ -420,8 +435,12 @@ def list_database_tables(_owner: dict = Depends(require_owner)):
             count = connection.execute(select(func.count()).select_from(table)).scalar_one()
             columns = inspector.get_columns(name, schema="public")
             primary = set((inspector.get_pk_constraint(name, schema="public") or {}).get("constrained_columns") or [])
+            group, kind = _database_table_group(name)
             tables.append({
                 "name": name,
+                "display_name": name.replace("_", " ").title(),
+                "group": group if name in APP_TABLE_NAMES else "Legacy",
+                "kind": kind if name in APP_TABLE_NAMES else "legacy",
                 "row_count": count,
                 "managed": name in APP_TABLE_NAMES,
                 "columns": [{
