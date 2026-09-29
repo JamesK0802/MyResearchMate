@@ -34,8 +34,10 @@
 :host .btn-template-current:disabled { border-color: #cbd5e1; background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
 
 @media (max-width: 700px) {
-  :host .section-header .header-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  :host .btn-reference-scope { min-height: 34px; padding: 7px 5px; font-size: .72rem; }
+  :host .section-header .header-actions { width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  :host .section-header .header-actions > button { min-width: 0; min-height: 34px; padding: 7px 2px; font-size: .62rem; white-space: nowrap; }
+  :host .btn-reference-scope { min-height: 34px; padding: 7px 2px; font-size: .62rem; gap: 3px; }
+  :host .btn-reference-scope span { min-width: 14px; height: 14px; padding: 0 2px; font-size: .56rem; }
   :host .autofill-buttons { display: grid; grid-template-columns: 1fr 1fr; }
   :host .autofill-buttons .btn-template-upload,
   :host .autofill-buttons .btn-template-current { min-width: 0; padding: 9px 7px; font-size: .7rem; }
