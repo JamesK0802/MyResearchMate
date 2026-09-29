@@ -48,9 +48,9 @@ export class NamuStorageService {
   get currentMyDataRecordId(): string | null { return this.myDataRecordId; }
   get hasCopiedNode(): boolean { return !!this.copiedNode; }
 
-  loadSavedDocument(document: NamuDocument, title: string, recordId: string) {
+  loadSavedDocument(document: NamuDocument, title: string, recordId: string, canUpdate = true) {
     this.activeFileHandle = null;
-    this.myDataRecordId = recordId;
+    this.myDataRecordId = canUpdate ? recordId : null;
     this.openedFileName$.next(title);
     this.isFileLoaded$.next(true);
     const savedDocument = structuredClone(document);

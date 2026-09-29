@@ -15,6 +15,8 @@ export interface ProtocolTreeRecord {
   is_shared?: boolean;
   shared_by_name?: string;
   shared_with_labs?: string[];
+  share_access?: 'owner' | 'read' | 'edit';
+  can_edit?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -48,11 +50,11 @@ export class ProtocolTreeService {
     return firstValueFrom(this.http.delete(`${this.apiUrl}/${id}`, { headers: await this.headers() }));
   }
 
-  async getShares(id: string): Promise<string[]> {
-    return firstValueFrom(this.http.get<string[]>(`${this.apiUrl}/${id}/shares`, { headers: await this.headers() }));
+  async getShares(id: string): Promise<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }> {
+    return firstValueFrom(this.http.get<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }>(`${this.apiUrl}/${id}/shares`, { headers: await this.headers() }));
   }
 
-  async updateShares(id: string, labIds: string[]) {
-    return firstValueFrom(this.http.put(`${this.apiUrl}/${id}/shares`, { lab_ids: labIds }, { headers: await this.headers() }));
+  async updateShares(id: string, readOnlyLabIds: string[], editLabIds: string[]) {
+    return firstValueFrom(this.http.put(`${this.apiUrl}/${id}/shares`, { read_only_lab_ids: readOnlyLabIds, edit_lab_ids: editLabIds }, { headers: await this.headers() }));
   }
 }

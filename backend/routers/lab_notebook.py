@@ -90,6 +90,8 @@ class PresetTransferRequest(BaseModel):
 class WorkflowShareUpdate(BaseModel):
     workflow_type: str  # "active" or "archive"
     lab_ids: List[str] = Field(default_factory=list)
+    read_only_lab_ids: List[str] = Field(default_factory=list)
+    edit_lab_ids: List[str] = Field(default_factory=list)
     user_ids: List[str] = Field(default_factory=list)
 
 
@@ -187,6 +189,25 @@ def get_experiment_file_and_owner(exp_id: str, current_user: dict, db: Session, 
                 return shared_file, user_uid(owner)
                 
     return None, None
+
+
+def workflow_access(exp_id: str, current_user: dict, db: Session) -> str | None:
+    for directory in (EXP_ACTIVE_DIR, EXP_ARCHIVE_DIR):
+        own_file = personal_tool_dir(current_user, "lab-note", create=False) / directory / f"{exp_id}.json"
+        if own_file.exists():
+            return "owner"
+    lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
+    from sqlalchemy import or_
+    shares = db.query(WorkflowShare).filter(
+        WorkflowShare.workflow_id == exp_id,
+        or_(
+            WorkflowShare.lab_id.in_(lab_ids) if lab_ids else False,
+            WorkflowShare.shared_with_user_id == current_user["id"],
+        ),
+    ).all()
+    if any(share.access_level == "edit" for share in shares):
+        return "edit"
+    return "read" if shares else None
 
 def delete_asset_file(owner_key: Any, year: str, month: str, filename: str):
     file_path = PERSONAL_ROOT / safe_segment(owner_key) / "lab-note" / ASSETS_DIR / year / month / filename
@@ -511,6 +532,11 @@ async def get_shared_workflows(
             else:
                 data["shared_by_name"] = owner.name or owner.email or "Unknown Researcher"
             data["workflow_type"] = workflow_type
+            matching_shares = [candidate for candidate in shares if candidate.workflow_id == share.workflow_id and (
+                candidate.shared_with_user_id == current_user["id"] or candidate.lab_id in lab_ids
+            )]
+            data["share_access"] = "edit" if any(candidate.access_level == "edit" for candidate in matching_shares) else "read"
+            data["can_edit"] = data["share_access"] == "edit"
             
             # Fetch all lab names this workflow is shared with
             lab_shares_query = db.query(Lab.lab_name).join(
@@ -723,6 +749,8 @@ async def get_experiment(
         shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
         data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
         data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+        data["share_access"] = workflow_access(exp_id, current_user, db)
+        data["can_edit"] = data["share_access"] in ("owner", "edit")
         return data
         
     # Check archive
@@ -732,6 +760,8 @@ async def get_experiment(
         shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
         data["shared_lab_ids"] = [str(s.lab_id) for s in shares if s.lab_id]
         data["shared_user_ids"] = [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
+        data["share_access"] = workflow_access(exp_id, current_user, db)
+        data["can_edit"] = data["share_access"] in ("owner", "edit")
         return data
         
     raise HTTPException(status_code=404, detail="Experiment not found")
@@ -743,6 +773,8 @@ async def update_experiment(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if workflow_access(exp_id, current_user, db) not in ("owner", "edit"):
+        raise HTTPException(status_code=403, detail="This experiment is read-only")
     f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ACTIVE_DIR)
     if not f or not f.exists():
         raise HTTPException(status_code=404, detail="Active experiment not found or unauthorized")
@@ -843,6 +875,8 @@ async def archive_experiment(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if workflow_access(exp_id, current_user, db) not in ("owner", "edit"):
+        raise HTTPException(status_code=403, detail="This experiment is read-only")
     active_f, owner_id = get_experiment_file_and_owner(exp_id, current_user, db, EXP_ACTIVE_DIR)
     if not active_f or not active_f.exists():
         raise HTTPException(status_code=404, detail="Active experiment not found or unauthorized")
@@ -1099,9 +1133,15 @@ async def get_workflow_shares(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    active_path, _ = find_user_file(EXP_ACTIVE_DIR, current_user, f"{exp_id}.json")
+    archive_path, _ = find_user_file(EXP_ARCHIVE_DIR, current_user, f"{exp_id}.json")
+    if not active_path and not archive_path:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this workflow")
     shares = db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).all()
     return {
         "lab_ids": [str(s.lab_id) for s in shares if s.lab_id],
+        "read_only_lab_ids": [str(s.lab_id) for s in shares if s.lab_id and s.access_level != "edit"],
+        "edit_lab_ids": [str(s.lab_id) for s in shares if s.lab_id and s.access_level == "edit"],
         "user_ids": [str(s.shared_with_user_id) for s in shares if s.shared_with_user_id]
     }
 
@@ -1121,17 +1161,22 @@ async def update_workflow_shares(
     # Delete existing shares
     db.query(WorkflowShare).filter(WorkflowShare.workflow_id == exp_id).delete()
     
-    # Create new lab shares
-    for lab_id_str in payload.lab_ids:
-        try:
-            db.add(WorkflowShare(
-                workflow_id=exp_id,
-                workflow_type=payload.workflow_type,
-                lab_id=uuid.UUID(lab_id_str),
-                shared_by_user_id=current_user["id"]
-            ))
-        except Exception as e:
-            continue
+    # Create new lab shares. Older clients send lab_ids, which remain read-only.
+    read_ids = payload.read_only_lab_ids or payload.lab_ids
+    for access_level, lab_ids in (("read", read_ids), ("edit", payload.edit_lab_ids)):
+        for lab_id_str in lab_ids:
+            if access_level == "read" and lab_id_str in payload.edit_lab_ids:
+                continue
+            try:
+                db.add(WorkflowShare(
+                    workflow_id=exp_id,
+                    workflow_type=payload.workflow_type,
+                    lab_id=uuid.UUID(lab_id_str),
+                    shared_by_user_id=current_user["id"],
+                    access_level=access_level,
+                ))
+            except Exception:
+                continue
             
     # Create new individual user shares
     for user_id_str in payload.user_ids:
@@ -1140,7 +1185,8 @@ async def update_workflow_shares(
                 workflow_id=exp_id,
                 workflow_type=payload.workflow_type,
                 shared_with_user_id=int(user_id_str),
-                shared_by_user_id=current_user["id"]
+                shared_by_user_id=current_user["id"],
+                access_level="read",
             ))
         except Exception as e:
             continue

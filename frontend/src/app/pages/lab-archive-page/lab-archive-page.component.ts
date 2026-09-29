@@ -318,7 +318,7 @@ export class LabArchivePageComponent implements OnInit {
     if (!this.sharingExp) return;
     this.savingShares = true;
     try {
-      await this.labNotebookService.updateWorkflowShares(this.sharingExp.id, 'archive', this.sharedLabIds, this.sharedUserIds);
+      await this.labNotebookService.updateWorkflowShares(this.sharingExp.id, 'archive', this.sharedLabIds, [], this.sharedUserIds);
       this.closeShareModal();
       await this.loadData();
     } catch (e) {

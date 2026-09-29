@@ -158,6 +158,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   signaturePreviewUrl: string = '';
   savedSignatures: SavedSignature[] = [];
   currentDocumentId: string | null = null;
+  openedReadOnlyShare = false;
   isSavingDocument = false;
 
   // Undo / Redo History
@@ -184,6 +185,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     this.pages = [];
     this.sourcePdfDocs.clear();
     this.currentDocumentId = null;
+    this.openedReadOnlyShare = false;
     this.history = [];
     this.historyIndex = -1;
     this.addBlankPage();
@@ -1712,6 +1714,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       const record = this.currentDocumentId
         ? await this.pdfDocuments.update(this.currentDocumentId, title, document)
         : await this.pdfDocuments.save(title, document);
+      this.openedReadOnlyShare = false;
       this.currentDocumentId = record.id;
       this.fileName = `${title}.pdf`;
       void this.router.navigate([], { relativeTo: this.route, queryParams: { document: record.id }, replaceUrl: true });
@@ -1740,7 +1743,8 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
         this.sourcePdfDocs.set(source.id, { fileName: source.fileName, pdfBytes: bytes, pdfJsDoc });
       }
       if (!this.pages.length) this.addBlankPage();
-      this.currentDocumentId = record.id;
+      this.openedReadOnlyShare = record.can_edit === false;
+      this.currentDocumentId = this.openedReadOnlyShare ? null : record.id;
       this.activePageIndex = 0;
       this.activeMode = 'edit';
       this.history = [];

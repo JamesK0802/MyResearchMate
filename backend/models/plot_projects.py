@@ -23,6 +23,8 @@ class PlotProjectInDB(PlotProjectCreate):
     is_shared: bool = False
     shared_by_name: Optional[str] = None
     shared_with_labs: List[str] = Field(default_factory=list)
+    share_access: Optional[str] = None
+    can_edit: bool = False
 
     class Config:
         from_attributes = True

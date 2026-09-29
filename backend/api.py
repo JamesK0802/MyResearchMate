@@ -25,6 +25,8 @@ if multiprocessing.current_process().name == 'MainProcess':
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE workflow_shares ADD COLUMN IF NOT EXISTS shared_with_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE"))
             conn.execute(text("ALTER TABLE workflow_shares ALTER COLUMN lab_id DROP NOT NULL"))
+            for table_name in ("protocol_tree_shares", "plot_project_shares", "workflow_shares"):
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS access_level VARCHAR NOT NULL DEFAULT 'read'"))
             for table_name in ("crispr_results", "protocol_trees", "plot_projects", "pcr_presets", "sequence_workspace_files"):
                 conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS storage_path TEXT"))
             conn.execute(text("ALTER TABLE labs ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ"))

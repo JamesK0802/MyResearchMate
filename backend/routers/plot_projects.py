@@ -24,13 +24,30 @@ def hydrate_project(project: PlotProject):
     return project
 
 
-def attach_share_metadata(project: PlotProject, db: Session):
+def access_for_project(project: PlotProject, db: Session, current_user: dict) -> str | None:
+    if project.owner_user_id == current_user["id"]:
+        return "owner"
+    lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
+    if not lab_ids:
+        return None
+    levels = [row[0] for row in db.query(PlotProjectShare.access_level).filter(
+        PlotProjectShare.plot_project_id == project.id,
+        PlotProjectShare.lab_id.in_(lab_ids),
+    ).all()]
+    if "edit" in levels:
+        return "edit"
+    return "read" if levels else None
+
+
+def attach_share_metadata(project: PlotProject, db: Session, current_user: dict):
     shares = db.query(PlotProjectShare, Lab).join(Lab, PlotProjectShare.lab_id == Lab.id).filter(
         PlotProjectShare.plot_project_id == project.id
     ).all()
     hydrate_project(project)
     project.shared_with_labs = [item.Lab.lab_name for item in shares]
     project.is_shared = bool(shares)
+    project.share_access = access_for_project(project, db, current_user)
+    project.can_edit = project.share_access in ("owner", "edit")
     return project
 
 
@@ -59,19 +76,19 @@ async def create_plot_project(data: PlotProjectCreate, db: Session = Depends(get
     project.storage_path = relative_data_path(path)
     db.commit()
     db.refresh(project)
-    return attach_share_metadata(project, db)
+    return attach_share_metadata(project, db, current_user)
 
 
 @router.get("/my", response_model=List[PlotProjectInDB])
 async def list_my_plot_projects(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    return [attach_share_metadata(project, db) for project in owner_projects(db, current_user)]
+    return [attach_share_metadata(project, db, current_user) for project in owner_projects(db, current_user)]
 
 
 @router.get("/shared", response_model=List[PlotProjectInDB])
 async def list_shared_plot_projects(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     projects = shared_projects(db, current_user)
     for project in projects:
-        attach_share_metadata(project, db)
+        attach_share_metadata(project, db, current_user)
         owner = db.query(User).filter(User.id == project.owner_user_id).first()
         project.shared_by_name = owner.name if owner else None
     return projects
@@ -85,7 +102,7 @@ async def list_all_plot_projects(db: Session = Depends(get_db), current_user: di
         if project.id in seen:
             continue
         seen.add(project.id)
-        attach_share_metadata(project, db)
+        attach_share_metadata(project, db, current_user)
         if project.owner_user_id != current_user["id"]:
             owner = db.query(User).filter(User.id == project.owner_user_id).first()
             project.shared_by_name = owner.name if owner else None
@@ -95,17 +112,17 @@ async def list_all_plot_projects(db: Session = Depends(get_db), current_user: di
 
 @router.get("/{project_id}", response_model=PlotProjectInDB)
 async def get_plot_project(project_id: UUID, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    project = db.query(PlotProject).filter(PlotProject.id == project_id, PlotProject.owner_user_id == current_user["id"]).first()
-    if not project:
+    project = db.query(PlotProject).filter(PlotProject.id == project_id).first()
+    if not project or not access_for_project(project, db, current_user):
         raise HTTPException(status_code=404, detail="Plot project not found")
-    return attach_share_metadata(project, db)
+    return attach_share_metadata(project, db, current_user)
 
 
 @router.put("/{project_id}", response_model=PlotProjectInDB)
 async def update_plot_project(project_id: UUID, data: PlotProjectUpdate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    project = db.query(PlotProject).filter(PlotProject.id == project_id, PlotProject.owner_user_id == current_user["id"]).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Plot project not found")
+    project = db.query(PlotProject).filter(PlotProject.id == project_id).first()
+    if not project or access_for_project(project, db, current_user) not in ("owner", "edit"):
+        raise HTTPException(status_code=403, detail="Not authorized")
     hydrate_project(project)
     title = data.title if data.title is not None else project.title
     document = data.project_json if data.project_json is not None else project.project_json
@@ -116,7 +133,7 @@ async def update_plot_project(project_id: UUID, data: PlotProjectUpdate, db: Ses
     project.storage_path = relative_data_path(path)
     db.commit()
     db.refresh(project)
-    return attach_share_metadata(project, db)
+    return attach_share_metadata(project, db, current_user)
 
 
 @router.get("/{project_id}/shares")
@@ -124,7 +141,11 @@ async def get_plot_project_shares(project_id: UUID, db: Session = Depends(get_db
     project = db.query(PlotProject).filter(PlotProject.id == project_id, PlotProject.owner_user_id == current_user["id"]).first()
     if not project:
         raise HTTPException(status_code=403, detail="Not authorized")
-    return [str(share.lab_id) for share in db.query(PlotProjectShare).filter(PlotProjectShare.plot_project_id == project_id).all()]
+    shares = db.query(PlotProjectShare).filter(PlotProjectShare.plot_project_id == project_id).all()
+    return {
+        "read_only_lab_ids": [str(share.lab_id) for share in shares if share.access_level != "edit"],
+        "edit_lab_ids": [str(share.lab_id) for share in shares if share.access_level == "edit"],
+    }
 
 
 @router.put("/{project_id}/shares")
@@ -133,11 +154,16 @@ async def update_plot_project_shares(project_id: UUID, payload: dict, db: Sessio
     if not project:
         raise HTTPException(status_code=403, detail="Not authorized")
     db.query(PlotProjectShare).filter(PlotProjectShare.plot_project_id == project_id).delete()
-    for lab_id in payload.get("lab_ids", []):
-        try:
-            db.add(PlotProjectShare(plot_project_id=project_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"]))
-        except (ValueError, TypeError):
-            continue
+    read_ids = payload.get("read_only_lab_ids", payload.get("lab_ids", []))
+    edit_ids = payload.get("edit_lab_ids", [])
+    for access_level, lab_ids in (("read", read_ids), ("edit", edit_ids)):
+        for lab_id in lab_ids:
+            if access_level == "read" and lab_id in edit_ids:
+                continue
+            try:
+                db.add(PlotProjectShare(plot_project_id=project_id, lab_id=UUID(lab_id), shared_by_user_id=current_user["id"], access_level=access_level))
+            except (ValueError, TypeError):
+                continue
     db.commit()
     return {"message": "Shares updated successfully"}
 

@@ -23,6 +23,7 @@
   <app-my-data-grid *ngIf="!loading && displayExperiments.length" [viewMode]="viewMode">
     <app-my-data-card *ngFor="let exp of displayExperiments"
       [title]="exp.title" [badges]="cardBadges(exp)" [meta]="cardMeta(exp)" [shared]="isExperimentShared(exp)" [viewMode]="viewMode"
+      [readOnly]="!!exp._shared && !exp.can_edit"
       [syncLabel]="syncStates[exp.id] === 'error' ? 'Save failed' : ''" [syncError]="syncStates[exp.id] === 'error'"
       [primaryLabel]="activeTab === 'current' ? 'Continue' : 'Review'" [showShare]="!exp._shared" [showDelete]="!exp._shared"
       (open)="openExperiment(exp)" (share)="openSharing(exp)" (remove)="deleteExperiment(exp)">
@@ -48,7 +49,7 @@
   <section class="detail-panel" aria-label="Experiment log details">
     <header class="detail-header">
       <h2 [appOverflowTooltip]="selectedExperiment.title">{{selectedExperiment.title}}</h2>
-      <button *ngIf="activeTab === 'current'" class="primary-action complete-action" (click)="openCompletion(selectedExperiment)">Complete</button>
+      <button *ngIf="activeTab === 'current' && (!selectedExperiment._shared || selectedExperiment.can_edit)" class="primary-action complete-action" (click)="openCompletion(selectedExperiment)">Complete</button>
     </header>
     <div class="detail-body">
       <details class="experiment-meta">
@@ -72,7 +73,7 @@
         <article *ngFor="let step of routeSteps(selectedExperiment); let index=index" class="node-page">
           <div class="stage-title"><span>{{index+1}}</span><div><h3>{{step.title}}</h3></div></div>
           <section class="notes-section">
-          <textarea class="stage-notepad" [ngModel]="stageNote(selectedExperiment,step)" (ngModelChange)="updateStageNote(step,$event)" (input)="autoGrow($event)" (focus)="autoGrow($event)" [readonly]="activeTab !== 'current'" aria-label="Experiment notes" placeholder="Notes…"></textarea>
+          <textarea class="stage-notepad" [ngModel]="stageNote(selectedExperiment,step)" (ngModelChange)="updateStageNote(step,$event)" (input)="autoGrow($event)" (focus)="autoGrow($event)" [readonly]="activeTab !== 'current' || (!!selectedExperiment._shared && !selectedExperiment.can_edit)" aria-label="Experiment notes" placeholder="Notes…"></textarea>
           <div class="evidence-grid"><button *ngFor="let image of step.images" (click)="previewImageUrl=image"><img [src]="image" alt="Experiment evidence"></button></div>
           </section>
           <section class="node-instructions">
@@ -96,8 +97,10 @@
     <h2>Share {{sharingExperiment.title}}</h2>
     <p *ngIf="sharingBusy">Loading…</p>
     <p *ngIf="sharingError" role="alert" class="create-error">{{sharingError}}</p>
+    <div class="share-permission-tabs" *ngIf="!sharingBusy" role="tablist"><button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab='read'">Read only <span>{{sharingLabIds.length}}</span></button><button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab='edit'">Edit <span>{{sharingEditLabIds.length}}</span></button></div>
+    <p class="share-permission-help" *ngIf="!sharingBusy">{{sharingPermissionTab === 'read' ? 'Can review the log, but cannot update it.' : 'Can add notes and update the original log.'}}</p>
     <div class="branch-options" *ngIf="!sharingBusy">
-      <label *ngFor="let lab of sharingLabs"><input type="checkbox" [checked]="sharingLabIds.includes(''+lab.id)" [disabled]="!!lab.archive_deletion_at || !!sharingError" (change)="toggleSharingLab(''+lab.id)"><span>{{lab.name || lab.lab_name}}{{lab.archive_deletion_at ? ' — unavailable' : ''}}</span></label>
+      <label *ngFor="let lab of sharingLabs"><input type="checkbox" [checked]="isSharingLabSelected(''+lab.id)" [disabled]="!!lab.archive_deletion_at || !!sharingError" (change)="toggleSharingLab(''+lab.id)"><span>{{lab.name || lab.lab_name}}{{lab.archive_deletion_at ? ' — unavailable' : ''}}</span></label>
     </div>
     <p *ngIf="!sharingBusy && !sharingError && !sharingLabs.length">No labs available to share with.</p>
     <div class="form-actions"><button class="secondary-action" [disabled]="sharingBusy" (click)="sharingExperiment=null">Cancel</button><button class="primary-action" [disabled]="sharingBusy || !!sharingError" (click)="saveSharing()">Save</button></div>

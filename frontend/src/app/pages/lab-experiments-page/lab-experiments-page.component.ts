@@ -78,6 +78,8 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   sharingExperiment:any = null;
   sharingLabs:any[] = [];
   sharingLabIds:string[] = [];
+  sharingEditLabIds:string[] = [];
+  sharingPermissionTab:'read'|'edit' = 'read';
   sharingUserIds:string[] = [];
   sharingBusy = false;
   sharingError = '';
@@ -358,16 +360,17 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
     this.sharingExperiment=exp; this.sharingBusy=true; this.sharingError='';
     try {
       const [labs,shares]=await Promise.all([this.labs.getMyLabs(),this.notebook.getWorkflowShares(exp.id)]);
-      this.sharingLabs=labs; this.sharingLabIds=[...shares.lab_ids]; this.sharingUserIds=[...shares.user_ids];
+      this.sharingLabs=labs; this.sharingLabIds=[...(shares.read_only_lab_ids || shares.lab_ids || [])]; this.sharingEditLabIds=[...(shares.edit_lab_ids || [])]; this.sharingUserIds=[...shares.user_ids]; this.sharingPermissionTab='read';
     } catch { this.sharingError='Could not load sharing settings. Close and try again.'; }
     finally {this.sharingBusy=false; this.cdr.detectChanges();}
   }
-  toggleSharingLab(id:string) { this.sharingLabIds=this.sharingLabIds.includes(id) ? this.sharingLabIds.filter(item=>item!==id) : [...this.sharingLabIds,id]; }
+  isSharingLabSelected(id:string) { return (this.sharingPermissionTab === 'edit' ? this.sharingEditLabIds : this.sharingLabIds).includes(id); }
+  toggleSharingLab(id:string) { const selected=this.isSharingLabSelected(id); if(this.sharingPermissionTab==='edit'){this.sharingEditLabIds=selected?this.sharingEditLabIds.filter(item=>item!==id):[...this.sharingEditLabIds,id];if(!selected)this.sharingLabIds=this.sharingLabIds.filter(item=>item!==id);}else{this.sharingLabIds=selected?this.sharingLabIds.filter(item=>item!==id):[...this.sharingLabIds,id];if(!selected)this.sharingEditLabIds=this.sharingEditLabIds.filter(item=>item!==id);} }
   async saveSharing() {
     if (!this.sharingExperiment || this.sharingBusy || this.sharingError) return;
     this.sharingBusy=true;
     try {
-      await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingUserIds);
+      await this.notebook.updateWorkflowShares(this.sharingExperiment.id,this.activeTab === 'completed' ? 'archive':'active',this.sharingLabIds,this.sharingEditLabIds,this.sharingUserIds);
       this.sharingExperiment=null;
       await this.loadExperiments();
     } catch { this.sharingError='Could not save sharing settings. Close and try again.'; }
@@ -376,7 +379,7 @@ export class LabExperimentsPageComponent implements OnInit, OnDestroy {
   closeExperiment() { this.flushPendingSaves(); this.selectedExperiment = null; void this.router.navigate(['/data/experiment-logs']); }
 
   onExperimentChange(exp: any) {
-    if (this.activeTab === 'completed') return;
+    if (this.activeTab === 'completed' || (exp._shared && !exp.can_edit)) return;
     this.syncStates[exp.id] = 'saving';
     this.pendingSaves.set(exp.id, exp);
     this.saveSubject.next(exp);

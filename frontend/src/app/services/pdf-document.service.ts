@@ -11,7 +11,11 @@ export interface PdfDocumentRecord {
   updated_at: string;
   document_json?: Record<string, unknown>;
   owner_user_id?: string | number;
-  is_shared?: false;
+  is_shared?: boolean;
+  shared_by_name?: string;
+  shared_with_labs?: string[];
+  share_access?: 'owner' | 'read' | 'edit';
+  can_edit?: boolean;
 }
 
 export interface SavedSignature extends PdfDocumentRecord {
@@ -26,8 +30,8 @@ export class PdfDocumentService {
     const session = await this.auth.getSession();
     return new HttpHeaders({ Authorization: `Bearer ${session?.access_token}` });
   }
-  async list(): Promise<PdfDocumentRecord[]> {
-    return firstValueFrom(this.http.get<PdfDocumentRecord[]>(this.apiUrl, { headers: await this.headers() }));
+  async list(scope: 'all' | 'my' | 'shared' = 'all'): Promise<PdfDocumentRecord[]> {
+    return firstValueFrom(this.http.get<PdfDocumentRecord[]>(`${this.apiUrl}?scope=${scope}`, { headers: await this.headers() }));
   }
   async get(id: string): Promise<PdfDocumentRecord> {
     return firstValueFrom(this.http.get<PdfDocumentRecord>(`${this.apiUrl}/${id}`, { headers: await this.headers() }));
@@ -40,6 +44,12 @@ export class PdfDocumentService {
   }
   async delete(id: string) {
     return firstValueFrom(this.http.delete(`${this.apiUrl}/${id}`, { headers: await this.headers() }));
+  }
+  async getShares(id: string): Promise<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }> {
+    return firstValueFrom(this.http.get<{ read_only_lab_ids: string[]; edit_lab_ids: string[] }>(`${this.apiUrl}/${id}/shares`, { headers: await this.headers() }));
+  }
+  async updateShares(id: string, readOnlyLabIds: string[], editLabIds: string[]) {
+    return firstValueFrom(this.http.put(`${this.apiUrl}/${id}/shares`, { read_only_lab_ids: readOnlyLabIds, edit_lab_ids: editLabIds }, { headers: await this.headers() }));
   }
   async listSignatures(): Promise<SavedSignature[]> {
     return firstValueFrom(this.http.get<SavedSignature[]>(`${this.apiUrl}/signatures`, { headers: await this.headers() }));

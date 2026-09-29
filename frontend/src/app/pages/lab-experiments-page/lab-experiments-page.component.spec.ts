@@ -38,8 +38,16 @@ describe('experiment creation snapshot', () => {
     await page.openSharing({id:'run'});
     page.toggleSharingLab('lab-2');
     await page.saveSharing();
-    expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],['42']);
+    expect(notebook.updateWorkflowShares).toHaveBeenCalledWith('run','active',['lab-1','lab-2'],[],['42']);
     expect(page.loadExperiments).toHaveBeenCalled();
+  });
+  it('keeps each lab in only one permission group', () => {
+    const page=new LabExperimentsPageComponent({} as any,{} as any,{} as any,{detectChanges(){}} as any,{} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);
+    page.sharingLabIds=['lab-1'];
+    page.sharingPermissionTab='edit';
+    page.toggleSharingLab('lab-1');
+    expect(page.sharingLabIds).toEqual([]);
+    expect(page.sharingEditLabIds).toEqual(['lab-1']);
   });
   it('shows owner and shared state for an experiment shared with a lab', () => {
     const page=new LabExperimentsPageComponent({} as any,{} as any,{} as any,{detectChanges(){}} as any,{} as any,{navigate:vi.fn()} as any,{snapshot:{paramMap:{get:()=>null}}} as any);

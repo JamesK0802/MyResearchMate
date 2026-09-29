@@ -553,7 +553,7 @@ export class RPlotStudioComponent implements OnInit, OnDestroy {
     const queuedProject = this.plotProjects.consumeQueuedOpen();
     if (queuedProject) {
       this.rSyncService.loadProjectDocument(queuedProject.project_json);
-      this.currentProjectId = queuedProject.id;
+      this.currentProjectId = queuedProject.can_edit === false ? null : queuedProject.id;
       this.currentProjectTitle = queuedProject.title;
       this.showWelcomeScreen = false;
     }

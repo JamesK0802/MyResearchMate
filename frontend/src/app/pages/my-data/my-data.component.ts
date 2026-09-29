@@ -41,7 +41,7 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
           [shared]="!!res.is_shared" [muted]="resource === 'pcr' && isSystemPreset(res)"
           [viewMode]="viewMode"
           [showPin]="true" [pinned]="isPinned(res)" [primaryLabel]="resource === 'protocol' ? 'Open Tree Protocol' : resource === 'pcr' ? 'Open Solution Protocol' : 'View Crispr Analysis'"
-          [showShare]="canManage(res)" [showDelete]="canManage(res)" [readOnly]="!!res.is_shared && !isOwner(res)"
+          [showShare]="canManage(res)" [showDelete]="canManage(res)" [readOnly]="!!res.is_shared && !isOwner(res) && !canEditShared(res)"
           (pin)="togglePin(res, $event)" (open)="loadItem(res)" (share)="openShareModal(res)" (remove)="deleteItem(res.id || '')">
           <div card-content *ngIf="res.is_shared" class="sharing-info">
               <!-- If I am owner, show WHO I shared it with -->
@@ -87,6 +87,12 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
           </div>
           <div class="modal-body">
             <p class="modal-sub">Select the labs you want to share "<strong>{{ getItemTitle(sharingResult) }}</strong>" with.</p>
+
+            <div *ngIf="resource === 'protocol'" class="permission-tabs" role="tablist" aria-label="Sharing permission">
+              <button type="button" [class.active]="sharingPermissionTab === 'read'" (click)="sharingPermissionTab = 'read'">Read only <span>{{selectedLabIds.length}}</span></button>
+              <button type="button" [class.active]="sharingPermissionTab === 'edit'" (click)="sharingPermissionTab = 'edit'">Edit <span>{{selectedEditLabIds.length}}</span></button>
+            </div>
+            <p *ngIf="resource === 'protocol'" class="permission-help">{{sharingPermissionTab === 'read' ? 'Can open and copy, but cannot update the original.' : 'Can edit and update the original for everyone.'}}</p>
             
             <div *ngIf="myLabs.length === 0" class="no-labs-warning">
               You don't belong to any labs yet. Please register or join a lab first.
@@ -187,6 +193,8 @@ import { MyDataGridComponent, MyDataListControlsComponent, MyDataViewMode, readM
     .close-btn:hover { background: var(--color-error-bg); color: #ef4444; }
     .modal-body { padding: var(--space-6) var(--space-8); }
     .modal-sub { color: var(--color-text-secondary); margin-bottom: var(--space-6); font-size: var(--text-md); }
+    .permission-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:-4px 0 8px;padding:4px;border:1px solid var(--color-border-light);border-radius:10px;background:var(--color-surface-alt)}
+    .permission-tabs button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--color-text-secondary);font-weight:700;cursor:pointer}.permission-tabs button.active{background:var(--color-surface);color:var(--color-primary);box-shadow:var(--shadow-xs)}.permission-tabs span{margin-left:4px;font-size:.72rem;opacity:.7}.permission-help{margin:0 0 14px;color:var(--color-text-tertiary);font-size:var(--text-sm)}
     .labs-list { display: flex; flex-direction: column; gap: var(--space-3); max-height: 300px; overflow-y: auto; padding-right: var(--space-2); }
     .lab-item { padding: var(--space-4); border: 1.5px solid var(--color-border); border-radius: var(--radius-lg); transition: var(--transition-fast); }
     .lab-item:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
@@ -268,6 +276,8 @@ export class MyDataComponent implements OnInit {
   sharingResult: CrisprResult | ProtocolTreeRecord | PCRPreset | null = null;
   myLabs: any[] = [];
   selectedLabIds: string[] = [];
+  selectedEditLabIds: string[] = [];
+  sharingPermissionTab: 'read' | 'edit' = 'read';
   savingShares = false;
 
   constructor(
@@ -397,6 +407,7 @@ export class MyDataComponent implements OnInit {
     if (this.auth.isDemo) return !this.isSystemPreset(res);
     return !this.isSystemPreset(res) && (!((res as any).is_shared) || this.isOwner(res));
   }
+  canEditShared(res: CrisprResult | ProtocolTreeRecord | PCRPreset): boolean { return !!(res as any).can_edit; }
 
   private getDemoItems(): Array<CrisprResult | ProtocolTreeRecord | PCRPreset> {
     const now = new Date().toISOString();
@@ -458,7 +469,7 @@ export class MyDataComponent implements OnInit {
     if (this.resource === 'protocol') {
       const tree = res as ProtocolTreeRecord;
       if (!tree.document_json?.trees?.length) { alert('This protocol tree has no document data.'); return; }
-      this.protocolStorage.loadSavedDocument(tree.document_json, tree.title, tree.id);
+      this.protocolStorage.loadSavedDocument(tree.document_json, tree.title, tree.id, this.isOwner(tree) || !!tree.can_edit);
       this.router.navigate(['/tools/protocol-builder'], {
         state: { openProtocolInNotebook: typeof window !== 'undefined' && window.innerWidth <= 900 }
       });
@@ -525,6 +536,8 @@ export class MyDataComponent implements OnInit {
     }
     this.sharingResult = result;
     this.selectedLabIds = [];
+    this.selectedEditLabIds = [];
+    this.sharingPermissionTab = 'read';
     try {
       const shares = this.resource === 'protocol'
         ? await this.protocolTreeService.getShares(String(result.id || ''))
@@ -532,7 +545,10 @@ export class MyDataComponent implements OnInit {
           ? await this.pcrPresetService.getDataPresetShares(result.id!)
           : await this.resultsService.getResultShares(String(result.id || ''));
       // Backend returns string[] of lab_ids
-      if (Array.isArray(shares)) {
+      if (this.resource === 'protocol' && !Array.isArray(shares)) {
+        this.selectedLabIds = (shares.read_only_lab_ids || []).filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
+        this.selectedEditLabIds = (shares.edit_lab_ids || []).filter(id => !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
+      } else if (Array.isArray(shares)) {
         this.selectedLabIds = shares.filter(id => typeof id === 'string' && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
       }
     } catch (err) {
@@ -544,11 +560,13 @@ export class MyDataComponent implements OnInit {
   closeShareModal() {
     this.sharingResult = null;
     this.selectedLabIds = [];
+    this.selectedEditLabIds = [];
   }
 
   isLabSelected(labId: string): boolean {
     if (!labId) return false;
-    const isSelected = this.selectedLabIds.some(id => String(id) === String(labId));
+    const selected = this.resource === 'protocol' && this.sharingPermissionTab === 'edit' ? this.selectedEditLabIds : this.selectedLabIds;
+    const isSelected = selected.some(id => String(id) === String(labId));
     return isSelected;
   }
 
@@ -557,10 +575,17 @@ export class MyDataComponent implements OnInit {
   toggleLabShare(labId: string) {
     if (!labId) return;
     if (this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(labId)))) return;
-    if (this.isLabSelected(labId)) {
+    if (this.resource === 'protocol' && this.sharingPermissionTab === 'edit') {
+      if (this.isLabSelected(labId)) this.selectedEditLabIds = this.selectedEditLabIds.filter(id => id !== labId);
+      else {
+        this.selectedEditLabIds.push(labId);
+        this.selectedLabIds = this.selectedLabIds.filter(id => id !== labId);
+      }
+    } else if (this.isLabSelected(labId)) {
       this.selectedLabIds = this.selectedLabIds.filter(id => id !== labId);
     } else {
       this.selectedLabIds.push(labId);
+      if (this.resource === 'protocol') this.selectedEditLabIds = this.selectedEditLabIds.filter(id => id !== labId);
     }
   }
 
@@ -573,10 +598,11 @@ export class MyDataComponent implements OnInit {
     
     // Final safety check: remove any non-string values
     const cleanLabIds = this.selectedLabIds.filter(id => typeof id === 'string' && id.length > 0 && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
+    const cleanEditLabIds = this.selectedEditLabIds.filter(id => typeof id === 'string' && id.length > 0 && !this.isLabUnavailable(this.myLabs.find(lab => String(lab.id) === String(id))));
     
     this.savingShares = true;
     try {
-      if (this.resource === 'protocol') await this.protocolTreeService.updateShares(String(this.sharingResult.id || ''), cleanLabIds);
+      if (this.resource === 'protocol') await this.protocolTreeService.updateShares(String(this.sharingResult.id || ''), cleanLabIds, cleanEditLabIds);
       else if (this.resource === 'pcr') await this.pcrPresetService.updateDataPresetShares(this.sharingResult.id!, cleanLabIds);
       else await this.resultsService.updateResultShares(String(this.sharingResult.id || ''), cleanLabIds);
       this.closeShareModal();

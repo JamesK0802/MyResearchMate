@@ -145,6 +145,7 @@ class ProtocolTreeShare(Base):
     protocol_tree_id = Column(UUID(as_uuid=True), ForeignKey("protocol_trees.id", ondelete="CASCADE"))
     lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
+    access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class PlotProject(Base):
@@ -163,6 +164,7 @@ class PlotProjectShare(Base):
     plot_project_id = Column(UUID(as_uuid=True), ForeignKey("plot_projects.id", ondelete="CASCADE"))
     lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id"))
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
+    access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class SequenceWorkspaceFile(Base):
@@ -288,4 +290,16 @@ class WorkflowShare(Base):
     lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=True)
     shared_with_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     shared_by_user_id = Column(BigInteger, ForeignKey("users.id"))
+    access_level = Column(String, nullable=False, default="read")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PdfDocumentShare(Base):
+    __tablename__ = "pdf_document_shares"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    lab_id = Column(UUID(as_uuid=True), ForeignKey("labs.id", ondelete="CASCADE"), nullable=False)
+    shared_by_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
+    access_level = Column(String, nullable=False, default="read")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
