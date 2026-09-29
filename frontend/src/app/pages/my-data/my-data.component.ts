@@ -1,5 +1,5 @@
 import { MyDataPageComponent } from '../../components/my-data-page.component';
-import { Component, OnInit, ChangeDetectorRef, NgZone, DestroyRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, NgZone, DestroyRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ResultsService, CrisprResult } from '../../services/results.service';
@@ -260,12 +260,16 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 })
 export class MyDataComponent implements OnInit {
   allResults: Array<CrisprResult | ProtocolTreeRecord | PCRPreset> = [];
-  displayResults: Array<CrisprResult | ProtocolTreeRecord | PCRPreset> = [];
+  private readonly displayResultsState = signal<Array<CrisprResult | ProtocolTreeRecord | PCRPreset>>([]);
+  get displayResults(): Array<CrisprResult | ProtocolTreeRecord | PCRPreset> { return this.displayResultsState(); }
+  set displayResults(results: Array<CrisprResult | ProtocolTreeRecord | PCRPreset>) { this.displayResultsState.set(results); }
   resource: 'crispr' | 'protocol' | 'pcr' = 'crispr';
   activeTab: 'all' | 'my' | 'shared' = 'all';
   sortMode: 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' = 'date-desc';
   viewMode: MyDataViewMode = readMyDataViewMode();
-  loading: boolean = true;
+  private readonly loadingState = signal(true);
+  get loading(): boolean { return this.loadingState(); }
+  set loading(value: boolean) { this.loadingState.set(value); }
   private pinnedIds = new Set<string>();
   
   // Sharing Modal

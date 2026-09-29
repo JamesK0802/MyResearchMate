@@ -68,14 +68,10 @@ export class ResultsService {
   }
 
   async getAllResults(): Promise<CrisprResult[]> {
-    // Build All Data from the two reliable scoped endpoints. Some deployed
-    // proxies have served a stale first response for /all while /my and
-    // /shared are already current, which made the page appear empty until the
-    // user changed tabs. Dedupe in case an item is reachable through both.
-    const [mine, shared] = await Promise.all([this.getMyResults(), this.getSharedResults()]);
-    const byId = new Map<string, CrisprResult>();
-    for (const result of [...mine, ...shared]) byId.set(String(result.id), result);
-    return [...byId.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    const headers = await this.getAuthHeaders();
+    return firstValueFrom(
+      this.http.get<CrisprResult[]>(this.freshUrl('/all'), { headers })
+    );
   }
 
   async getResult(id: string): Promise<CrisprResult> {
