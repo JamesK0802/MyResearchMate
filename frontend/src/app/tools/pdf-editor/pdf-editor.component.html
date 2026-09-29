@@ -210,41 +210,52 @@
           <div class="tool-group">
             <button type="button" class="tool-btn" [class.active]="activeTool === 'select'" (click)="setTool('select')" title="Select, Move & Resize (V)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="M3 3l7 18 3-7 7-3L3 3z"></path></svg>
-              <span>Select</span>
+              <span class="tool-label">Select</span>
             </button>
             <button type="button" class="tool-btn" [class.active]="activeTool === 'text'" (click)="setTool('text')" title="Add Text Box (T)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-              <span>Text</span>
+              <span class="tool-label">Text</span>
             </button>
-            <label class="tool-select-wrap" [class.active]="drawToolValue">
-              <span class="tool-select-icon">✎</span>
-              <select [ngModel]="drawToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Drawing tools">
-                <option value="" disabled>Draw</option><option value="pen">Pen</option><option value="highlight">Highlight</option><option value="eraser">Eraser</option>
-              </select>
+            <label class="tool-picker tool-picker-draw" [class.active]="isDrawToolActive" title="Drawing tools">
+              <span class="tool-select-trigger">
+                <svg *ngIf="drawToolValue !== 'eraser'" viewBox="0 0 24 24" class="tool-icon tool-picker-icon"><path d="M4 20l4.2-1 10.6-10.6a2.2 2.2 0 0 0-3.2-3.2L5 15.8 4 20z"></path><path *ngIf="drawToolValue === 'highlight'" d="M3 21h9"></path></svg>
+                <svg *ngIf="drawToolValue === 'eraser'" viewBox="0 0 24 24" class="tool-icon tool-picker-icon"><path d="m7 20-4-4L14 5a2.8 2.8 0 0 1 4 0l1 1a2.8 2.8 0 0 1 0 4L9 20H7z"></path><path d="M11 20h9"></path></svg>
+                <span class="tool-picker-label">{{ drawToolLabel }}</span><span class="tool-chevron">⌄</span>
+              </span>
+              <select class="tool-native-select" [ngModel]="drawToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" aria-label="Drawing tools"><option value="" disabled>Draw</option><option value="pen">Pen</option><option value="highlight">Highlight</option><option value="eraser">Eraser</option></select>
             </label>
-            <label class="tool-select-wrap" [class.active]="shapeToolValue">
-              <span class="tool-select-icon">○</span>
-              <select [ngModel]="shapeToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Shape tools">
-                <option value="" disabled>Shapes</option><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option>
-              </select>
+            <label class="tool-picker tool-picker-shape" [class.active]="isShapeToolActive" title="Shape tools">
+              <span class="tool-select-trigger">
+                <svg viewBox="0 0 24 24" class="tool-icon tool-picker-icon">
+                  <rect *ngIf="shapeToolValue !== 'circle' && shapeToolValue !== 'triangle'" x="4" y="4" width="16" height="16" rx="1"></rect>
+                  <circle *ngIf="shapeToolValue === 'circle'" cx="12" cy="12" r="8"></circle>
+                  <path *ngIf="shapeToolValue === 'triangle'" d="M12 4 21 20H3L12 4z"></path>
+                </svg>
+                <span class="tool-picker-label">{{ shapeToolLabel }}</span><span class="tool-chevron">⌄</span>
+              </span>
+              <select class="tool-native-select" [ngModel]="shapeToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" aria-label="Shape tools"><option value="" disabled>Shapes</option><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
             </label>
-            <label class="tool-select-wrap" [class.active]="lineToolValue">
-              <span class="tool-select-icon">╱</span>
-              <select [ngModel]="lineToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" title="Line tools; hold Shift to snap angles">
-                <option value="" disabled>Lines</option><option value="line">Line</option><option value="arrow">Arrow</option>
-              </select>
+            <label class="tool-picker tool-picker-line" [class.active]="isLineToolActive" title="Line tools; hold Shift to snap angles">
+              <span class="tool-select-trigger">
+                <svg viewBox="0 0 24 24" class="tool-icon tool-picker-icon">
+                  <path d="M4 20 20 4"></path>
+                  <path *ngIf="lineToolValue === 'arrow'" d="M12 4h8v8"></path>
+                </svg>
+                <span class="tool-picker-label">{{ lineToolLabel }}</span><span class="tool-chevron">⌄</span>
+              </span>
+              <select class="tool-native-select" [ngModel]="lineToolValue" (ngModelChange)="setTool($event)" [ngModelOptions]="{standalone: true}" aria-label="Line tools"><option value="" disabled>Lines</option><option value="line">Line</option><option value="arrow">Arrow</option></select>
             </label>
             <button type="button" class="tool-btn tool-whiteout" [class.active]="activeTool === 'whiteout'" (click)="setTool('whiteout')" title="Whiteout Eraser Box">
               <span class="whiteout-icon">⬜</span>
-              <span>Whiteout</span>
+              <span class="tool-label">Whiteout</span>
             </button>
             <button type="button" class="tool-btn" (click)="setTool('image')" title="Insert Image / Stamp">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-              <span>Image</span>
+              <span class="tool-label">Image</span>
             </button>
             <button type="button" class="tool-btn" (click)="setTool('signature')" title="Insert Signature">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tool-icon"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
-              <span>Sign</span>
+              <span class="tool-label">Sign</span>
             </button>
           </div>
 

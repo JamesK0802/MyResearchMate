@@ -135,6 +135,9 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   // View / Edit Settings & Zoom
   zoom: number = 1.0;
   activeTool: ToolType = 'select';
+  selectedDrawTool: ToolType | '' = '';
+  selectedShapeTool: ToolType | '' = '';
+  selectedLineTool: ToolType | '' = '';
   strokeColor: string = '#2563eb';
   fillColor: string = '#3b82f6';
   strokeWidth: number = 3;
@@ -229,15 +232,39 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   }
 
   get drawToolValue(): ToolType | '' {
-    return ['pen', 'highlight', 'eraser'].includes(this.activeTool) ? this.activeTool : '';
+    return this.selectedDrawTool;
   }
 
   get shapeToolValue(): ToolType | '' {
-    return ['rect', 'circle', 'triangle'].includes(this.activeTool) ? this.activeTool : '';
+    return this.selectedShapeTool;
   }
 
   get lineToolValue(): ToolType | '' {
-    return ['line', 'arrow'].includes(this.activeTool) ? this.activeTool : '';
+    return this.selectedLineTool;
+  }
+
+  get isDrawToolActive(): boolean {
+    return ['pen', 'highlight', 'eraser'].includes(this.activeTool);
+  }
+
+  get isShapeToolActive(): boolean {
+    return ['rect', 'circle', 'triangle'].includes(this.activeTool);
+  }
+
+  get isLineToolActive(): boolean {
+    return ['line', 'arrow'].includes(this.activeTool);
+  }
+
+  get drawToolLabel(): string {
+    return this.drawToolValue ? ({ pen: 'Pen', highlight: 'Highlight', eraser: 'Eraser' } as Partial<Record<ToolType, string>>)[this.drawToolValue] || 'Draw' : 'Draw';
+  }
+
+  get shapeToolLabel(): string {
+    return this.shapeToolValue ? ({ rect: 'Rectangle', circle: 'Circle', triangle: 'Triangle' } as Partial<Record<ToolType, string>>)[this.shapeToolValue] || 'Shapes' : 'Shapes';
+  }
+
+  get lineToolLabel(): string {
+    return this.lineToolValue ? ({ line: 'Line', arrow: 'Arrow' } as Partial<Record<ToolType, string>>)[this.lineToolValue] || 'Lines' : 'Lines';
   }
 
   // ═════════════════════════════════════════════════════════════════════════════
@@ -1142,6 +1169,9 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
   // ═════════════════════════════════════════════════════════════════════════════
 
   setTool(tool: ToolType) {
+    if (['pen', 'highlight', 'eraser'].includes(tool)) this.selectedDrawTool = tool;
+    if (['rect', 'circle', 'triangle'].includes(tool)) this.selectedShapeTool = tool;
+    if (['line', 'arrow'].includes(tool)) this.selectedLineTool = tool;
     this.activeTool = tool;
     this.selectedAnnotationId = null;
 
