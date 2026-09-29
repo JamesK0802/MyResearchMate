@@ -426,7 +426,6 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       for (let i = 1; i <= pdfJsDoc.numPages; i++) {
         const page = await pdfJsDoc.getPage(i);
         const viewport = page.getViewport({ scale: 1.0 });
-        const editableText = await this.extractEditableText(page, viewport);
 
         // Generate clean proportional thumbnail (140x198 standard A4 ratio)
         const thumbCanvas = document.createElement('canvas');
@@ -458,7 +457,9 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
           sourceDocId: docId,
           sourceType: 'pdf',
           sourceFileName: file.name,
-          annotations: editableText
+          // The PDF page already contains its own text layer. Only annotations
+          // explicitly created in this editor belong in the editable overlay.
+          annotations: []
         };
         this.pages.push(pageItem);
       }
@@ -476,30 +477,6 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
     } finally {
       this.isLoading = false;
       this.cdr.detectChanges();
-    }
-  }
-
-  private async extractEditableText(page: any, viewport: any): Promise<AnnotationItem[]> {
-    try {
-      const content = await page.getTextContent();
-      return (content.items || []).filter((item: any) => String(item.str || '').trim()).map((item: any, index: number) => {
-        const fontHeight = Math.max(7, Math.abs(Number(item.transform?.[3] || item.height || 12)));
-        return {
-          id: `pdf-text-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 5)}`,
-          type: 'text' as ToolType,
-          x: Number(item.transform?.[4] || 0),
-          y: Math.max(0, viewport.height - Number(item.transform?.[5] || 0) - fontHeight),
-          width: Math.max(12, Number(item.width || String(item.str).length * fontHeight * 0.55)),
-          height: fontHeight * 1.35,
-          text: String(item.str),
-          fontSize: fontHeight,
-          fontFamily: 'Arial, sans-serif',
-          color: '#0f172a',
-          backgroundColor: '#ffffff'
-        };
-      });
-    } catch {
-      return [];
     }
   }
 
@@ -1901,7 +1878,15 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       const record = await this.pdfDocuments.get(id);
       const document = (record.document_json || {}) as any;
       this.fileName = document.fileName || `${record.title}.pdf`;
-      this.pages = Array.isArray(document.pages) ? document.pages : [];
+      this.pages = Array.isArray(document.pages)
+        ? document.pages.map((page: PdfPageItem) => ({
+            ...page,
+            // Versions that imported native PDF text into the editor created
+            // synthetic annotations with this prefix. They duplicate the base
+            // PDF and must never be treated as user-created text boxes.
+            annotations: (page.annotations || []).filter(annotation => !annotation.id?.startsWith('pdf-text-'))
+          }))
+        : [];
       this.sourcePdfDocs.clear();
       for (const source of document.sources || []) {
         const bytes = this.base64ToBytes(source.pdfBase64);
