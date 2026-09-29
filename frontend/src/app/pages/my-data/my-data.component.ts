@@ -1,5 +1,5 @@
 import { MyDataPageComponent } from '../../components/my-data-page.component';
-import { Component, OnInit, ChangeDetectorRef, NgZone, DestroyRef, signal } from '@angular/core';
+import { ApplicationRef, Component, OnInit, ChangeDetectorRef, NgZone, DestroyRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ResultsService, CrisprResult } from '../../services/results.service';
@@ -293,6 +293,7 @@ export class MyDataComponent implements OnInit {
     public auth: AuthService,
     private router: Router,
     private state: AppStateService,
+    private appRef: ApplicationRef,
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone,
     private route: ActivatedRoute,
@@ -350,12 +351,24 @@ export class MyDataComponent implements OnInit {
         this.applySorting();
         this.loading = false;
         this.cdr.detectChanges();
+        this.requestViewRefresh();
       });
     } catch (err) {
       console.error('Failed to load results:', err);
     } finally {
-      if (requestId === this.loadRequestId && this.loading) this.ngZone.run(() => { this.loading = false; this.cdr.detectChanges(); });
+      if (requestId === this.loadRequestId && this.loading) this.ngZone.run(() => {
+        this.loading = false;
+        this.cdr.detectChanges();
+        this.requestViewRefresh();
+      });
     }
+  }
+
+  private requestViewRefresh() {
+    this.cdr.markForCheck();
+    queueMicrotask(() => {
+      if (!this.destroyRef.destroyed) this.ngZone.run(() => this.appRef.tick());
+    });
   }
 
   setTab(tab: 'all' | 'my' | 'shared') {
