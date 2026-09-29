@@ -117,6 +117,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   // Mobile Drawer State
   isMobileSidebarOpen: boolean = false;
+  isMobileFileMenuOpen: boolean = false;
   showTitlePopover = false;
 
   // Multi-touch canvas zoom state
@@ -273,6 +274,10 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
 
   toggleMobileSidebar() {
     this.isMobileSidebarOpen = !this.isMobileSidebarOpen;
+  }
+
+  toggleMobileFileMenu() {
+    this.isMobileFileMenuOpen = !this.isMobileFileMenuOpen;
   }
 
   closeMobileSidebar() {
@@ -1477,7 +1482,7 @@ export class PdfEditorComponent implements OnInit, AfterViewInit {
       }
       this.previewShape = null;
       this.currentPoints = [];
-      if (createdAnnotation) {
+      if (createdAnnotation && !['pen', 'highlight', 'line', 'arrow'].includes(createdAnnotation.type)) {
         this.selectedAnnotationId = createdAnnotation.id;
         this.activeTool = 'select';
       }
