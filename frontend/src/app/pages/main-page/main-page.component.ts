@@ -71,7 +71,7 @@ import { AuthService } from '../../services/auth.service';
             </a>
             <a routerLink="/tools/pdf-editor" class="tool-card">
               <div class="card-body">
-                <h3>PDF Editor (Beta)</h3>
+                <h3>PDF Editor</h3>
                 <p>Edit, sign, organize, save, and export PDF documents.</p>
                 <div class="tag-row">
                   <span>Text Editing</span>

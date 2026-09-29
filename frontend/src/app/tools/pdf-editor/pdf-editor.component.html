@@ -10,7 +10,6 @@
       </button>
 
       <div class="title-block">
-        <span class="app-badge app-badge-green">PDF Editor (Beta)</span>
         <button type="button" class="document-title" [attr.aria-expanded]="showTitlePopover" (click)="showTitlePopover = !showTitlePopover">{{ fileName }}</button>
         <div class="title-popover" *ngIf="showTitlePopover">
           <strong>{{ fileName }}</strong>

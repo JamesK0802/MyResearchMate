@@ -16,7 +16,7 @@ import { ShareAccessMatrixComponent } from '../../components/share-access-matrix
   imports: [CommonModule, MyDataPageComponent, MyDataHeaderComponent, MyDataCardComponent, MyDataGridComponent, MyDataListControlsComponent, ShareAccessMatrixComponent],
   template: `
     <app-my-data-page>
-      <app-my-data-header title="PDF Editor (Beta)"></app-my-data-header>
+      <app-my-data-header title="PDF Editor"></app-my-data-header>
       <app-my-data-list-controls [tabs]="[{value:'all',label:'All Data'},{value:'my',label:'My Data'},{value:'shared',label:'Shared with Me'}]" [activeTab]="activeTab" (tabChange)="setTab($event)"
         [sort]="sortMode" (sortChange)="sortMode=$event; sort()"
         [sortOptions]="[{value:'date-desc',label:'Newest first'},{value:'date-asc',label:'Oldest first'},{value:'name-asc',label:'Name A–Z'},{value:'name-desc',label:'Name Z–A'}]"
