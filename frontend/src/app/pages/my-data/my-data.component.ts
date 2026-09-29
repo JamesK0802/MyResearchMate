@@ -36,8 +36,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
         <p>Loading {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }}...</p>
       </div>
 
+      <div *ngIf="!loading && loadError" class="load-error" role="alert">
+        <strong>Data could not be loaded.</strong>
+        <span>{{ loadError }}</span>
+        <button type="button" (click)="loadData()">Retry</button>
+      </div>
+
       <!-- Results Grid -->
-      <app-my-data-grid *ngIf="!loading && displayResults.length > 0" [viewMode]="viewMode">
+      <app-my-data-grid *ngIf="!loading && !loadError && displayResults.length > 0" [viewMode]="viewMode">
         <app-my-data-card *ngFor="let res of displayResults"
           [title]="getItemTitle(res)" [badges]="getCardBadges(res)" [meta]="getCardMeta(res)"
           [shared]="!!res.is_shared" [muted]="resource === 'pcr' && isSystemPreset(res)"
@@ -75,7 +81,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
         </app-my-data-card>
       </app-my-data-grid>
 
-      <div *ngIf="!loading && displayResults.length === 0" class="empty-state">
+      <div *ngIf="!loading && !loadError && displayResults.length === 0" class="empty-state">
         <div class="empty-icon">📁</div>
         <h3>No {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }} found</h3>
         <p>You haven't saved or shared any {{ resource === 'protocol' ? 'Tree Protocols' : resource === 'pcr' ? 'Solution Protocols' : 'Crispr Analysis' }} in this category yet.</p>
@@ -216,6 +222,10 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
     .loading-spinner { text-align: center; padding: 100px 0; }
     .spinner { width: 36px; height: 36px; border: 3px solid var(--color-border-light); border-top-color: var(--color-primary); border-radius: 50%; margin: 0 auto var(--space-4); animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .load-error { display:flex; align-items:center; gap:12px; margin-top:var(--space-5); padding:16px 18px; border:1px solid var(--color-error-border); border-radius:var(--radius-lg); background:var(--color-error-bg); color:var(--color-text-body); }
+    .load-error strong { color:#b91c1c; }
+    .load-error span { flex:1; color:var(--color-text-secondary); }
+    .load-error button { min-height:36px; padding:7px 14px; border:1px solid var(--color-error-border); border-radius:var(--radius-md); background:var(--color-surface); color:#b91c1c; font-weight:var(--fw-bold); cursor:pointer; }
     .empty-state { text-align: center; padding: 80px var(--space-10); background: var(--color-surface); border-radius: var(--radius-xl); border: 2px dashed var(--color-border); margin-top: var(--space-5); }
     .empty-icon { font-size: 3rem; margin-bottom: var(--space-5); display: block; }
     .empty-state h3 { font-size: var(--text-xl); color: var(--color-text-primary); margin-bottom: var(--space-3); font-weight: var(--fw-bold); }
@@ -243,6 +253,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
       .btn-load { font-size:.76rem; min-height:36px; padding:7px 9px; }
       .btn-share,.btn-delete,.btn-info-only { height:36px; width:36px; }
       .empty-state { border-radius:12px; padding:36px 16px; }
+      .load-error { align-items:flex-start; flex-direction:column; font-size:.8rem; }
+      .load-error button { width:100%; }
       .empty-icon { font-size:2rem; margin-bottom:10px; }
       .empty-state h3 { font-size:1rem; }
       .empty-state p { font-size:.78rem; margin-bottom:14px; }
@@ -270,6 +282,7 @@ export class MyDataComponent implements OnInit {
   private readonly loadingState = signal(true);
   get loading(): boolean { return this.loadingState(); }
   set loading(value: boolean) { this.loadingState.set(value); }
+  loadError = '';
   private pinnedIds = new Set<string>();
   
   // Sharing Modal
@@ -329,7 +342,11 @@ export class MyDataComponent implements OnInit {
 
   async loadData() {
     const requestId = ++this.loadRequestId;
-    this.ngZone.run(() => { this.loading = true; this.cdr.detectChanges(); });
+    this.ngZone.run(() => {
+      this.loading = true;
+      this.loadError = '';
+      this.cdr.detectChanges();
+    });
     try {
       let results: Array<CrisprResult | ProtocolTreeRecord | PCRPreset>;
       if (this.auth.isDemo) {
@@ -355,6 +372,11 @@ export class MyDataComponent implements OnInit {
       });
     } catch (err) {
       console.error('Failed to load results:', err);
+      if (requestId === this.loadRequestId) this.ngZone.run(() => {
+        this.allResults = [];
+        this.applySorting();
+        this.loadError = 'Please retry. If the problem continues, contact an administrator.';
+      });
     } finally {
       if (requestId === this.loadRequestId && this.loading) this.ngZone.run(() => {
         this.loading = false;

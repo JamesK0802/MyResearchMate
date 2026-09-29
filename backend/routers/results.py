@@ -12,6 +12,29 @@ from storage.file_store import document_path, read_json, relative_data_path, res
 
 router = APIRouter(prefix="/crispr-results", tags=["results"])
 
+
+def shared_results_query(db: Session, user_id: int, lab_ids):
+    """Build a shared-results query without DISTINCT over JSON columns.
+
+    ``crispr_results`` still contains PostgreSQL ``json`` columns for legacy
+    records. PostgreSQL cannot apply DISTINCT to those columns, so access is
+    expressed as a correlated EXISTS predicate instead. EXISTS also naturally
+    returns each result only once when it has several matching shares.
+    """
+    access_conditions = [CrisprResultShare.shared_with_user_id == user_id]
+    if lab_ids:
+        access_conditions.append(CrisprResultShare.lab_id.in_(lab_ids))
+
+    matching_share = db.query(CrisprResultShare.id).filter(
+        CrisprResultShare.result_id == CrisprResult.id,
+        or_(*access_conditions),
+    ).exists()
+
+    return db.query(CrisprResult).filter(
+        CrisprResult.owner_user_id != user_id,
+        matching_share,
+    )
+
 def hydrate_result(result: CrisprResult):
     payload = read_json(result.storage_path, None) if result.storage_path else None
     if isinstance(payload, dict):
@@ -84,10 +107,11 @@ async def list_shared_results(
 ):
     lab_ids = db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()
     lab_ids = [l[0] for l in lab_ids]
-    shared_results = db.query(CrisprResult).join(CrisprResultShare).filter(
-        or_(CrisprResultShare.lab_id.in_(lab_ids) if lab_ids else False, CrisprResultShare.shared_with_user_id == current_user["id"]),
-        CrisprResult.owner_user_id != current_user["id"]
-    ).distinct().all()
+    shared_results = shared_results_query(
+        db,
+        current_user["id"],
+        lab_ids,
+    ).order_by(CrisprResult.created_at.desc()).all()
     
     for r in shared_results:
         attach_share_metadata(r, db)
