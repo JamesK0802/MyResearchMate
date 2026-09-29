@@ -10,6 +10,7 @@ from database.models import PlotProject, PlotProjectShare, Lab, LabMember, User
 from models.plot_projects import PlotProjectCreate, PlotProjectInDB, PlotProjectUpdate
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import or_
+from routers.shared_access import shared_entities_query
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 
@@ -60,9 +61,10 @@ def owner_projects(db: Session, current_user: dict):
 
 def shared_projects(db: Session, current_user: dict):
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    return db.query(PlotProject).join(PlotProjectShare).filter(
-        or_(PlotProjectShare.lab_id.in_(lab_ids) if lab_ids else False, PlotProjectShare.shared_with_user_id == current_user["id"]), PlotProject.owner_user_id != current_user["id"]
-    ).distinct().order_by(PlotProject.updated_at.desc(), PlotProject.created_at.desc()).all()
+    return shared_entities_query(
+        db, PlotProject, PlotProjectShare,
+        PlotProjectShare.plot_project_id, current_user["id"], lab_ids,
+    ).order_by(PlotProject.updated_at.desc(), PlotProject.created_at.desc()).all()
 
 
 @router.post("", response_model=PlotProjectInDB)

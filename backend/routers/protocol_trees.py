@@ -8,6 +8,7 @@ from database.models import ProtocolTree, ProtocolTreeShare, Lab, LabMember, Use
 from models.protocol_trees import ProtocolTreeCreate, ProtocolTreeUpdate, ProtocolTreeInDB
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import or_
+from routers.shared_access import shared_entities_query
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/protocol-trees", tags=["protocol-trees"])
@@ -69,14 +70,14 @@ async def create_protocol_tree(
 def owner_trees(db: Session, current_user: dict):
     return db.query(ProtocolTree).filter(
         ProtocolTree.owner_user_id == current_user["id"]
-    ).distinct().order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
+    ).order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
 
 
 def shared_trees(db: Session, current_user: dict):
     lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == current_user["id"]).all()]
-    return db.query(ProtocolTree).join(ProtocolTreeShare).filter(
-        or_(ProtocolTreeShare.lab_id.in_(lab_ids) if lab_ids else False, ProtocolTreeShare.shared_with_user_id == current_user["id"]),
-        ProtocolTree.owner_user_id != current_user["id"],
+    return shared_entities_query(
+        db, ProtocolTree, ProtocolTreeShare,
+        ProtocolTreeShare.protocol_tree_id, current_user["id"], lab_ids,
     ).order_by(ProtocolTree.updated_at.desc(), ProtocolTree.created_at.desc()).all()
 
 

@@ -8,31 +8,16 @@ from database.models import CrisprResult, CrisprResultShare, Lab, LabMember, Use
 from models.results import CrisprResultCreate, CrisprResultUpdate, CrisprResultInDB
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import or_
+from routers.shared_access import shared_entities_query
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/crispr-results", tags=["results"])
 
 
 def shared_results_query(db: Session, user_id: int, lab_ids):
-    """Build a shared-results query without DISTINCT over JSON columns.
-
-    ``crispr_results`` still contains PostgreSQL ``json`` columns for legacy
-    records. PostgreSQL cannot apply DISTINCT to those columns, so access is
-    expressed as a correlated EXISTS predicate instead. EXISTS also naturally
-    returns each result only once when it has several matching shares.
-    """
-    access_conditions = [CrisprResultShare.shared_with_user_id == user_id]
-    if lab_ids:
-        access_conditions.append(CrisprResultShare.lab_id.in_(lab_ids))
-
-    matching_share = db.query(CrisprResultShare.id).filter(
-        CrisprResultShare.result_id == CrisprResult.id,
-        or_(*access_conditions),
-    ).exists()
-
-    return db.query(CrisprResult).filter(
-        CrisprResult.owner_user_id != user_id,
-        matching_share,
+    return shared_entities_query(
+        db, CrisprResult, CrisprResultShare,
+        CrisprResultShare.result_id, user_id, lab_ids,
     )
 
 def hydrate_result(result: CrisprResult):

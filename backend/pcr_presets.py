@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import uuid
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import or_
+from routers.shared_access import shared_entities_query
 from storage.file_store import document_path, read_json, relative_data_path, resolve_data_path, write_json
 
 router = APIRouter(prefix="/pcr-presets", tags=["pcr"])
@@ -160,18 +161,20 @@ def data_scope_presets(scope: str, db: Session, current_user: dict):
     owner_id = current_user["id"]
     if scope == "shared":
         lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
-        presets = db.query(PcrPreset).join(PcrPresetLabShare).filter(
-            or_(PcrPresetLabShare.lab_id.in_(lab_ids) if lab_ids else False, PcrPresetLabShare.shared_with_user_id == owner_id), PcrPreset.owner_user_id != owner_id
-        ).distinct().all()
+        presets = shared_entities_query(
+            db, PcrPreset, PcrPresetLabShare,
+            PcrPresetLabShare.preset_id, owner_id, lab_ids,
+        ).all()
     else:
         owned = db.query(PcrPreset).filter((PcrPreset.owner_user_id == owner_id) | (PcrPreset.is_system == True)).all()
         if scope == "my":
             presets = owned
         else:
             lab_ids = [row[0] for row in db.query(LabMember.lab_id).filter(LabMember.user_id == owner_id).all()]
-            shared = db.query(PcrPreset).join(PcrPresetLabShare).filter(
-                or_(PcrPresetLabShare.lab_id.in_(lab_ids) if lab_ids else False, PcrPresetLabShare.shared_with_user_id == owner_id), PcrPreset.owner_user_id != owner_id
-            ).distinct().all()
+            shared = shared_entities_query(
+                db, PcrPreset, PcrPresetLabShare,
+                PcrPresetLabShare.preset_id, owner_id, lab_ids,
+            ).all()
             presets = owned + shared
     seen = set()
     result = []
