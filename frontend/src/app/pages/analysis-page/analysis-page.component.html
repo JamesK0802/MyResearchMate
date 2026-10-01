@@ -309,7 +309,14 @@
                 <div class="homoeolog-overview-card" *ngFor="let overview of homoeologOverviews">
                   <div class="homoeolog-overview-head"><strong>{{ overview.groupId }}</strong></div>
                   <div class="homoeolog-lane" *ngFor="let lane of overview.lanes">
-                    <div class="homoeolog-lane-label" [title]="lane.geneName"><strong>{{ lane.geneName }}</strong></div>
+                    <div class="homoeolog-lane-label" [title]="lane.geneName + (lane.isAnchor ? ' · baseline' : '')">
+                      <label class="homoeolog-anchor-toggle" [title]="lane.isAnchor ? 'Baseline reference' : 'Use as baseline'">
+                        <input type="checkbox" [checked]="lane.isAnchor"
+                          (change)="selectHomoeologAnchor(overview.groupId, lane.geneIndex)" />
+                        <span></span>
+                      </label>
+                      <strong>{{ lane.geneName }}</strong>
+                    </div>
                     <div class="homoeolog-track">
                       <div class="homoeolog-track-line"></div>
                       <div *ngFor="let difference of lane.differences" class="homoeolog-difference"
@@ -325,7 +332,11 @@
                           [title]="marker.targetId + ' gRNA · cut ' + marker.cutSite"></div>
                         <b *ngIf="marker.leftPercent !== undefined" class="homoeolog-marker-label"
                           [style.left.%]="marker.leftPercent" [style.--marker-color]="targetColor(markerIndex)"
-                          [title]="marker.targetId + ' · cut ' + marker.cutSite + (marker.exact ? ' · exact' : ' · ' + marker.mismatches + ' mismatch')">{{ marker.targetId }}</b>
+                          [title]="marker.targetId + ' · cut ' + marker.cutSite + (marker.exact ? ' · exact' : ' · ' + marker.mismatches + ' mismatch')">
+                          {{ marker.targetId }}
+                          <small *ngIf="marker.windowDifferenceBp !== undefined"
+                            [class.same]="marker.windowDifferenceBp === 0">{{ marker.windowDifferenceBp }} bp</small>
+                        </b>
                         <div *ngIf="marker.leftPercent === undefined" class="homoeolog-marker-error"
                           [style.top.px]="8" [title]="marker.error">{{ marker.targetId }} !</div>
                       </ng-container>
