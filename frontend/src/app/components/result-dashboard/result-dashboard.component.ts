@@ -15,7 +15,8 @@ import { resolveAnnotationCutSite } from './annotation-cut-site';
   selector: 'app-result-dashboard',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './result-dashboard.component.html'
+  templateUrl: './result-dashboard.component.html',
+  styleUrl: './result-dashboard.component.css'
 })
 export class ResultDashboardComponent implements OnInit, OnDestroy {
   isSaving = false;
