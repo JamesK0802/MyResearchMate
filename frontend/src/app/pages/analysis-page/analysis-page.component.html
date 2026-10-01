@@ -198,7 +198,12 @@
                   <span class="tooltip-text">Excludes mutations (indels/substitutions) starting within cut site ±N bp from similarity score calculation (Default: 0).</span>
                 </span>
               </label>
-              <span class="slider-value-badge">±{{ state.analysisForm.get('cutSiteExclusionFlank')?.value }} bp</span>
+              <label class="slider-manual-value">
+                <span>±</span>
+                <input type="number" min="0" max="500" step="1" formControlName="cutSiteExclusionFlank"
+                  aria-label="Cut-site exclusion window" />
+                <span>bp</span>
+              </label>
             </div>
             <input type="range" min="0" max="10" step="1" formControlName="cutSiteExclusionFlank" class="form-range" />
             <p class="slider-description">Excludes indels/mutations starting within cut site ±N bp from similarity calculations to prevent score distortion.</p>
