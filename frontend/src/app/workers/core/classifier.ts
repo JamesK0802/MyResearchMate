@@ -25,7 +25,8 @@ import type { QualityScores } from './fastq-parser';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CUT_SITE_MIN_FLANK = 15;
-const ANCHOR_LEN = 12;
+const ANCHOR_LEN = 15;
+const MAX_ANCHOR_ERRORS = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type Helpers & Basic Utilities
@@ -216,6 +217,24 @@ function findOffset(seqUp: string, refUp: string, sgrnaSeq: string): number | nu
   return null;
 }
 
+function editDistance(a: string, b: string, maxErrors: number = MAX_ANCHOR_ERRORS): number {
+  if (Math.abs(a.length - b.length) > maxErrors) return maxErrors + 1;
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = new Array<number>(b.length + 1);
+    current[0] = i;
+    let rowMin = current[0];
+    for (let j = 1; j <= b.length; j++) {
+      const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitution);
+      rowMin = Math.min(rowMin, current[j]);
+    }
+    if (rowMin > maxErrors) return maxErrors + 1;
+    previous = current;
+  }
+  return previous[b.length];
+}
+
 interface AlignResult {
   fail: string | null;
   observed_read?: string;
@@ -235,7 +254,7 @@ function alignReadToWindow(
   const seqUp = seq.toUpperCase();
   const refUp = refWindow.toUpperCase();
   const winLen = refWindow.length;
-  // A short direct-input window cannot hold two independent 12 bp anchors.
+  // A short direct-input window cannot hold two independent 15 bp anchors.
   // Split it into non-overlapping terminal anchors instead of treating the
   // entire window as both anchors (which can never form a valid pair).
   const anchorLen = Math.min(ANCHOR_LEN, Math.max(1, Math.floor(winLen / 2)));
@@ -350,21 +369,32 @@ function alignReadToWindow(
 function xawareAnchorCheck(readWindow: string, refWindow: string): boolean {
   const rw = readWindow.toUpperCase();
   const rf = refWindow.toUpperCase();
-  const wl = Math.min(rw.length, rf.length);
+  if (!rw || !rf) return false;
 
-  // Left anchor
-  for (let i = 0; i < Math.min(ANCHOR_LEN, wl); i++) {
-    if (rw[i] === 'X') continue;
-    if (rw[i] !== rf[i]) return false;
-  }
+  const leadingX = Math.min((rw.match(/^X+/)?.[0].length || 0), ANCHOR_LEN, rf.length);
+  const trailingX = Math.min((rw.match(/X+$/)?.[0].length || 0), ANCHOR_LEN, Math.max(0, rf.length - leadingX));
 
-  // Right anchor
-  for (let i = 1; i <= Math.min(ANCHOR_LEN, wl); i++) {
-    if (rw[rw.length - i] === 'X') continue;
-    if (rw[rw.length - i] !== rf[rf.length - i]) return false;
-  }
+  const anchorPasses = (refAnchor: string, observedEdge: string): boolean => {
+    if (!refAnchor.length) return true;
+    const minLength = Math.max(1, refAnchor.length - MAX_ANCHOR_ERRORS);
+    const maxLength = Math.min(observedEdge.length, refAnchor.length + MAX_ANCHOR_ERRORS);
+    if (maxLength < minLength) return false;
+    let best = MAX_ANCHOR_ERRORS + 1;
+    for (let length = minLength; length <= maxLength; length++) {
+      best = Math.min(best, editDistance(refAnchor, observedEdge.substring(0, length), MAX_ANCHOR_ERRORS));
+    }
+    return best <= MAX_ANCHOR_ERRORS;
+  };
 
-  return true;
+  const leftRef = rf.substring(leadingX, Math.min(ANCHOR_LEN, rf.length));
+  const leftObserved = rw.substring(leadingX, Math.min(rw.length - trailingX, ANCHOR_LEN + MAX_ANCHOR_ERRORS));
+  if (!anchorPasses(leftRef, leftObserved)) return false;
+
+  const rightRefEnd = Math.max(0, rf.length - trailingX);
+  const rightRef = rf.substring(Math.max(leadingX, rf.length - ANCHOR_LEN), rightRefEnd).split('').reverse().join('');
+  const observedEnd = Math.max(leadingX, rw.length - trailingX);
+  const rightObserved = rw.substring(Math.max(leadingX, observedEnd - ANCHOR_LEN - MAX_ANCHOR_ERRORS), observedEnd).split('').reverse().join('');
+  return anchorPasses(rightRef, rightObserved);
 }
 
 /** X is an unobserved separator, never nucleotide evidence. */
