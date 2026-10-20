@@ -9,8 +9,9 @@ services:
       POSTGRES_DB: ${DB_NAME:-myresearchmate}
       POSTGRES_USER: ${DB_USER:-james}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    # Internal Compose network only; never publish PostgreSQL on the host.
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -31,8 +32,9 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - LAB_NOTEBOOK_DATA_DIR=/app/data
       - SERVER_ENV_FILE=/app/server-config/.env
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    # Only frontend Nginx reaches the API through backend:8000.
+    expose:
+      - "8000"
     volumes:
       - ./data:/app/data
       - ./.env:/app/server-config/.env

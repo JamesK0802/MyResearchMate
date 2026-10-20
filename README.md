@@ -90,7 +90,7 @@ Ensure the server has Docker and Docker Compose installed.
    cp .env.example .env
    nano .env
    ```
-   *   **Ports**: If `80` or `8000` are already in use, change `FRONTEND_PORT` or `BACKEND_PORT`.
+   *   **Ports**: Only the frontend is published on the host. Change `FRONTEND_PORT` if port `80` is already in use. The API (`backend:8000`) and database (`db:5432`) remain on the internal Compose network; do not add host `ports` mappings for either service.
    *   **Database**: Update `DB_PASSWORD` to a secure string.
 
 ### 3. Execution
