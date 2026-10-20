@@ -140,13 +140,13 @@ describe('Illumina paired-end preprocessing', () => {
   it('uses an X guard when mate overlap is shorter than the minimum', () => {
     const normalized = normalizeIlluminaPairByOverlap(
       read('AAAACCCCGGGG', 35, 'guard/1'),
-      read('TTTTAAAACCCC', 35, 'guard/2'),
+      read('TTAATTAATTAA', 35, 'guard/2'),
       6,
       8,
       0.9,
     );
     expect(normalized.merged).toBe(false);
-    expect(normalized.read.seq).toBe('AAAACCCCGGGGXXXXXXTTTTAAAACCCC');
+    expect(normalized.read.seq).toBe('AAAACCCCGGGGXXXXXXTTAATTAATTAA');
     expect(Array.from(normalized.read.qual).slice(12, 18)).toEqual(new Array(6).fill(0));
   });
 

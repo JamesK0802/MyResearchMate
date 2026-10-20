@@ -1,7 +1,6 @@
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { saveAs } from 'file-saver';
 import { AppStateService } from '../../services/app-state.service';
 import { LocalAnalysisService, LocalAnalysisEvent } from '../../services/local-analysis.service';
@@ -32,7 +31,6 @@ export class BenchmarkPageComponent {
     public state: AppStateService,
     private localAnalysis: LocalAnalysisService,
     private workspace: SequenceWorkspaceService,
-    private router: Router,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -183,6 +181,6 @@ export class BenchmarkPageComponent {
   async exportMergeFile(): Promise<void> {
     if (!this.mergeOutputFile || this.mergeOutputFile.size === 0) return;
     await this.workspace.importGeneratedFastq(this.mergeOutputFile);
-    await this.router.navigateByUrl('/tools/sequence-viewer');
+    this.state.switchMainTab('workspace');
   }
 }

@@ -1,13 +1,15 @@
 import { Component, ChangeDetectorRef, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormsModule } from '@angular/forms';
+import { AbstractControl, ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { AppStateService, AnalysisTab } from '../../services/app-state.service';
 import { ResultDashboardComponent } from '../../components/result-dashboard/result-dashboard.component';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Subscription, debounceTime } from 'rxjs';
+import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, pastedFileStems, sequenceFilenameParts, validCollectionName, validFileStem } from '../../models/sequence-file-io';
+import { compareSequenceNames, moveSequenceFile } from '../../models/sequence-file-order';
 import { findGrnaCutSite, extractWindow, cutIndexInWindow } from '../../workers/core/classifier';
-import { SequenceMatcher } from '../../workers/core/sequence-matcher';
+import { ReferenceMatcher as SequenceMatcher, compareReferences, rememberComparison, setComparisonCacheLimit, ReferenceComparison } from '../../workers/core/reference-comparison';
 import {
   findHomoeologGuideSite,
   homoeologSimilarity,
@@ -25,6 +27,9 @@ import {
 } from '../../models/illumina.model';
 
 export interface ExtractedWindowItem {
+  /** Stable FormArray position used internally; names may be edited or duplicated. */
+  geneIndex: number;
+  targetIndex: number;
   geneName: string;
   targetId: string;
   sequence: string;
@@ -107,24 +112,13 @@ export interface HomoeologOverview {
 
 export interface HomoeologInputGroup {
   name: string;
+  references: Array<{ index: number; control: AbstractControl }>;
   indices: number[];
   trackKey: object | string;
 }
 
-interface ReferenceSource {
-  key: string;
-  label: string;
-  workerKey: string;
-  aliases: string[];
-}
-
-interface ReferenceExcelRow {
-  homoeologName: string;
-  geneName: string;
-  geneSeq: string;
-  targetName: string;
-  targetSeq: string;
-}
+interface ReferenceSource { key: string; label: string; workerKey: string; aliases: string[]; }
+interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: string; targetName: string; targetSeq: string; }
 
 @Component({
   selector: 'app-analysis-page',
@@ -134,6 +128,138 @@ interface ReferenceExcelRow {
   styleUrl: './analysis-page.component.css'
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
+  showUploadChoices = false;
+  isReadingFolders = false;
+  isCopyingFiles = false;
+  collectionFolderName = '';
+  showCollectFilesDialog = false;
+  changeCollectionFileNames = false;
+  collectionLocation: LocalDirectory | null = null;
+  collectionRows: Array<{ file: File; currentName: string; newName: string; extension: string }> = [];
+  collectionSort: { key: 'currentName' | 'newName'; ascending: boolean } | null = null;
+  draggedSequenceFile: File | null = null;
+  sequenceDropTarget: File | null = null;
+  sequenceDropAfter = false;
+  collectionMessage = '';
+  fileActionMessage = '';
+  private readonly sequencePaths = new WeakMap<File, string>();
+
+  get canCopyToFolder(): boolean { return typeof window !== 'undefined' && 'showDirectoryPicker' in window; }
+  get uploadedSequenceFiles(): File[] {
+    const files = this.sequencingPlatform === 'illumina'
+      ? this.state.illuminaPairs.flatMap(pair => [pair.r1, pair.r2].filter((file): file is File => !!file))
+      : this.state.selectedFiles;
+    return [...new Set(files)];
+  }
+
+  sequenceFilePath(file: File): string { return this.sequencePaths.get(file) || file.webkitRelativePath || file.name; }
+
+  openCollectFilesDialog(): void {
+    this.collectionSort = null;
+    this.collectionRows = this.uploadedSequenceFiles.map(file => {
+      const { stem, extension } = sequenceFilenameParts(file.name);
+      return { file, currentName: stem, newName: stem, extension };
+    });
+    this.collectionFolderName = '';
+    this.collectionLocation = null;
+    this.changeCollectionFileNames = false;
+    this.collectionMessage = '';
+    this.showCollectFilesDialog = true;
+    setTimeout(() => document.getElementById('collection-folder-name')?.focus());
+  }
+
+  closeCollectFilesDialog(): void {
+    if (!this.isCopyingFiles) this.showCollectFilesDialog = false;
+  }
+
+  sortCollectionNames(key: 'currentName' | 'newName'): void {
+    if (this.isCopyingFiles) return;
+    const ascending = this.collectionSort?.key === key ? !this.collectionSort.ascending : true;
+    this.collectionSort = { key, ascending };
+    this.collectionRows = [...this.collectionRows].sort((a, b) =>
+      compareSequenceNames(a[key], b[key]) * (ascending ? 1 : -1));
+  }
+
+  collectionDialogKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') { event.preventDefault(); this.closeCollectFilesDialog(); return; }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'));
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+
+  get collectionNameError(): string {
+    if (this.collectionFolderName && !validCollectionName(this.collectionFolderName)) return 'Enter a valid folder name without slashes or leading/trailing spaces.';
+    if (!this.changeCollectionFileNames) return '';
+    if (this.collectionRows.some(row => !validFileStem(row.newName))) return 'Enter a valid new name for every file.';
+    const names = this.collectionRows.map(row => (row.newName + row.extension).toLowerCase());
+    return new Set(names).size !== names.length ? 'New file names must be unique.' : '';
+  }
+
+  get canCreateCollection(): boolean {
+    return this.canCopyToFolder && !this.isCopyingFiles && !!this.collectionLocation &&
+      validCollectionName(this.collectionFolderName) && this.collectionRows.length > 0 && !this.collectionNameError;
+  }
+
+  async chooseCollectionLocation(): Promise<void> {
+    if (!this.canCopyToFolder || this.isCopyingFiles) return;
+    try {
+      const picker = (window as unknown as { showDirectoryPicker(options: { mode: string }): Promise<LocalDirectory> }).showDirectoryPicker;
+      this.collectionLocation = await picker.call(window, { mode: 'readwrite' });
+      this.collectionMessage = '';
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') this.collectionMessage = `Location could not be selected. ${(error as Error).message}`;
+    } finally { this.cdr.detectChanges(); }
+  }
+
+  pasteCollectionNames(event: ClipboardEvent, start: number): void {
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text || this.isCopyingFiles) return;
+    event.preventDefault();
+    const names = pastedFileStems(text);
+    if (start + names.length > this.collectionRows.length) {
+      this.collectionMessage = 'The pasted rows exceed the file list. No names were changed.';
+      return;
+    }
+    names.forEach((name, offset) => this.collectionRows[start + offset].newName = name);
+    this.collectionMessage = '';
+  }
+
+  moveCollectionCell(event: KeyboardEvent, index: number): void {
+    const offset = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' || event.key === 'Enter' ? 1 : 0;
+    if (!offset) return;
+    event.preventDefault();
+    const input = document.querySelector<HTMLInputElement>(`[data-rename-row="${index + offset}"]`);
+    input?.focus(); input?.select();
+  }
+
+  async copyUploadedFilesToFolder(): Promise<void> {
+    if (!this.canCreateCollection || !this.collectionLocation) return;
+    const files = this.collectionRows.map(row => row.file);
+    const parent = this.collectionLocation;
+    const newStems = this.changeCollectionFileNames ? this.collectionRows.map(row => row.newName) : undefined;
+    const folderName = this.collectionFolderName;
+    this.isCopyingFiles = true;
+    this.collectionMessage = '';
+    let copied = 0;
+    try {
+      await copySequenceFiles(parent, folderName, files, count => {
+        copied = count;
+        this.collectionMessage = `Copying ${count} / ${files.length} files…`;
+        this.cdr.detectChanges();
+      }, newStems);
+      this.fileActionMessage = `Copied ${copied} files to ${parent.name}/${folderName}. Original files are unchanged.`;
+      this.showCollectFilesDialog = false;
+    } catch (error) {
+      this.collectionMessage = (error as DOMException).name === 'AbortError' && copied === 0
+        ? 'Copy cancelled.'
+        : `Copy stopped (${copied}/${files.length} completed). ${(error as Error).message} Any partial copies remain in the destination.`;
+    } finally {
+      this.isCopyingFiles = false;
+      this.cdr.detectChanges();
+    }
+  }
   isSaving = false;
   showAutofill = false;
   showPerFileReferences = false;
@@ -156,14 +282,27 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     this.editingTabId = null;
   }
 
+  private lastActiveTabId = '';
+
+  collapseAllPanels() {
+    this.showAutofill = false;
+    this.showPerFileReferences = false;
+    this.showSimilarWindowSettings = false;
+    this.showWindowCheck = false;
+    this.clearPairComparison();
+    this.cdr.detectChanges();
+  }
+
   closeTab(event: MouseEvent, tabId: string) {
     event.stopPropagation();
+    this.collapseAllPanels();
     this.state.closeTab(tabId);
   }
 
   showWindowCheck = false;
   windowCheckSize = 90;
   isCalculatingWindowCheck = false;
+  windowCheckError = '';
   extractedWindows: ExtractedWindowItem[] = [];
   similarityMatrix: number[][] = [];
   homoeologOverviews: HomoeologOverview[] = [];
@@ -182,19 +321,30 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   ) { }
 
   private resultsUpdateSub?: Subscription;
+  private collapsePanelsSub?: Subscription;
   private windowCheckFormSub?: Subscription;
   private windowCheckTimer?: ReturnType<typeof setTimeout>;
+  private windowCheckRevision = 0;
+  private referenceCheckWorker?: Worker;
+  private referenceRequests = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
+  private referenceRequestId = 0;
   private homoeologAnchorByGroup = new Map<string, number>();
   draggedReferenceIndex: number | null = null;
   dragOverHomoeolog = '';
 
   ngOnInit() {
     this.state.activateSlot('analysis');
+    this.lastActiveTabId = this.state.activeTabId;
     if (this.homoeologMode) this.materializeHomoeologGroups(true);
     this.resultsUpdateSub = this.state.resultsUpdated$.subscribe(() => {
-      // Worker callbacks update service state outside a template event. The
-      // parent must render once so the result dashboard *ngIf is created.
+      if (this.lastActiveTabId !== this.state.activeTabId) {
+        this.lastActiveTabId = this.state.activeTabId;
+        this.collapseAllPanels();
+      }
       this.cdr.detectChanges();
+    });
+    this.collapsePanelsSub = this.state.collapseAnalysisPanels$.subscribe(() => {
+      this.collapseAllPanels();
     });
     this.windowCheckFormSub = this.state.geneBlocks.valueChanges.pipe(debounceTime(120)).subscribe(() => {
       if (this.showWindowCheck) this.recalculateWindowCheck();
@@ -202,9 +352,14 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.windowCheckRevision++;
     this.resultsUpdateSub?.unsubscribe();
+    this.collapsePanelsSub?.unsubscribe();
     this.windowCheckFormSub?.unsubscribe();
     if (this.windowCheckTimer) clearTimeout(this.windowCheckTimer);
+    this.referenceCheckWorker?.terminate();
+    this.referenceRequests.forEach(request => request.reject(new Error('Reference check closed')));
+    this.referenceRequests.clear();
   }
 
   get sequencingPlatform(): SequencingPlatform {
@@ -215,6 +370,10 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     return Boolean(this.state.analysisForm.get('homoeologMode')?.value);
   }
 
+  toggleHomoeologMode(): void {
+    this.setHomoeologMode(!this.homoeologMode);
+  }
+
   setHomoeologMode(enabled: boolean): void {
     if (this.homoeologMode === enabled) return;
     this.state.analysisForm.get('homoeologMode')?.setValue(enabled);
@@ -223,23 +382,32 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   get homoeologInputGroups(): HomoeologInputGroup[] {
-    const groups = new Map<string, number[]>();
+    const groups = new Map<string, Array<{ index: number; control: AbstractControl }>>();
     this.state.geneBlocks.controls.forEach((control, index) => {
       const entered = String(control.get('homoeolog_group')?.value || '').trim();
       const name = entered || `Homoeolog ${index + 1}`;
-      const indices = groups.get(name) || [];
-      indices.push(index);
-      groups.set(name, indices);
+      const references = groups.get(name) || [];
+      references.push({ index, control });
+      groups.set(name, references);
     });
-    return [...groups.entries()].map(([name, indices]) => ({
+    return [...groups.entries()].map(([name, references]) => ({
       name,
-      indices,
-      trackKey: indices.length ? this.state.geneBlocks.at(indices[0]) : name
+      references,
+      indices: references.map(reference => reference.index),
+      trackKey: references.length ? references[0].control : name
     }));
   }
 
   trackHomoeologGroup(_index: number, group: HomoeologInputGroup): object | string {
     return group.trackKey;
+  }
+
+  trackControl(_index: number, control: AbstractControl): AbstractControl {
+    return control;
+  }
+
+  trackHomoeologReference(_index: number, reference: { index: number; control: AbstractControl }): AbstractControl {
+    return reference.control;
   }
 
   addHomoeolog(): void {
@@ -311,7 +479,9 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     const values = controls.map(control => String(control.get('homoeolog_group')?.value || '').trim());
     const legacySingleGroup = splitLegacy && controls.length > 1 && values.every(value => !value || value === 'Homoeolog');
     controls.forEach((control, index) => {
-      if (legacySingleGroup || !values[index]) control.get('homoeolog_group')?.setValue(`Homoeolog ${index + 1}`);
+      if (legacySingleGroup || !values[index]) {
+        control.get('homoeolog_group')?.setValue(`Homoeolog ${index + 1}`);
+      }
     });
   }
 
@@ -330,44 +500,25 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   get referenceSources(): ReferenceSource[] {
     if (this.sequencingPlatform === 'illumina') {
-      return this.state.illuminaPairs
-        .filter(pair => pair.r1 || pair.r2)
-        .map(pair => {
-          const label = this.barcodeName(displayIlluminaPairName(pair));
-          return {
-            key: `pair:${pair.id}`,
-            label,
-            workerKey: pair.id,
-            aliases: [label, pair.name, displayIlluminaPairName(pair), pair.r1?.name || '', pair.r2?.name || '']
-          };
-        });
+      return this.state.illuminaPairs.filter(pair => pair.r1 || pair.r2).map(pair => {
+        const label = this.barcodeName(displayIlluminaPairName(pair));
+        return { key: `pair:${pair.id}`, label, workerKey: pair.id, aliases: [label, pair.name, displayIlluminaPairName(pair), pair.r1?.name || '', pair.r2?.name || ''] };
+      });
     }
     return this.state.selectedFiles.map(file => ({
       key: `file:${file.name}:${file.size}:${file.lastModified}`,
-      label: this.barcodeName(file.name),
-      workerKey: file.name,
+      label: this.barcodeName(file.name), workerKey: file.name,
       aliases: [file.name, this.barcodeName(file.name)]
     }));
   }
 
-  get customReferenceCount(): number {
-    return this.referenceSources.filter(source => this.state.hasCustomReferenceConfig(source.key)).length;
-  }
-
-  get activeReferenceIsCustom(): boolean {
-    return this.state.hasCustomReferenceConfig(this.state.activeReferenceKey);
-  }
-
+  get customReferenceCount(): number { return this.referenceSources.filter(source => this.state.hasCustomReferenceConfig(source.key)).length; }
+  get activeReferenceIsCustom(): boolean { return this.state.hasCustomReferenceConfig(this.state.activeReferenceKey); }
   togglePerFileReferences() {
     this.showPerFileReferences = !this.showPerFileReferences;
     if (!this.showPerFileReferences && this.state.activeReferenceKey !== 'default') this.state.selectReferenceConfig('default');
   }
-
-  selectReferenceSource(key: string) {
-    this.state.selectReferenceConfig(key);
-    if (this.showWindowCheck) this.recalculateWindowCheck();
-  }
-
+  selectReferenceSource(key: string) { this.state.selectReferenceConfig(key); if (this.showWindowCheck) this.recalculateWindowCheck(); }
   useDefaultForActiveSource() {
     const key = this.state.activeReferenceKey;
     if (key === 'default') return;
@@ -390,7 +541,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   onWindowCheckSizeChange(newSize: any) {
     const parsed = Number(newSize);
-    this.windowCheckSize = isNaN(parsed) || parsed < 1 ? 90 : parsed;
+    this.windowCheckSize = isNaN(parsed) || parsed < 1 ? 90 : Math.min(1000, Math.round(parsed));
     if (this.showWindowCheck) {
       this.recalculateWindowCheck();
     }
@@ -451,7 +602,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     const seq2 = t2.sequence;
     const similarity = this.similarityMatrix[rIdx]?.[cIdx] ?? 0;
 
-    const matcher = new SequenceMatcher(null, seq1, seq2);
+    const matcher = new SequenceMatcher(null, seq1, seq2, seq2.length < 200);
     const opcodes = matcher.getOpcodes();
 
     const tokens1: AlignmentCharToken[] = [];
@@ -527,12 +678,49 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     };
   }
 
+  fullRefWindowError = '';
+
+  coverFullReference() {
+    this.fullRefWindowError = '';
+    const currentGenes = this.state.analysisForm.get('genes')?.value || [];
+    const configs = [currentGenes, ...Object.entries(this.state.referenceConfigs)
+      .filter(([key]) => key !== this.state.activeReferenceKey).map(([, genes]) => genes)];
+    let left = 0, right = 0, targets = 0;
+    for (const genes of configs) {
+      for (const gene of genes) {
+        const reference = String(gene.gene_reference || '').replace(/\s+/g, '').toUpperCase();
+        for (const target of gene.geneTargets || []) {
+          const guide = String(target.gRNA || '').replace(/\s+/g, '').toUpperCase();
+          if (!reference || !guide) continue;
+          const match = this.homoeologMode ? findHomoeologGuideSite(reference, guide) : undefined;
+          const exact = match ? undefined : findGrnaCutSite(reference, guide);
+          const cut = match ? match.cutSite : exact!.cut_site;
+          const guideStart = match ? match.grnaStart : exact!.grna_start;
+          if (guideStart < 0 || cut < 0 || cut > reference.length) {
+            this.fullRefWindowError = 'Cannot locate a cut site. Check each reference and gRNA first.';
+            return;
+          }
+          left = Math.max(left, cut);
+          right = Math.max(right, reference.length - cut);
+          targets++;
+        }
+      }
+    }
+    if (!targets) {
+      this.fullRefWindowError = 'Add a reference and gRNA first.';
+      return;
+    }
+    this.state.analysisForm.patchValue({ customWindowEnabled: true, customWindowLeft: left, customWindowRight: right });
+  }
+
   recalculateWindowCheck() {
     if (this.windowCheckTimer) clearTimeout(this.windowCheckTimer);
+    const revision = ++this.windowCheckRevision;
     this.isCalculatingWindowCheck = true;
+    this.windowCheckError = '';
     this.cdr.detectChanges();
 
-    this.windowCheckTimer = setTimeout(() => {
+    this.windowCheckTimer = setTimeout(async () => {
       this.windowCheckTimer = undefined;
       try {
         const genesFormVal = this.state.analysisForm.get('genes')?.value || [];
@@ -544,7 +732,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
         genesFormVal.forEach((g: any, gi: number) => {
           const geneName = g.gene_name?.trim() || `Gene ${gi + 1}`;
-          const refSeq = (g.gene_reference || '').trim().toUpperCase();
+          const refSeq = (g.gene_reference || '').replace(/\s+/g, '').toUpperCase();
           if (!refSeq) return;
 
           (g.geneTargets || []).forEach((t: any, ti: number) => {
@@ -588,6 +776,8 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
             const targetWidthPercent = (grnaStart >= 0 && refLength > 0) ? (grnaLength / refLength) * 100 : 0;
 
             extracted.push({
+              geneIndex: gi,
+              targetIndex: ti,
               geneName,
               targetId,
               sequence: winSeq,
@@ -610,6 +800,14 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
           });
         });
 
+        // A delete/reorder can trigger a newer form update while a previous
+        // calculation is queued. Only let the current FormArray snapshot
+        // update the cards, matrix, and homoeolog lanes together.
+        if (revision !== this.windowCheckRevision) return;
+        const sequenceSets = [extracted.map(item => item.sequence),
+          this.homoeologMode ? genesFormVal.map((gene: any) => String(gene.gene_reference || '').replace(/\s+/g, '').toUpperCase()) : []];
+        await this.prepareReferenceComparisons(sequenceSets);
+        if (revision !== this.windowCheckRevision) return;
         this.extractedWindows = extracted;
         const n = extracted.length;
         const matrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
@@ -632,30 +830,65 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         }
       } catch (err) {
         console.error('Error calculating window check matrix:', err);
+        if (revision === this.windowCheckRevision) this.windowCheckError = err instanceof Error ? err.message : String(err);
       } finally {
-        this.isCalculatingWindowCheck = false;
+        if (revision === this.windowCheckRevision) this.isCalculatingWindowCheck = false;
         this.cdr.detectChanges();
       }
-    }, 20);
+    }, 150);
+  }
+
+  onCutSiteExclusionSlider(event: Event): void {
+    const rawVal = (event.target as HTMLInputElement).value;
+    const num = Math.max(0, Math.min(500, Number(rawVal) || 0));
+    this.state.analysisForm.get('cutSiteExclusionFlank')?.setValue(num);
+    this.cdr.detectChanges();
+  }
+
+  onCutSiteExclusionInput(event: Event): void {
+    const rawVal = (event.target as HTMLInputElement).value;
+    const num = Math.max(0, Math.min(500, Number(rawVal) || 0));
+    this.state.analysisForm.get('cutSiteExclusionFlank')?.setValue(num);
+    this.cdr.detectChanges();
+  }
+
+  private prepareReferenceComparisons(sequenceSets: string[][]): Promise<void> {
+    if (!this.referenceCheckWorker) {
+      this.referenceCheckWorker = new Worker(new URL('../../workers/reference-check.worker', import.meta.url), { type: 'module' });
+      this.referenceCheckWorker.onmessage = ({ data }) => {
+        const request = this.referenceRequests.get(data.id);
+        if (!request) return;
+        this.referenceRequests.delete(data.id);
+        if (data.error) request.reject(new Error(data.error));
+        else {
+          for (const [key, result] of data.results as [string, ReferenceComparison][]) rememberComparison(key, result);
+          request.resolve();
+        }
+      };
+      this.referenceCheckWorker.onerror = () => {
+        this.referenceRequests.forEach(request => request.reject(new Error('Reference comparison worker failed')));
+        this.referenceRequests.clear();
+        this.referenceCheckWorker?.terminate(); this.referenceCheckWorker = undefined;
+      };
+    }
+    const pairs: [string, string][] = [];
+    for (const values of sequenceSets) {
+      const sequences = [...new Set(values)].filter(Boolean);
+      for (const a of sequences) for (const b of sequences) pairs.push([a, b]);
+    }
+    const id = ++this.referenceRequestId;
+    setComparisonCacheLimit(pairs.length * 2);
+    return new Promise((resolve, reject) => {
+      this.referenceRequests.set(id, { resolve, reject });
+      this.referenceCheckWorker!.postMessage({ id, pairs });
+    });
   }
 
   calculateSymmetricSimilarity(seq1: string, seq2: string): number {
     if (!seq1 || !seq2) return 0;
     if (seq1 === seq2) return 100.0;
 
-    if (seq1.length === seq2.length && seq1.length > 0) {
-      let matchCount = 0;
-      for (let k = 0; k < seq1.length; k++) {
-        if (seq1[k] === seq2[k]) {
-          matchCount++;
-        }
-      }
-      return Math.round((matchCount / seq1.length) * 1000) / 10;
-    }
-
-    const m1 = new SequenceMatcher(null, seq1, seq2).ratio();
-    const m2 = new SequenceMatcher(null, seq2, seq1).ratio();
-    return Math.round(((m1 + m2) / 2.0) * 1000) / 10;
+    return compareReferences(seq1, seq2).similarity;
   }
 
   private buildHomoeologOverviews(genes: any[], windows: ExtractedWindowItem[]): HomoeologOverview[] {
@@ -688,8 +921,8 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
             }))
           : [];
         const markers = targetIds.map((targetId, rowIndex) => {
-          const item = windows.find(window => window.geneName === ref.geneName && window.targetId === targetId);
-          const anchorItem = windows.find(window => window.geneName === anchor.geneName && window.targetId === targetId);
+          const item = windows.find(window => window.geneIndex === ref.geneIndex && window.targetId === targetId);
+          const anchorItem = windows.find(window => window.geneIndex === anchor.geneIndex && window.targetId === targetId);
           if (!item || item.cutSiteIndex < 0 || !aligned) {
             return {
               targetId, rowIndex, exact: false, mismatches: item?.guideMatch?.mismatches ?? 0,
@@ -782,8 +1015,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     const suggested = 'CRISPR_Reference_Config';
     const requested = prompt('File name for the current configuration', suggested);
     if (requested === null) return;
-    const fileName = this.safeDownloadFileName(requested, suggested);
-    await this.downloadReferenceWorkbook(true, fileName);
+    await this.downloadReferenceWorkbook(true, this.safeDownloadFileName(requested, suggested));
   }
 
   private async downloadReferenceWorkbook(includeCurrent: boolean, requestedFileName?: string) {
@@ -802,12 +1034,9 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       worksheet.views = [{ state: 'frozen', ySplit: 1 }];
       for (const row of this.genesToRows(genes)) worksheet.addRow(row);
     };
-
     addSheet('Default', includeCurrent ? this.state.referenceGenes('default') : []);
     for (const source of this.referenceSources) {
-      if (!includeCurrent || this.state.hasCustomReferenceConfig(source.key)) {
-        addSheet(source.label, includeCurrent ? this.state.referenceGenes(source.key) : []);
-      }
+      if (!includeCurrent || this.state.hasCustomReferenceConfig(source.key)) addSheet(source.label, includeCurrent ? this.state.referenceGenes(source.key) : []);
     }
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), includeCurrent ? `${requestedFileName || 'CRISPR_Reference_Config'}.xlsx` : 'CRISPR_Reference_Template.xlsx');
@@ -824,15 +1053,11 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     if (!file) return;
     try {
       const workbook = new ExcelJS.Workbook();
-      const buffer = await file.arrayBuffer();
-      await workbook.xlsx.load(buffer);
+      await workbook.xlsx.load(await file.arrayBuffer());
       const sourceByAlias = new Map<string, ReferenceSource>();
       for (const source of this.referenceSources) {
-        for (const alias of [...source.aliases, this.safeWorksheetBase(source.label)]) {
-          if (alias) sourceByAlias.set(this.normalizedBarcode(alias), source);
-        }
+        for (const alias of [...source.aliases, this.safeWorksheetBase(source.label)]) if (alias) sourceByAlias.set(this.normalizedBarcode(alias), source);
       }
-
       let loadedRows = 0;
       let defaultLoaded = false;
       const customSources: ReferenceSource[] = [];
@@ -842,34 +1067,18 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         if (!rows.length) continue;
         const normalizedName = this.normalizedBarcode(worksheet.name);
         const isDefault = ['default', 'references', 'reference'].includes(normalizedName);
-        // Legacy workbooks contained a single arbitrarily named sheet. Treat
-        // every one-sheet workbook as the shared Default configuration.
         if (workbook.worksheets.length === 1 || isDefault) {
           this.state.setReferenceConfig('default', this.rowsToGenes(rows));
-          defaultLoaded = true;
-          loadedRows += rows.length;
-          continue;
+          defaultLoaded = true; loadedRows += rows.length; continue;
         }
         const source = sourceByAlias.get(normalizedName);
-        if (!source) {
-          unmatchedSheets.push(worksheet.name);
-          continue;
-        }
+        if (!source) { unmatchedSheets.push(worksheet.name); continue; }
         this.state.setReferenceConfig(source.key, this.rowsToGenes(rows));
-        customSources.push(source);
-        loadedRows += rows.length;
+        customSources.push(source); loadedRows += rows.length;
       }
-
-      if (!loadedRows) {
-        alert('No valid reference rows were found. Use Default or a sheet named after a file.');
-        return;
-      }
-      if (customSources.length) {
-        this.showPerFileReferences = true;
-        this.state.selectReferenceConfig(customSources[0].key);
-      } else if (defaultLoaded) {
-        this.state.selectReferenceConfig('default');
-      }
+      if (!loadedRows) { alert('No valid reference rows were found. Use Default or a sheet named after a file.'); return; }
+      if (customSources.length) { this.showPerFileReferences = true; this.state.selectReferenceConfig(customSources[0].key); }
+      else if (defaultLoaded) this.state.selectReferenceConfig('default');
       this.showAutofill = false;
       this.cdr.detectChanges();
       const skipped = unmatchedSheets.length ? ` Skipped unmatched sheets: ${unmatchedSheets.join(', ')}.` : '';
@@ -877,9 +1086,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Failed to import reference workbook', error);
       alert('The Excel file could not be read. Please check the workbook format.');
-    } finally {
-      input.value = '';
-    }
+    } finally { input.value = ''; }
   }
 
   async onCurrentFileTemplateUpload(event: Event) {
@@ -892,57 +1099,62 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       if (file) alert('Select a file tab before applying a file-specific configuration.');
       return;
     }
-
     try {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
       let worksheet: ExcelJS.Worksheet | undefined;
-
-      if (workbook.worksheets.length === 1) {
-        worksheet = workbook.worksheets[0];
-      } else {
+      if (workbook.worksheets.length === 1) worksheet = workbook.worksheets[0];
+      else {
         const activeName = this.normalizedBarcode(source.label);
         worksheet = workbook.worksheets.find(sheet => this.normalizedBarcode(sheet.name) === activeName);
-        if (!worksheet) {
-          worksheet = workbook.worksheets.find(sheet => ['default', 'references', 'reference'].includes(this.normalizedBarcode(sheet.name)));
-        }
+        if (!worksheet) worksheet = workbook.worksheets.find(sheet => ['default', 'references', 'reference'].includes(this.normalizedBarcode(sheet.name)));
       }
-
-      if (!worksheet) {
-        alert(`No sheet named “${source.label}” or “Default” was found in this workbook.`);
-        return;
-      }
+      if (!worksheet) { alert(`No sheet named “${source.label}” or “Default” was found in this workbook.`); return; }
       const rows = this.worksheetRows(worksheet);
-      if (!rows.length) {
-        alert(`The “${worksheet.name}” sheet does not contain valid reference rows.`);
-        return;
-      }
-
+      if (!rows.length) { alert(`The “${worksheet.name}” sheet does not contain valid reference rows.`); return; }
       this.state.setReferenceConfig(activeKey, this.rowsToGenes(rows));
       this.state.selectReferenceConfig(activeKey);
-      this.showPerFileReferences = true;
-      this.showAutofill = false;
+      this.showPerFileReferences = true; this.showAutofill = false;
       if (this.showWindowCheck) this.recalculateWindowCheck();
       this.cdr.detectChanges();
       alert(`Applied ${rows.length} reference target${rows.length === 1 ? '' : 's'} to ${source.label} from “${worksheet.name}”.`);
     } catch (error) {
       console.error('Failed to import current-file reference workbook', error);
       alert('The Excel file could not be read. Please check the workbook format.');
-    } finally {
-      input.value = '';
-    }
+    } finally { input.value = ''; }
   }
 
   onFileSelected(event: any) {
-    this.addSequencingFiles(Array.from(event.target.files || []));
+    this.showUploadChoices = false;
+    const files = Array.from(event.target.files || []) as File[];
+    this.fileActionMessage = files.some(file => isSequenceFile(file.name)) ? '' : 'No supported FASTQ files were found.';
+    this.addSequencingFiles(files);
     event.target.value = '';
   }
 
-  onFileDropped(event: DragEvent) {
+  async onFileDropped(event: DragEvent) {
+    this.showUploadChoices = false;
     event.preventDefault();
     this.state.isDragging = false;
-    if (event.dataTransfer?.files) {
-      this.addSequencingFiles(Array.from(event.dataTransfer.files));
+    if (this.isReadingFolders || !event.dataTransfer) return;
+    // Capture entries synchronously, while the drag data store is still available.
+    const entries = Array.from(event.dataTransfer.items || [])
+      .map(item => item.webkitGetAsEntry() as unknown as DroppedEntry | null).filter((entry): entry is DroppedEntry => !!entry);
+    const fallback = Array.from(event.dataTransfer.files);
+    this.isReadingFolders = true;
+    this.fileActionMessage = '';
+    try {
+      if (entries.length) {
+        const collected = await collectDroppedEntries(entries);
+        for (const item of collected) this.sequencePaths.set(item.file, item.path);
+        this.addSequencingFiles(collected.map(item => item.file));
+        if (!collected.length) this.fileActionMessage = 'No supported FASTQ files were found in the selected folders.';
+      } else this.addSequencingFiles(fallback);
+    } catch (error) {
+      this.fileActionMessage = `Folder could not be fully read; no files from this drop were added. ${(error as Error).message}`;
+    } finally {
+      this.isReadingFolders = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -954,12 +1166,49 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     if (removed?.key === this.state.activeReferenceKey) this.state.selectReferenceConfig('default');
   }
 
-  private addSequencingFiles(files: File[]): void {
-    const fastqFiles = files.filter(file => /\.(?:fastq|fq)(?:\.gz)?$/i.test(file.name));
-    if (this.sequencingPlatform === 'illumina') {
-      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles);
+  startSequenceFileDrag(event: DragEvent, file: File): void {
+    event.stopPropagation();
+    this.draggedSequenceFile = file;
+    event.dataTransfer?.setData('application/x-casmango-file-order', 'move');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  allowSequenceFileDrop(event: DragEvent, target: File): void {
+    event.preventDefault(); event.stopPropagation();
+    if (!this.draggedSequenceFile || !event.dataTransfer?.types.includes('application/x-casmango-file-order')) return;
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.sequenceDropTarget = target;
+    this.sequenceDropAfter = event.clientY >= bounds.top + bounds.height / 2;
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  dropSequenceFile(event: DragEvent, target: File): void {
+    event.preventDefault(); event.stopPropagation();
+    if (this.draggedSequenceFile && event.dataTransfer?.getData('application/x-casmango-file-order')) {
+      const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      this.state.selectedFiles = moveSequenceFile(this.state.selectedFiles, this.draggedSequenceFile, target,
+        event.clientY >= bounds.top + bounds.height / 2);
+      this.endSequenceFileDrag();
     } else {
-      this.state.selectedFiles.push(...fastqFiles);
+      this.endSequenceFileDrag();
+      void this.onFileDropped(event);
+    }
+  }
+
+  endSequenceFileDrag(): void {
+    this.draggedSequenceFile = null;
+    this.sequenceDropTarget = null;
+  }
+
+  private addSequencingFiles(files: File[]): void {
+    const fastqFiles = files.filter(file => isSequenceFile(file.name));
+    if (!fastqFiles.length) return;
+    if (this.sequencingPlatform === 'illumina') {
+      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles, file => this.sequenceFilePath(file))
+        .sort((a, b) => compareSequenceNames(displayIlluminaPairName(a), displayIlluminaPairName(b)));
+    } else {
+      this.state.selectedFiles = [...this.state.selectedFiles, ...fastqFiles].sort((a, b) =>
+        compareSequenceNames(a.name, b.name) || compareSequenceNames(this.sequenceFilePath(a), this.sequenceFilePath(b)));
     }
   }
 
@@ -1016,9 +1265,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     const invalidSource = [{ key: 'default', label: 'Default' }, ...this.referenceSources]
       .find(source => (source.key === 'default' || this.state.hasCustomReferenceConfig(source.key)) && !this.validGenes(this.state.referenceGenes(source.key)));
     if (formInvalid || inputCount === 0 || invalidSource) {
-      this.state.error = invalidSource
-        ? `Reference configuration for ${invalidSource.label} is incomplete.`
-        : 'Validation failed. Check files and parameters.';
+      this.state.error = invalidSource ? `Reference configuration for ${invalidSource.label} is incomplete.` : 'Validation failed. Check files and parameters.';
       return;
     }
 
@@ -1039,6 +1286,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       : Number(rawValue.interestRegion ?? 90);
 
     this.state.lastRunParams = {
+      sequencingPlatform: platform,
       windowSize,
       phredThreshold: phredVal,
       indelThreshold: indelVal,
@@ -1056,9 +1304,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       fileCount: inputCount
     };
 
-    const toPayload = (genes: any[]) => this.buildSequenceBasedPayload(
-      genes, windowSize, customWindowEnabled, customWindowLeft, customWindowRight
-    );
+    const toPayload = (genes: any[]) => this.buildSequenceBasedPayload(genes, windowSize, customWindowEnabled, customWindowLeft, customWindowRight);
     const genesPayload = toPayload(this.state.referenceGenes('default'));
     const genesByInput: Record<string, any[]> = {};
     for (const source of this.referenceSources) {
@@ -1086,106 +1332,57 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     );
   }
 
-  private barcodeName(filename: string): string {
-    return filename.replace(/\.(?:fastq|fq)(?:\.gz)?$/i, '') || filename;
-  }
+  private barcodeName(filename: string): string { return filename.replace(/\.(?:fastq|fq)(?:\.gz)?$/i, '') || filename; }
+  private normalizedBarcode(value: string): string { return this.barcodeName(value).trim().toLowerCase().replace(/[\s._-]+/g, ''); }
 
-  private normalizedBarcode(value: string): string {
-    return this.barcodeName(value).trim().toLowerCase().replace(/[\s._-]+/g, '');
-  }
-
-  /**
-   * Reference and target sequences are the identity; labels are presentation.
-   * This prevents duplicate names from collapsing different sequences and
-   * combines aliases (for example YCO/TRY) when they describe one sequence.
-   */
-  private buildSequenceBasedPayload(
-    genes: any[], windowSize: number, customWindowEnabled: boolean,
-    customWindowLeft: number, customWindowRight: number
-  ): any[] {
+  private buildSequenceBasedPayload(genes: any[], windowSize: number, customWindowEnabled: boolean, customWindowLeft: number, customWindowRight: number): any[] {
     const normalized = (value: unknown) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
-    const referenceGroups = new Map<string, { names: string[]; sequence: string; homoeologGroup?: string; targets: Map<string, string[]> }>();
-
+    const referenceGroups = new Map<string, { names: string[]; sequence: string; homoeologGroup?: string; targets: Map<string, { names: string[]; originalGuide: string }> }>();
     genes.forEach((gene: any, geneIndex: number) => {
       const sequence = normalized(gene.gene_reference);
       if (!sequence) return;
       const homoeologGroup = this.homoeologMode
         ? (String(gene.homoeolog_group || '').trim() || `Homoeolog ${geneIndex + 1}`)
         : undefined;
-      let group = referenceGroups.get(sequence);
-      if (!group) {
-        group = { names: [], sequence, homoeologGroup, targets: new Map() };
-        referenceGroups.set(sequence, group);
-      }
+      const referenceKey = sequence;
+      let group = referenceGroups.get(referenceKey);
+      if (!group) { group = { names: [], sequence, homoeologGroup, targets: new Map() }; referenceGroups.set(referenceKey, group); }
       const geneName = gene.gene_name?.trim() || `G${geneIndex + 1}`;
       if (!group.names.includes(geneName)) group.names.push(geneName);
       (gene.geneTargets || []).forEach((target: any, targetIndex: number) => {
         const targetSequence = normalized(target.gRNA);
         if (!targetSequence) return;
         const targetName = target.target_id?.trim() || `T${targetIndex + 1}`;
-        const aliases = group!.targets.get(targetSequence) || [];
-        if (!aliases.includes(targetName)) aliases.push(targetName);
-        group!.targets.set(targetSequence, aliases);
+        const key = targetSequence;
+        const entry = group!.targets.get(key) || { names: [], originalGuide: targetSequence };
+        if (!entry.names.includes(targetName)) entry.names.push(targetName);
+        group!.targets.set(key, entry);
       });
     });
-
-    const displayNameCounts = new Map<string, number>();
-    for (const group of referenceGroups.values()) {
-      const name = group.names.join('/');
-      displayNameCounts.set(name, (displayNameCounts.get(name) || 0) + 1);
-    }
-
-    return [...referenceGroups.values()].map((group, geneIndex) => {
-      const displayBase = group.names.join('/') || `G${geneIndex + 1}`;
-      const displayGene = (displayNameCounts.get(displayBase) || 0) > 1
-        ? `${displayBase} [${geneIndex + 1}]`
-        : displayBase;
-      const targetBases = [...group.targets.values()].map(names => names.join('/'));
-      const targetNameCounts = targetBases.reduce((counts, name) => {
-        counts.set(name, (counts.get(name) || 0) + 1);
-        return counts;
-      }, new Map<string, number>());
-      const targetOccurrences = new Map<string, number>();
-
-      return {
-        // Internal key must be unique even when two references share a label.
-        gene: `reference-${geneIndex + 1}`,
-        display_gene: displayGene,
-        homoeolog_group: group.homoeologGroup,
-        sequence: group.sequence,
-        targets: [...group.targets.entries()].map(([sgrnaSeq, names]) => {
-          const base = names.join('/');
-          const occurrence = (targetOccurrences.get(base) || 0) + 1;
-          targetOccurrences.set(base, occurrence);
-          return {
-            target_id: (targetNameCounts.get(base) || 0) > 1 ? `${base} [${occurrence}]` : base,
-            sgrna_seq: sgrnaSeq,
-            reference_seq: group.sequence,
-            window_size: windowSize,
-            window_left: customWindowEnabled ? customWindowLeft : undefined,
-            window_right: customWindowEnabled ? customWindowRight : undefined
-          };
-        })
-      };
-    });
+    return [...referenceGroups.values()].map((group, geneIndex) => ({
+      gene: `reference-${geneIndex + 1}`,
+      display_gene: group.names.join('/') || `G${geneIndex + 1}`,
+      homoeolog_group: group.homoeologGroup,
+      sequence: group.sequence,
+      targets: [...group.targets.values()].map(entry => {
+        return {
+          target_id: entry.names.join('/'),
+          sgrna_seq: entry.originalGuide,
+          reference_seq: group.sequence,
+          window_size: windowSize,
+          window_left: customWindowEnabled ? customWindowLeft : undefined,
+          window_right: customWindowEnabled ? customWindowRight : undefined
+        };
+      })
+    }));
   }
 
-  private safeWorksheetBase(value: string): string {
-    return (value.replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Barcode').slice(0, 31);
-  }
-
+  private safeWorksheetBase(value: string): string { return (value.replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Barcode').slice(0, 31); }
   private safeWorksheetName(value: string, used: Set<string>): string {
-    const base = this.safeWorksheetBase(value);
-    let name = base;
-    let suffix = 2;
-    while (used.has(name.toLowerCase())) {
-      const tail = ` ${suffix++}`;
-      name = `${base.slice(0, 31 - tail.length)}${tail}`;
-    }
-    used.add(name.toLowerCase());
-    return name;
+    const base = this.safeWorksheetBase(value); let name = base; let suffix = 2;
+    while (used.has(name.toLowerCase())) { const tail = ` ${suffix++}`; name = `${base.slice(0, 31 - tail.length)}${tail}`; }
+    used.add(name.toLowerCase()); return name;
   }
-
   private worksheetRows(worksheet: ExcelJS.Worksheet): ReferenceExcelRow[] {
     const rows: ReferenceExcelRow[] = [];
     const normalizedHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1217,7 +1414,6 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     });
     return rows;
   }
-
   private rowsToGenes(rows: ReferenceExcelRow[]): any[] {
     const genes = new Map<string, { names: string[]; homoeolog_group: string; gene_reference: string; targets: Map<string, string[]> }>();
     for (const row of rows) {
@@ -1232,31 +1428,13 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
         genes.set(row.geneSeq, gene);
       }
       if (!gene.names.includes(row.geneName)) gene.names.push(row.geneName);
-      const targetNames = gene.targets.get(row.targetSeq) || [];
+      const names = gene.targets.get(row.targetSeq) || [];
       const targetName = row.targetName || `T${gene.targets.size + 1}`;
-      if (!targetNames.includes(targetName)) targetNames.push(targetName);
-      gene.targets.set(row.targetSeq, targetNames);
+      if (!names.includes(targetName)) names.push(targetName);
+      gene.targets.set(row.targetSeq, names);
     }
-    return [...genes.values()].map(gene => ({
-      gene_name: gene.names.join('/'),
-      homoeolog_group: gene.homoeolog_group,
-      gene_reference: gene.gene_reference,
-      geneTargets: [...gene.targets.entries()].map(([gRNA, names]) => ({ target_id: names.join('/'), gRNA }))
-    }));
+    return [...genes.values()].map(gene => ({ gene_name: gene.names.join('/'), homoeolog_group: gene.homoeolog_group, gene_reference: gene.gene_reference, geneTargets: [...gene.targets.entries()].map(([gRNA, names]) => ({ target_id: names.join('/'), gRNA })) }));
   }
-
-  private genesToRows(genes: any[]): ReferenceExcelRow[] {
-    return genes.flatMap(gene => (gene.geneTargets || []).map((target: any) => ({
-      homoeologName: gene.homoeolog_group || '',
-      geneName: gene.gene_name || '', geneSeq: gene.gene_reference || '',
-      targetName: target.target_id || '', targetSeq: target.gRNA || ''
-    })));
-  }
-
-  private validGenes(genes: any[]): boolean {
-    return genes.length > 0 && genes.every(gene =>
-      Boolean(gene.gene_reference?.trim()) && Array.isArray(gene.geneTargets) && gene.geneTargets.length > 0 &&
-      gene.geneTargets.every((target: any) => Boolean(target.gRNA?.trim()))
-    );
-  }
+  private genesToRows(genes: any[]): ReferenceExcelRow[] { return genes.flatMap(gene => (gene.geneTargets || []).map((target: any) => ({ homoeologName: gene.homoeolog_group || '', geneName: gene.gene_name || '', geneSeq: gene.gene_reference || '', targetName: target.target_id || '', targetSeq: target.gRNA || '' }))); }
+  private validGenes(genes: any[]): boolean { return genes.length > 0 && genes.every(gene => Boolean(gene.gene_reference?.trim()) && Array.isArray(gene.geneTargets) && gene.geneTargets.length > 0 && gene.geneTargets.every((target: any) => Boolean(target.gRNA?.trim()))); }
 }

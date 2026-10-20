@@ -11,6 +11,9 @@ describe('AnalysisPageComponent result rendering', () => {
     const state = {
       resultsUpdated$,
       activateSlot: vi.fn(),
+      collapseAnalysisPanels$: new Subject<void>(),
+      analysisForm: { get: () => ({ value: false }) },
+      geneBlocks: { valueChanges: new Subject<void>() },
     } as any;
     const cdr = { detectChanges: vi.fn() } as any;
     const component = new AnalysisPageComponent(state, cdr);
@@ -25,7 +28,7 @@ describe('AnalysisPageComponent result rendering', () => {
   });
 
   it('uses sequences as identity and joins aliases without collapsing different sequences', () => {
-    const component = new AnalysisPageComponent({} as any, {} as any);
+    const component = new AnalysisPageComponent({analysisForm: {get: () => ({value: false})}} as any, {} as any);
     const payload = (component as any).buildSequenceBasedPayload([
       { gene_name: 'YCO', gene_reference: 'AAAA', geneTargets: [{ target_id: 'T1', gRNA: 'GG' }] },
       { gene_name: 'TRY', gene_reference: 'AAAA', geneTargets: [{ target_id: 'T2', gRNA: 'GG' }] },

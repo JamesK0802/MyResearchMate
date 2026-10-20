@@ -1,5 +1,3 @@
-import { resolveMatchedCutSite } from '../../workers/core/classifier';
-
 export interface AnnotationTarget {
   ref_sequence?: string;
   sgrna_seq?: string;
@@ -9,6 +7,9 @@ export interface AnnotationTarget {
   is_rc?: boolean;
   strand?: string;
 }
+
+const isNgg = (value: string): boolean => /^[ACGT]GG$/.test(value);
+const isCcn = (value: string): boolean => /^CC[ACGT]$/.test(value);
 
 /**
  * Resolve the marker used by the result annotation only.
@@ -31,15 +32,30 @@ export function resolveAnnotationCutSite(target: AnnotationTarget | null | undef
   const guideEnd = guideStart + displayedGuide.length;
   if (guideEnd > reference.length) return fallback;
 
+  const rightPam = reference.slice(guideEnd, guideEnd + 3);
+  const leftPam = guideStart >= 3 ? reference.slice(guideStart - 3, guideStart) : '';
+  const guideEndsWithPam = displayedGuide.length > 3 && isNgg(displayedGuide.slice(-3));
+  const guideStartsWithPam = displayedGuide.length > 3 && isCcn(displayedGuide.slice(0, 3));
+
   // Prefer the strand selected during analysis when both orientations happen
   // to be possible. This changes only the annotation marker.
   const reverse = target.is_rc === true || target.strand === 'reverse';
 
-  const preferred = resolveMatchedCutSite(reference, guideStart, displayedGuide.length, reverse ? 'reverse' : 'forward');
-  const alternate = preferred.pam_found
-    ? preferred
-    : resolveMatchedCutSite(reference, guideStart, displayedGuide.length, reverse ? 'forward' : 'reverse');
-  const resolved = alternate.pam_found ? alternate.cut_site : fallback;
+  const forwardCut = isNgg(rightPam)
+    ? guideEnd - 3
+    : guideEndsWithPam
+      ? guideEnd - 6
+      : null;
+
+  const reverseCut = isCcn(leftPam)
+    ? guideStart + 3
+    : guideStartsWithPam
+      ? guideStart + 6
+      : null;
+
+  const resolved = reverse
+    ? (reverseCut ?? forwardCut)
+    : (forwardCut ?? reverseCut);
 
   return resolved !== null && resolved >= 0 && resolved <= reference.length
     ? resolved

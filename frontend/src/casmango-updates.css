@@ -1,0 +1,1468 @@
+/* CasMANGO-only additions; preserve the platform shell and other tools. */
+
+
+@media (max-width: 700px) {
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-filter-row { align-items: stretch; }
+}
+
+@media (max-width: 700px) {
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set.targets { margin-left: 0; }
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .local-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-primary);
+  animation: localBannerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .local-mode-banner svg {
+  flex-shrink: 0;
+  stroke: var(--color-primary);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-advanced-toggle, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-autofill, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-window-check {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  color: var(--color-text-secondary);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 650;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-advanced-toggle:hover { color: var(--color-primary-hover); background: var(--color-primary-light); border-color: var(--color-primary-border); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .similar-window-settings-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; min-height: 38px; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--color-primary-hover); font-weight: 700; white-space: nowrap; cursor: pointer; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-toggle input { width: 16px; height: 16px; accent-color: var(--color-primary); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-inputs > label { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: .85rem; font-weight: 700; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .similar-window-card { padding: 18px; border: 1px solid var(--color-border); border-radius: 12px; background: #fff; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .similar-window-header h4 { margin: 0; color: var(--color-text-primary); font-size: 1rem; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .similar-window-subtitle { color: var(--color-text-tertiary); font-size: .82rem; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .slider-description { margin: 6px 0 0; color: var(--color-text-tertiary); font-size: .8rem; }
+
+@media (max-width: 700px) {
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-row, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .custom-window-inputs, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .similar-window-header { align-items: flex-start; flex-direction: column; }
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .percent-text { font-family: var(--font-mono); font-weight: var(--fw-black); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .status-log {
+  background: #1e1e1e;
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .mate-empty {
+  display: flex;
+  align-items: center;
+  min-height: 31px;
+  color: var(--color-text-tertiary);
+  font-size: 0.72rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .info-icon:hover {
+  background: #94a3b8;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .info-icon:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 8px 12px 0 12px;
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 16px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tabs-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+  flex: 1;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-tab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 8px 8px 0 0;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-tab-item:hover {
+  background: #cbd5e1;
+  color: #1e293b;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-tab-item.active {
+  background: #ffffff;
+  color: #1e293b;
+  border-color: #cbd5e1 #cbd5e1 #ffffff #cbd5e1;
+  font-weight: 700;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.04);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-tab-item.locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tab-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tab-rename-input {
+  padding: 2px 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  height: 24px !important;
+  width: 120px !important;
+  border: 1px solid #3b82f6 !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tab-close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tab-close-btn:hover {
+  color: #ef4444;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .tab-close-btn:disabled, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-add-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-add-tab {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #3b82f6;
+  font-size: 1.1rem;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-add-tab:hover:not(:disabled) {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+  transform: scale(1.05);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .ref-map-bar-wrapper {
+  margin: 8px 0 10px 0;
+  padding: 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .ref-map-bar {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: #22c55e; /* Green for full reference */
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .ref-map-win {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #f97316; /* Orange for extracted 90bp window */
+  opacity: 0.9;
+  border-left: 1px solid #c2410c;
+  border-right: 1px solid #c2410c;
+  z-index: 1;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .ref-map-target {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #ef4444; /* Red for target gRNA */
+  border-left: 1px solid #b91c1c;
+  border-right: 1px solid #b91c1c;
+  z-index: 2;
+  box-shadow: 0 0 3px rgba(239, 68, 68, 0.6);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .global-ref-map-legend-bottom {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #475569;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  padding-left: 2px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .legend-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .box-ref {
+  background: #22c55e;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .box-win {
+  background: #f97316;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .box-target {
+  background: #ef4444;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-anno-target-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-anno-target-action:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-anno-target-action.workspace {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #16a34a;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-anno-target-action.workspace:hover {
+  background: #dcfce7;
+  border-color: #4ade80;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .advanced-toggle-bar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-advanced-toggle {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-advanced-toggle:hover {
+  color: #1e293b;
+  background-color: #f1f5f9;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similar-window-settings-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similar-window-header {
+  margin-bottom: 14px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similar-window-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similar-window-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-group-container {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-group {
+  flex: 1;
+  min-width: 260px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-header label {
+  margin-bottom: 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-value-badge {
+  background: #e2e8f0;
+  color: #1e293b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: monospace;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) input[type="range"].form-range, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .form-range {
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  width: 100%;
+  accent-color: #3b82f6;
+  cursor: pointer;
+  height: 6px;
+  margin: 12px 0 8px 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-description {
+  margin: 4px 0 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.out-of-frame { border-top-color: #E69F00; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.in-frame     { border-top-color: #0072B2; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.no-indel     { border-top-color: #009E73; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.sub          { border-top-color: #CC79A7; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .result-view-switch {
+  display: inline-flex;
+  gap: 3px;
+  margin: 0 0 var(--space-5);
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .result-view-switch button, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set button {
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .result-view-switch button { padding: 6px 16px; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .result-view-switch button.active, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set button.active {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homoeolog-result-view {
+  display: grid;
+  gap: var(--space-6);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-filter-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set button {
+  padding: 5px 12px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-chip-set.targets {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-metrics-grid {
+  margin-bottom: 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .homo-charts-section {
+  margin-bottom: 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.out-of-frame { border-left: 4px solid #E69F00; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.in-frame     { border-left: 4px solid #0072B2; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.no-indel     { border-left: 4px solid #009E73; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .metric-card.sub          { border-left: 4px solid #CC79A7; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unified-table {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: min-content;
+  width: 100%;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unified-row {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .sticky-left {
+  position: sticky;
+  left: 0;
+  background: white;
+  z-index: 20;
+  padding: 15px;
+  width: 150px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-right: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .seq-center {
+  padding: 10px 15px 5px 15px;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .sticky-right {
+  position: sticky;
+  right: 0;
+  background: white;
+  z-index: 20;
+  padding: 15px;
+  width: 300px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-left: 1px solid #eee;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-result-card { background: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px 22px; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-mode-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-mode-tabs button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-advanced-toggle:hover { border-color: var(--color-primary-border); background: var(--color-primary-light); color: var(--color-primary-hover); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-custom-window-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 700; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-custom-window-toggle input { width: 16px; height: 16px; accent-color: var(--color-primary); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-custom-window { display: flex; gap: var(--space-4); }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-dataset-card { overflow: hidden; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-class-row, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .merge-reference-row {
+  display: grid;
+  grid-template-columns: minmax(170px, .8fr) minmax(0, 3.35fr) 32px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .merge-output-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .merge-mate-card {
+  display: grid;
+  gap: 8px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+@media (max-width: 900px) {
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .merge-mate-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .bench-class-row, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .merge-reference-row { grid-template-columns: 1fr; align-items: stretch; }
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-save-data {
+  padding: 8px 16px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-save-data:hover {
+  background-color: #059669;
+  transform: translateY(-1px);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-save-data:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-window-check {
+  padding: 8px 16px;
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-window-check:hover {
+  background-color: #dcfce7;
+  border-color: #86efac;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-window-check.active {
+  background-color: #16a34a;
+  color: #ffffff;
+  border-color: #15803d;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  animation: slideDown 0.25s ease-out;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-title h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-hint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-close-window-check {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-close-window-check:hover {
+  color: #334155;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #f8fafc;
+  padding: 12px 18px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 1px solid #f1f5f9;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-controls-row .control-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .slider-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-range-slider {
+  width: 100%;
+  accent-color: #16a34a;
+  cursor: pointer;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .range-bound {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .number-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-number-input {
+  width: 80px !important;
+  text-align: center;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unit-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  gap: 12px;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-check-loading .spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #16a34a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .no-windows-alert {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .windows-list-section h4, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-matrix-section h4 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+  margin: 0 0 12px 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .windows-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.82rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-target-name {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-length-badge {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-meta {
+  font-size: 0.76rem;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-meta.warning {
+  color: #d97706;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .window-seq {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  padding: 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: #0f172a;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .matrix-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table th, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table td {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table .corner-cell {
+  background: #f1f5f9;
+  font-weight: 700;
+  color: #475569;
+  text-align: left;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table .col-header {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334155;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table .row-header {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334155;
+  text-align: left;
+  white-space: nowrap;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table td.diagonal {
+  font-weight: 700;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-pct {
+  font-weight: 600;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .matrix-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .matrix-header-row h4 {
+  margin: 0 !important;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .matrix-hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table td {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table td:hover {
+  outline: 2px solid #16a34a;
+  outline-offset: -2px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .similarity-table td.selected-cell {
+  outline: 3px solid #15803d !important;
+  outline-offset: -3px;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.4);
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .pair-comparison-section {
+  margin-top: 20px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 16px;
+  animation: slideDown 0.25s ease-out;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .pair-comparison-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .pair-title-info h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .highlight-target {
+  color: #16a34a;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .vs-badge {
+  font-size: 0.75rem;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin: 0 6px;
+  font-weight: 700;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .pair-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .stat-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .stat-badge.similarity {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .stat-badge.matches {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .stat-badge.mismatches {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-close-comparison {
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .btn-close-comparison:hover {
+  color: #334155;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .alignment-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .alignment-row {
+  display: flex;
+  align-items: center;
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .alignment-row.match-bar-row {
+  margin: 2px 0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .alignment-label {
+  width: 140px;
+  min-width: 140px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+  text-align: right;
+  font-size: 0.8rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .alignment-seq {
+  display: flex;
+  align-items: center;
+  letter-spacing: 1px;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .base-char {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 3px;
+  transition: all 0.1s ease;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .base-char.match {
+  color: #1e293b;
+  background-color: transparent;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .base-char.mismatch {
+  color: #dc2626;
+  background-color: #fee2e2;
+  font-weight: 800;
+  border: 1px solid #fca5a5;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .scrollable-drag {
+  cursor: grab;
+  user-select: none;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .scrollable-drag.dragging-scroll {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .stat-badge.cut-site-legend {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .base-char.cut-site {
+  box-shadow: inset 0 -3px 0 #2563eb;
+  font-weight: 800;
+  position: relative;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .match-bar .cut-site-icon {
+  color: #2563eb;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .base-char.gap {
+  color: #9ca3af;
+  background-color: #f3f4f6;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .match-bar .match-icon {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .match-bar .match-icon.match {
+  color: #16a34a;
+  font-weight: 800;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .match-bar .match-icon.mismatch {
+  color: #ef4444;
+  font-weight: 800;
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .config-section {
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .upload-zone {
+    align-items: center;
+    border-radius: 14px;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 18px;
+    min-height: 58px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .upload-zone p {
+    margin: 0;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-controls-grid .tooltip-text {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .divider {
+    margin: 16px 0;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .section-header {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .section-header h2 {
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .section-header .header-actions {
+    display: grid;
+    flex-shrink: 0;
+    gap: 8px;
+    grid-template-columns: 1fr 1fr;
+    width: 176px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-block-card {
+    border-width: 1.5px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-block-header {
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-block-body {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-block-body .form-row {
+    gap: 12px !important;
+    margin-bottom: 12px !important;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-block-body .form-group, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-target-row .form-group {
+    flex: 1 1 auto !important;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page textarea.monospaced {
+    min-height: 96px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-targets-section {
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-targets-header {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-targets-label {
+    line-height: 1.35;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .btn-add-small {
+    flex-shrink: 0;
+    min-height: 42px;
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-target-row {
+    gap: 10px;
+    padding: 10px 0 14px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .analysis-page .gene-target-num {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .mobile-scope-select {
+    appearance: none;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.92rem;
+    font-weight: 800;
+    min-height: 46px;
+    padding: 10px 40px 10px 14px;
+    width: 100%;
+    background-image:
+      linear-gradient(45deg, transparent 50%, #64748b 50%),
+      linear-gradient(135deg, #64748b 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) 19px,
+      calc(100% - 13px) 19px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .left-actions, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .right-actions {
+    display: grid !important;
+    gap: 10px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-curate, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-exit-curate, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-new-analysis, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-save-data, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-save-curated, :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .results-dashboard .btn-export {
+    justify-content: center;
+    min-height: 48px;
+    padding: 10px 12px !important;
+    text-align: center;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+
+  :is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .mobile-sequence-bases {
+    display: flex;
+    padding: 6px 12px 20px;
+  }
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unified-anno-container {
+  overflow-x: auto;
+  white-space: nowrap;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  background: #fff;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unified-table {
+  display: grid;
+  grid-template-columns: 150px max-content 280px;
+  align-items: stretch;
+  min-width: 100%;
+  width: max-content;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .unified-row { display: contents; }
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .sticky-left {
+  grid-column: 1;
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  padding: 12px;
+  border-right: 1px solid #eee;
+  border-bottom: 1px dotted #e0e0e0;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .seq-center {
+  grid-column: 2;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  padding: 10px 15px 5px;
+  border-bottom: 1px dotted #e0e0e0;
+}
+
+:is(app-analysis-page,app-result-dashboard,app-benchmark-page,app-result-viewer-page) .sticky-right {
+  grid-column: 3;
+  position: sticky;
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  padding: 12px;
+  border-left: 1px solid #eee;
+  border-bottom: 1px dotted #e0e0e0;
+  background: #fff;
+}

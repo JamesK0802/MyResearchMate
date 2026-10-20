@@ -1,5 +1,5 @@
 import { findGrnaCutSite, reverseComplement } from './classifier';
-import { SequenceMatcher } from './sequence-matcher';
+import { ReferenceMatcher as SequenceMatcher } from './reference-comparison';
 
 export interface HomoeologGuideMatch {
   matched: boolean;
@@ -53,6 +53,7 @@ export function findHomoeologGuideSite(reference: string, guide: string, maxMism
   const candidates: HomoeologGuideMatch[] = [];
   for (let pos = 0; pos <= ref.length - query.length; pos++) {
     const spacer = ref.slice(pos, pos + query.length);
+
     const forwardPam = ref.slice(pos + query.length, pos + query.length + 3);
     const forwardPamFound = forwardPam.length === 3 && forwardPam[1] === 'G' && forwardPam[2] === 'G';
     const forwardMismatches = mismatchCount(spacer, query);

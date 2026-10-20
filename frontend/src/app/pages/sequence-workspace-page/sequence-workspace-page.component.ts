@@ -50,14 +50,20 @@ type MobileWorkspacePanel = 'files' | 'viewer' | 'details';
         <app-main-viewer [isSidebarCollapsed]="isSidebarCollapsed"></app-main-viewer>
       </div>
 
-      <div class="panel inspector-panel" [class.mobile-panel-hidden]="mobilePanel !== 'details'" *ngIf="(workspace.selectedItem$ | async)?.type !== 'fastq'">
+      <div class="panel inspector-panel" [class.mobile-panel-hidden]="mobilePanel !== 'details'" *ngIf="canOpenDetails">
         <app-item-inspector></app-item-inspector>
       </div>
       </div>
     </div>
   `,
   styles: [`
-    .sequence-workspace-page { display: flex; flex-direction: column; height: calc(100vh - 56px); width: 100%; background: var(--color-background); overflow: hidden; }
+    .sequence-workspace-page {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 56px);
+      width: 100%;
+      background: var(--color-background);
+      overflow: hidden; }
     .storage-bar { height: 34px; padding: 0 14px; flex: 0 0 34px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); background: var(--color-surface); box-sizing: border-box; }
     .storage-title { color: var(--color-text-primary); font-size: 0.82rem; font-weight: 800; }
     .storage-usage { color: var(--color-primary); font-size: 0.78rem; font-weight: 700; }
@@ -127,8 +133,18 @@ type MobileWorkspacePanel = 'files' | 'viewer' | 'details';
       .storage-bar { height: 32px; flex-basis: 32px; padding: 0 9px; }
       .storage-title { font-size: .72rem; }
       .storage-bar app-storage-usage, .storage-usage.muted { display: none; }
-      .mobile-workspace-tabs { display: grid; grid-template-columns: repeat(3, 1fr); flex: 0 0 39px; border-bottom: 1px solid var(--color-border); background: #fff; }
-      .mobile-workspace-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #64748b; font: 700 .74rem var(--font-sans); }
+      .mobile-workspace-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        flex: 0 0 42px;
+        border-bottom: 1px solid var(--color-border);
+        background: #fff; }
+      .mobile-workspace-tabs button {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: #64748b;
+        font: 750 .78rem var(--font-sans); }
       .mobile-workspace-tabs button.active { border-bottom-color: var(--color-primary); color: var(--color-primary); }
       .mobile-workspace-tabs button:disabled { color: #cbd5e1; cursor: not-allowed; }
       .mobile-workspace-tabs button:disabled.active { border-bottom-color: transparent; }

@@ -24,6 +24,7 @@ import { findGrnaCutSite, extractWindow, cutIndexInWindow, isReadUsable } from '
 import { GenePayload } from './core/multi-reference-assigner';
 import { runBenchmark } from './core/benchmark-pipeline';
 import { IlluminaFilePair } from '../models/illumina.model';
+import { findMergeTarget } from '../models/result-merge';
 import { buildIlluminaPseudoReads, fastqReadsToString, preprocessIlluminaReads } from './core/illumina-preprocessor';
 
 let cancelled = false;
@@ -36,10 +37,6 @@ const geneResultKey = (gene: any): string => {
   const sequence = normalizedSequence(gene.reference_sequence);
   const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
   return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
-};
-const targetResultKey = (target: any): string => {
-  const sequence = normalizedSequence(target.sgrna_seq || target.display_sgrna_seq);
-  return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
 };
 
 // Files below this size already run reliably through the normal in-memory
@@ -85,7 +82,6 @@ function finalizeTargetResult(target: any): void {
   summary.indel_editing_efficiency = pct(summary.modified);
   target.top_groups = (target.top_groups || [])
     .sort((a: any, b: any) => b.read_count - a.read_count)
-    .slice(0, 10)
     .map((group: any, index: number) => ({
       ...group,
       group_rank: index + 1,
@@ -134,17 +130,14 @@ function mergeFileResult(target: FileResult | null, source: FileResult): FileRes
     }
     gene.gene = mergeAliases(gene.gene, incomingGene.gene);
     gene.assigned_read_count += incomingGene.assigned_read_count || 0;
-    const targets = new Map<string, any>((gene.analysis_result.targets || []).map((item: any) => [targetResultKey(item), item]));
     for (const incomingTarget of incomingGene.analysis_result.targets || []) {
-      const targetIdentity = targetResultKey(incomingTarget);
-      const existing = targets.get(targetIdentity);
+      const existing = findMergeTarget(gene.analysis_result.targets || [], incomingTarget, incomingGene.analysis_result.targets || []);
       if (existing) {
         existing.target_id = mergeAliases(existing.target_id, incomingTarget.target_id);
         mergeTargetResult(existing, incomingTarget);
       } else {
         const copy = structuredClone(incomingTarget);
         gene.analysis_result.targets.push(copy);
-        targets.set(targetIdentity, copy);
       }
     }
     if (incomingGene.analysis_result.multi_target_summary) {
@@ -240,7 +233,13 @@ addEventListener('message', async (event: MessageEvent) => {
             fileProgress: { ...fileProgress },
           });
 
-          allResults.push(processFile(pair.name, normalized.reads, inputGenes, params));
+          const result = processFile(pair.name, normalized.reads, inputGenes, params);
+          // Raw/phred counts describe input molecules, not the window-dependent
+          // normalized subset that is handed to the downstream classifier.
+          const debug = result.multi_reference_result.debug;
+          debug.total_reads_parsed = normalized.stats.inputMolecules;
+          debug.phred_passed_count = normalized.stats.phredPassedMolecules;
+          allResults.push(result);
           fileProgress[pair.name] = 100;
           postMessage({
             type: 'progress',
@@ -476,21 +475,33 @@ addEventListener('message', async (event: MessageEvent) => {
 const fileTextCache = new Map<string, string>();
 
   if (type === 'export-group-fastq') {
-    const { file, target, readInner, params } = payload as {
-      file: File;
+    const { file, illuminaPair, target, readInner, params } = payload as {
+      file?: File | null;
+      illuminaPair?: IlluminaFilePair | null;
       target: any;
       readInner: string;
       params: any;
     };
 
     try {
-      const cacheKey = `${file.name}_${file.size}_${file.lastModified}`;
-      let text = fileTextCache.get(cacheKey);
-
-      if (!text) {
-        postMessage({ type: 'progress', percent: 10, stage: 'Reading & decompressing FASTQ file...' });
-        text = await readFileAsText(file);
-        fileTextCache.set(cacheKey, text);
+      let text: string;
+      if (illuminaPair) {
+        postMessage({ type: 'progress', percent: 10, stage: 'Reading and normalizing Illumina mates...' });
+        const r1Reads = illuminaPair.r1 ? await parseFastqFile(illuminaPair.r1) : null;
+        const r2Reads = illuminaPair.r2 ? await parseFastqFile(illuminaPair.r2) : null;
+        text = fastqReadsToString(buildIlluminaPseudoReads(r1Reads, r2Reads, params.windowSize ?? target.window_size ?? 90));
+      } else if (file) {
+        const cacheKey = `${file.name}_${file.size}_${file.lastModified}`;
+        const cached = fileTextCache.get(cacheKey);
+        if (cached) {
+          text = cached;
+        } else {
+          postMessage({ type: 'progress', percent: 10, stage: 'Reading & decompressing FASTQ file...' });
+          text = await readFileAsText(file);
+          fileTextCache.set(cacheKey, text);
+        }
+      } else {
+        throw new Error('No FASTQ source is available for export.');
       }
 
       postMessage({ type: 'progress', percent: 40, stage: 'Filtering reads for export...' });

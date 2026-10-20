@@ -53,6 +53,7 @@
         <button type="button" (click)="runMobileResultAction(state.activeMode === 'viewer' ? 'new-view' : 'new-analysis')">
           {{ state.activeMode === 'viewer' ? 'New view' : 'New analysis' }}
         </button>
+        <button *ngIf="state.mergedGenes.length > 0" type="button" [disabled]="isSaving" (click)="runMobileResultAction(state.isCuratedView ? 'save-curated' : 'save')">Save to My Data</button>
         <button *ngIf="!state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('export')">Export Excel</button>
         <button *ngIf="state.isCuratedView && state.mergedGenes.length > 0" type="button" (click)="runMobileResultAction('export-curated')">Export curated</button>
       </div>
@@ -119,13 +120,18 @@
   <div class="standard-result-view" [hidden]="resultView === 'homoeolog'">
 
   <!-- ── Result Scope Tabs (Merged vs Per-File) ── -->
-  <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.multiFileCount > 1">
-    <div class="scope-tabs">
+  <p class="curation-sweep-hint" *ngIf="state.isCuratedView">Hold × and drag across items, scroll while holding, or Shift-click a range.</p>
+  <div class="curation-sweep-status" *ngIf="curationSweep" role="status">Release to {{ curationSweep.excluded ? 'exclude' : 'restore' }} {{ curationSweep.items.size }} {{ curationSweep.kind === 'gene' ? 'reference(s)' : curationSweep.kind + '(s)' }} · Esc to cancel</div>
+
+  <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.allFileResults.length > 1">
+    <div class="scope-tabs" [class.curatable-strip]="state.isCuratedView">
       <button type="button" class="scope-tab-btn" [class.active]="state.selectedScopeIndex === -1"
         (click)="selectScope(-1)">
         All Merged
       </button>
       <button type="button" class="scope-tab-btn file-curate-tab" *ngFor="let fr of state.allFileResults; let i = index"
+        data-curation-kind="file" [attr.data-curation-key]="extractFileName(fr.fastq_file)"
+        [class.curation-pending]="isCurationPending('file', extractFileName(fr.fastq_file))"
         [class.active]="state.selectedScopeIndex === i"
         [class.excluded-tab]="isFileExcluded(fr)"
         (click)="selectScope(i)">
@@ -142,7 +148,10 @@
 
         <!-- Exclude Toggle -->
         <span *ngIf="state.isCuratedView" class="exclude-toggle" [class.is-excluded]="isFileExcluded(fr)"
-          (click)="toggleFile(fr); $event.stopPropagation()">
+          role="button" tabindex="0" aria-label="Exclude or restore file"
+          (pointerdown)="beginCurationSweep($event, 'file', extractFileName(fr.fastq_file), isFileExcluded(fr))"
+          (click)="onCurationClick($event, 'file', extractFileName(fr.fastq_file), isFileExcluded(fr))"
+          (keydown.enter)="toggleFile(fr); $event.stopPropagation()" (keydown.space)="toggleFile(fr); $event.preventDefault(); $event.stopPropagation()">
           {{ isFileExcluded(fr) ? '↩' : '✕' }}
         </span>
       </button>
@@ -154,39 +163,55 @@
     <div class="gene-tabs" role="tablist">
       <!-- Normal genes (included) -->
       <button *ngFor="let g of state.normalGenes; let i = index" role="tab" class="gene-tab-btn"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex"
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.rescuedGenes; let i = index" role="tab" class="gene-tab-btn rescued-derived"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex" (click)="selectGene(state.genes.indexOf(g))"
         style="background-color: #e8f5e9; border-color: #a5d6a7;">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.ambiguousGenes; let i = index" role="tab" class="gene-tab-btn ambiguous-derived"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex"
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <!-- Excluded genes (curated mode only) -->
       <button *ngFor="let gName of excludedGeneNames" role="tab"
+        data-curation-kind="gene" [attr.data-curation-key]="gName" [class.curation-pending]="isCurationPending('gene', gName)"
         class="gene-tab-btn excluded-tab"
         (click)="toggleGene(gName)">
         <span class="gene-tab-label">{{ gName }}</span>
         <span class="gene-tab-count">excluded</span>
-        <span class="exclude-toggle gene-exclude is-excluded">↩</span>
+        <span class="exclude-toggle gene-exclude is-excluded" role="button" tabindex="0" aria-label="Restore reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', gName, true)"
+          (click)="onCurationClick($event, 'gene', gName, true)"
+          (keydown.enter)="toggleGene(gName); $event.stopPropagation()" (keydown.space)="toggleGene(gName); $event.preventDefault(); $event.stopPropagation()">↩</span>
       </button>
     </div>
 
@@ -199,7 +224,7 @@
     <div class="gene-info-stripe" *ngIf="state.currentGene" [class.mobile-open]="mobileGeneInfoOpen">
       <span class="gene-info-item"><strong>Gene:</strong> {{ state.currentGene.gene }}</span>
       <span class="gene-info-sep">|</span>
-      <span class="gene-info-item"><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number
+      <span class="gene-info-item" title="Unique reads assigned to this reference before target/group curation. A read evaluated at multiple targets is counted once."><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number
         }}</span>
       <span class="gene-info-sep">|</span>
       <span class="gene-info-item ambiguous"><strong>Ambiguous Excluded:</strong> {{ state.ambiguousReadCount | number
@@ -238,7 +263,7 @@
     </div>
     <div class="metric-card no-indel">
       <span class="m-label">Unmodified %</span>
-      <span class="m-value">{{ (state.metrics.avgNoIndel - state.metrics.avgSubstitution) | number:'1.1-2' }}%</span>
+      <span class="m-value">{{ state.metrics.avgNoIndel | number:'1.1-2' }}%</span>
     </div>
     <div class="metric-card sub">
       <span class="m-label">Substitution %</span>
@@ -346,73 +371,6 @@
       </div>
     </div>
   </div>
-  </div>
-
-  <div class="homoeolog-result-view" *ngIf="resultView === 'homoeolog' && hasHomoeologResults">
-    <div class="homo-filter-row">
-      <div class="homo-chip-set" *ngIf="homoeologGroupIds.length > 1">
-        <button type="button" *ngFor="let group of homoeologGroupIds"
-          [class.active]="activeHomoeologGroup === group" (click)="selectHomoeologGroup(group)">{{ group }}</button>
-      </div>
-      <div class="homo-chip-set targets">
-        <button type="button" *ngFor="let target of homoeologTargetIds"
-          [class.active]="activeHomoeologTarget === target" (click)="selectHomoeologTarget(target)">{{ target }}</button>
-      </div>
-    </div>
-
-    <div class="homo-metrics">
-      <div><span>Refs</span><strong>{{ homoeologGenes.length }}</strong></div>
-      <div><span>Aligned</span><strong>{{ homoeologAssignedReads | number }}</strong></div>
-      <div><span>Mean edit</span><strong>{{ homoeologMeanEditing | number:'1.1-1' }}%</strong></div>
-      <div><span>Spread</span><strong>{{ homoeologEditingSpread | number:'1.1-1' }}%</strong></div>
-    </div>
-
-    <div class="homo-chart-grid">
-      <div class="homo-chart-card"><canvas id="homoeologEditingChart"></canvas></div>
-      <div class="homo-chart-card"><canvas id="homoeologCoverageChart"></canvas></div>
-    </div>
-
-    <div class="homo-ref-grid">
-      <ng-container *ngFor="let gene of homoeologGenes">
-        <div class="homo-ref-card" *ngIf="homoeologTarget(gene, activeHomoeologTarget) as target">
-          <div class="homo-ref-head"><strong>{{ gene.gene }}</strong><span>{{ target.summary?.aligned_reads | number }} reads</span></div>
-          <div class="homo-ref-edit"><strong>{{ (target.summary?.editing_efficiency ?? target.summary?.indel_editing_efficiency ?? 0) | number:'1.1-1' }}%</strong><span>edit</span></div>
-          <div class="homo-mini-profile" title="Unmodified · Substitution · In-frame · Out-of-frame">
-            <i class="unmod" [style.width.%]="(target.summary?.no_indel_pct ?? 0) - (target.summary?.substitution_pct ?? 0)"></i>
-            <i class="sub" [style.width.%]="target.summary?.substitution_pct ?? 0"></i>
-            <i class="inframe" [style.width.%]="target.summary?.in_frame_pct ?? 0"></i>
-            <i class="outframe" [style.width.%]="target.summary?.out_of_frame_pct ?? 0"></i>
-          </div>
-          <div class="homo-ref-values">
-            <span><i class="unmod"></i>Unmod <b>{{ ((target.summary?.no_indel_pct ?? 0) - (target.summary?.substitution_pct ?? 0)) | number:'1.1-1' }}%</b></span>
-            <span><i class="sub"></i>Sub <b>{{ target.summary?.substitution_pct ?? 0 | number:'1.1-1' }}%</b></span>
-            <span><i class="inframe"></i>IF <b>{{ target.summary?.in_frame_pct ?? 0 | number:'1.1-1' }}%</b></span>
-            <span><i class="outframe"></i>OOF <b>{{ target.summary?.out_of_frame_pct ?? 0 | number:'1.1-1' }}%</b></span>
-          </div>
-        </div>
-      </ng-container>
-    </div>
-
-    <div class="homo-compare-card">
-      <table>
-        <thead><tr><th>Reference</th><th>Total</th><th>Aligned</th><th>Edit</th><th>OOF</th><th>IF</th><th>Sub</th></tr></thead>
-        <tbody>
-          <ng-container *ngFor="let gene of homoeologGenes">
-            <tr *ngIf="homoeologTarget(gene, activeHomoeologTarget) as target">
-              <td><strong>{{ gene.gene }}</strong></td>
-              <td>{{ target.summary?.total_reads ?? 0 | number }}</td>
-              <td>{{ target.summary?.aligned_reads ?? 0 | number }}</td>
-              <td>{{ (target.summary?.editing_efficiency ?? target.summary?.indel_editing_efficiency ?? 0) | number:'1.1-1' }}%</td>
-              <td>{{ target.summary?.out_of_frame_pct ?? 0 | number:'1.1-1' }}%</td>
-              <td>{{ target.summary?.in_frame_pct ?? 0 | number:'1.1-1' }}%</td>
-              <td>{{ target.summary?.substitution_pct ?? 0 | number:'1.1-1' }}%</td>
-            </tr>
-          </ng-container>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════ ANNOTATION PANEL ══════════════ -->
 <div class="annotation-panel"
@@ -428,33 +386,35 @@
       </div>
 
       <!-- All Target Reads Actions (Download & Open in Workspace) - Only in Analysis Mode -->
-      <div class="target-all-actions-bar" *ngIf="state.activeMode !== 'viewer' && state.selectedFiles && state.selectedFiles.length > 0">
+      <div class="target-all-actions-bar" *ngIf="(state.activeMode !== 'viewer' && state.hasFastqExportSources)" style="display: flex; gap: 8px; margin-left: 8px;">
         <button
           type="button"
+
           (click)="state.downloadAllTargetFastq(state.selectedTarget)"
           [disabled]="state.isExportingFastq"
           title="Download all reads of this target as FASTQ"
-          aria-label="Download all reads of this target as FASTQ"
-          class="annotation-export-icon download">
+          class="btn-anno-target-action">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
+          All Reads Download
         </button>
 
         <button
           type="button"
+
           (click)="state.openAllTargetInSequenceWorkspace(state.selectedTarget)"
           [disabled]="state.isExportingFastq"
           title="Open all reads of this target in Sequence Workspace with auto-alignment"
-          aria-label="Open all reads of this target in Sequence Workspace with auto-alignment"
-          class="annotation-export-icon workspace">
+          class="btn-anno-target-action workspace">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
             <polyline points="15 3 21 3 21 9"></polyline>
             <line x1="10" y1="14" x2="21" y2="3"></line>
           </svg>
+          All Reads in Workspace ↗
         </button>
       </div>
     </div>
@@ -503,14 +463,18 @@
       </div>
 
       <!-- Mutation Group Rows -->
-      <div class="unified-row" *ngFor="let group of state.selectedTarget.top_groups"
+      <div class="unified-row" *ngFor="let group of visibleTopGroups"
         [class.excluded-row]="isGroupExcludedObj(group)"
         style="border-bottom: 1px dotted #e0e0e0; background: white;">
-        <div class="sticky-left">
+        <div class="sticky-left" data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
-            (click)="toggleGroup(group)"
+            (contextmenu)="openExcludeBelow($event, group)"
+            role="button" tabindex="0" aria-label="Exclude or restore group"
+            (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
-            title="Exclude/restore this group">
+            title="Exclude/restore this group. Right-click to exclude this group and all below.">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
           </span>
           <ng-container *ngIf="!isGroupExcludedObj(group)">GROUP {{ group.group_rank }}</ng-container>
@@ -545,14 +509,15 @@
             <span style="color:#7f8c8d; display: inline-flex; align-items: center;">
               {{ group.read_count | number }} Reads
               <ng-container *ngIf="!isGroupExcludedObj(group)">&nbsp;·&nbsp; {{ group.read_pct }}%</ng-container>
-              <ng-container *ngIf="state.activeMode !== 'viewer' && state.selectedFiles && state.selectedFiles.length > 0">
+              <ng-container *ngIf="(state.activeMode !== 'viewer' && state.hasFastqExportSources)">
                 <button
-                  type="button"
                   (click)="state.downloadGroupFastq(group)"
                   [disabled]="state.isExportingFastq"
                   title="Download original reads as FASTQ"
-                  aria-label="Download group reads as FASTQ"
-                  class="annotation-export-icon download">
+                  style="background: none; border: none; cursor: pointer; padding: 0 2px 0 4px; display: flex; align-items: center; color: #3498db; transition: opacity 0.2s;"
+                  [style.opacity]="state.isExportingFastq ? 0.5 : 1"
+                  onmouseover="this.style.opacity=0.7"
+                  onmouseout="this.style.opacity=1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
@@ -560,12 +525,13 @@
                   </svg>
                 </button>
                 <button
-                  type="button"
                   (click)="state.openGroupInSequenceWorkspace(group, state.selectedTarget)"
                   [disabled]="state.isExportingFastq"
                   title="Open group reads in Sequence Workspace with auto-alignment"
-                  aria-label="Open group reads in Sequence Workspace with auto-alignment"
-                  class="annotation-export-icon workspace">
+                  style="background: none; border: none; cursor: pointer; padding: 0 0 0 4px; display: flex; align-items: center; color: #16a34a; transition: opacity 0.2s;"
+                  [style.opacity]="state.isExportingFastq ? 0.5 : 1"
+                  onmouseover="this.style.opacity=0.7"
+                  onmouseout="this.style.opacity=1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                     <polyline points="15 3 21 3 21 9"></polyline>
@@ -578,6 +544,11 @@
         </div>
       </div>
     </div>
+
+  </div>
+  <div *ngIf="hasMoreGroups" class="annotation-more-footer desktop-annotation-more">
+    <span>{{ remainingGroupCount | number }} groups remaining</span>
+    <button type="button" class="annotation-more-button" (click)="loadMoreGroups()">Show {{ remainingGroupCount < 10 ? remainingGroupCount : 10 }} more <span aria-hidden="true">⌄</span></button>
   </div>
 
   <div class="mobile-annotation-list">
@@ -608,13 +579,18 @@
       </div>
 
       <!-- Mutation Groups -->
-      <ng-container *ngFor="let group of state.selectedTarget.top_groups">
+      <ng-container *ngFor="let group of visibleTopGroups">
         <!-- Group Header -->
-        <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)">
+        <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)"
+          data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
-            (click)="toggleGroup(group)"
+            (contextmenu)="openExcludeBelow($event, group)"
+            role="button" tabindex="0" aria-label="Exclude or restore group"
+            (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
-            title="Exclude/restore this group">
+            title="Exclude/restore this group. Right-click to exclude this group and all below.">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
           </span>
           <div class="mobile-group-info-line">
@@ -625,12 +601,11 @@
             <span class="group-reads">{{ group.read_count | number }} reads</span>
             <span class="group-pct" *ngIf="!isGroupExcludedObj(group)">{{ group.read_pct }}%</span>
             <button
-                type="button"
                 (click)="state.downloadGroupFastq(group)"
                 [disabled]="state.isExportingFastq"
                 title="Download original reads as FASTQ"
-                aria-label="Download group reads as FASTQ"
-                class="annotation-export-icon download">
+                style="background: none; border: none; cursor: pointer; padding: 0 0 0 4px; display: flex; align-items: center; color: #3498db; transition: opacity 0.2s;"
+                [style.opacity]="state.isExportingFastq ? 0.5 : 1">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="7 10 12 15 17 10"></polyline>
@@ -664,6 +639,139 @@
           </div>
         </div>
       </ng-container>
+    </div>
+
+    <!-- Mobile Load More Button -->
+    <div *ngIf="hasMoreGroups" class="annotation-more-footer">
+      <span>{{ remainingGroupCount | number }} groups remaining</span>
+      <button type="button" class="annotation-more-button" (click)="loadMoreGroups()">Show {{ remainingGroupCount < 10 ? remainingGroupCount : 10 }} more <span aria-hidden="true">⌄</span></button>
+    </div>
+  </div>
+</div>
+
+<div #excludeBelowMenu popover="auto" class="group-context-menu" role="menu" aria-label="Group actions"
+  [style.left.px]="bulkMenuPosition.x" [style.top.px]="bulkMenuPosition.y">
+  <button type="button" role="menuitem" [disabled]="!bulkGroupExclusion?.keys?.length"
+    (click)="confirmExcludeBelow()">Exclude this group and all below</button>
+</div>
+</div>
+
+  <div class="homoeolog-result-view" *ngIf="resultView === 'homoeolog' && hasHomoeologResults">
+    <!-- Target Selector (Only if multiple targets exist) -->
+    <div class="homo-filter-row" *ngIf="homoeologTargetIds.length > 1">
+      <div class="homo-chip-set targets">
+        <button type="button" *ngFor="let target of homoeologTargetIds"
+          [class.active]="activeHomoeologTarget === target" (click)="selectHomoeologTarget(target)">{{ target }}</button>
+      </div>
+    </div>
+
+    <!-- Overview Metrics Grid -->
+    <div class="metrics-grid homo-metrics-grid">
+      <div class="metric-card">
+        <span class="m-label">References</span>
+        <span class="m-value">{{ homoeologGenes.length }}</span>
+      </div>
+      <div class="metric-card">
+        <span class="m-label">Aligned Reads</span>
+        <span class="m-value">{{ homoeologAssignedReads | number }}</span>
+      </div>
+      <div class="metric-card">
+        <span class="m-label">Mean Editing</span>
+        <span class="m-value">{{ homoeologMeanEditing | number:'1.1-2' }}%</span>
+      </div>
+      <div class="metric-card out-of-frame">
+        <span class="m-label">Concomitant Edit</span>
+        <span class="m-value">{{ homoeologCoEditStats.pBoth | number:'1.1-2' }}%</span>
+      </div>
+      <div class="metric-card in-frame">
+        <span class="m-label">Single Homoeolog</span>
+        <span class="m-value">{{ homoeologCoEditStats.pSingle | number:'1.1-2' }}%</span>
+      </div>
+      <div class="metric-card sub">
+        <span class="m-label">Parity Index</span>
+        <span class="m-value">{{ homoeologCoEditStats.parityScore | number:'1.1-2' }}%</span>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-section homo-charts-section">
+      <div class="chart-card"><canvas id="homoeologEditingChart"></canvas></div>
+      <div class="chart-card"><canvas id="homoeologCoverageChart"></canvas></div>
+      <div class="chart-card donut"><canvas id="homoeologCoEditChart"></canvas></div>
+    </div>
+
+    <!-- Comparison Summary Table -->
+    <div class="table-card">
+      <h3>Homoeolog Summary Table
+        <span class="table-gene-badge">{{ activeHomoeologTarget }}</span>
+      </h3>
+      <div class="table-responsive">
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Total Reads</th>
+              <th>Aligned Reads</th>
+              <th>Total Editing</th>
+              <th>Out-of-Frame</th>
+              <th>In-Frame</th>
+              <th>Substitution</th>
+              <th>Unmodified</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngFor="let gene of homoeologGenes">
+              <tr *ngIf="homoeologTarget(gene, activeHomoeologTarget) as target">
+                <td><strong>{{ gene.gene }}</strong></td>
+                <td>{{ target.summary?.total_reads ?? 0 | number }}</td>
+                <td>{{ target.summary?.aligned_reads ?? 0 | number }}</td>
+                <td><strong>{{ (target.summary?.editing_efficiency ?? target.summary?.indel_editing_efficiency ?? 0) | number:'1.1-2' }}%</strong></td>
+                <td><span class="highlight-oof">{{ target.summary?.out_of_frame_pct ?? 0 | number:'1.1-2' }}%</span></td>
+                <td>{{ target.summary?.in_frame_pct ?? 0 | number:'1.1-2' }}%</td>
+                <td>{{ target.summary?.substitution_pct ?? 0 | number:'1.1-2' }}%</td>
+                <td>{{ (target.summary?.no_indel_pct ?? 0) | number:'1.1-2' }}%</td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Shared vs Unique Repair Alleles -->
+    <div class="table-card" *ngIf="homoeologSharedAlleles.length > 0">
+      <h3>Shared & Subgenome-Specific Alleles
+        <span class="table-gene-badge">{{ activeHomoeologTarget }}</span>
+      </h3>
+      <div class="table-responsive">
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>Repair Pattern</th>
+              <th>Net Indel</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th *ngFor="let gene of homoeologGenes">{{ gene.gene }}</th>
+              <th>Mean Freq</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let allele of homoeologSharedAlleles">
+              <td class="font-mono"><strong>{{ allele.alleleKey }}</strong></td>
+              <td>{{ allele.netIndel > 0 ? '+' : '' }}{{ allele.netIndel }} bp</td>
+              <td><span class="badge">{{ allele.classification }}</span></td>
+              <td>
+                <span class="badge" [style.background-color]="allele.isShared ? 'var(--color-success-bg)' : 'var(--color-surface-alt)'" [style.color]="allele.isShared ? 'var(--color-success)' : 'var(--color-text-secondary)'">
+                  {{ allele.isShared ? 'Shared' : 'Unique' }}
+                </span>
+              </td>
+              <td *ngFor="let freq of allele.homoeologFrequencies">
+                {{ freq.pct > 0 ? (freq.pct | number:'1.1-2') + '%' : '-' }}
+              </td>
+              <td><strong>{{ allele.meanFrequency | number:'1.1-2' }}%</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

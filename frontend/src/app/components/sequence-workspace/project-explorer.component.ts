@@ -202,6 +202,36 @@ export function sortProjectItems(items: ProjectItem[], mode: FileSortMode): Proj
       .btn-collapse { display:none; }
       .item-actions { opacity:1; }
     }
+    @media (max-width: 700px) {
+      .explorer-header { height: 46px; padding: 0 12px; }
+    }
+    @media (max-width: 700px) {
+      .btn-import-primary { min-height: 34px; padding: 7px 14px; }
+    }
+    @media (max-width: 700px) {
+      .btn-collapse { display: none; }
+    }
+    @media (max-width: 700px) {
+      .item-list { padding: 4px 0 max(8px, env(safe-area-inset-bottom)); }
+    }
+    @media (max-width: 700px) {
+      .item-row { min-height: 54px; padding: 8px 10px 8px 12px; }
+    }
+    @media (max-width: 700px) {
+      .item-icon { margin-right: 10px; }
+    }
+    @media (max-width: 700px) {
+      .item-name { font-size: .86rem; }
+    }
+    @media (max-width: 700px) {
+      .item-actions { opacity: 1; gap: 2px; }
+    }
+    @media (max-width: 700px) {
+      .icon-btn { width: 34px; height: 34px; margin-left: 0; }
+    }
+    @media (max-width: 700px) {
+      .rename-btn { display: none; }
+    }
   `]
 })
 export class ProjectExplorerComponent {

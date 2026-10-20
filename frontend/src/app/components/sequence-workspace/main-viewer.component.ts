@@ -80,7 +80,7 @@ import { FastqViewerComponent } from './fastq-viewer.component';
   `,
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
-    .viewer-container { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .viewer-container { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
     
     .compact-doc-header {
       height: 38px;
@@ -102,6 +102,7 @@ import { FastqViewerComponent } from './fastq-viewer.component';
       align-items: center;
       gap: 10px;
       overflow: hidden;
+      min-width: 0;
     }
     .doc-name {
       font-size: 0.92rem;
@@ -143,11 +144,11 @@ import { FastqViewerComponent } from './fastq-viewer.component';
     }
 
     @media (max-width: 700px) {
-      .compact-doc-header { padding: 6px 8px; }
+      .compact-doc-header { height: auto; min-height: 42px; padding: 6px 8px; gap: 6px; }
       .doc-title-group { width: 100%; gap: 6px; }
-      .doc-name { flex: 1; min-width: 44px; }
-      .doc-badge { font-size: 0.62rem; padding: 2px 5px; }
-      .doc-meta-text { font-size: 0.7rem; }
+      .doc-name { flex: 1; min-width: 44px; font-size: .82rem; }
+      .doc-badge { flex: 0 0 auto; font-size: .62rem; padding: 2px 5px; }
+      .doc-meta-text { flex: 0 0 auto; font-size: .68rem; }
       .doc-preview-note { font-size: 0.66rem; }
     }
 
@@ -174,6 +175,30 @@ import { FastqViewerComponent } from './fastq-viewer.component';
     .feature-table th, .feature-table td { padding: 8px 12px; border-bottom: 1px solid var(--color-border); text-align: left; }
     .feature-table th { background: #f8f9fa; font-weight: 600; color: #34495e; }
     .color-box { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+    @media (max-width: 700px) {
+      .compact-doc-header.has-collapsed-padding { padding-left: 8px; }
+    }
+    @media (max-width: 700px) {
+      .viewer-tabs { flex: 0 0 auto; }
+    }
+    @media (max-width: 700px) {
+      .tab-btn { padding: 5px 7px; font-size: .7rem; }
+    }
+    @media (max-width: 700px) {
+      .feature-pane { overflow: auto; }
+    }
+    @media (max-width: 700px) {
+      .feature-table { min-width: 480px; }
+    }
+    @media (max-width: 700px) {
+      .empty-state { padding: 24px; }
+    }
+    @media (max-width: 700px) {
+      .empty-state h2 { font-size: 1.05rem; }
+    }
+    @media (max-width: 700px) {
+      .empty-state p { font-size: .82rem; }
+    }
   `]
 })
 export class MainViewerComponent {

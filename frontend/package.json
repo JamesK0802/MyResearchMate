@@ -8,7 +8,9 @@
     "prebuild": "node scripts/sync-version.js",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:casmango": "vitest run --config vitest.casmango.config.ts",
+    "test:platform": "vitest run --config vitest.platform.config.ts"
   },
   "private": true,
   "packageManager": "npm@11.11.0",

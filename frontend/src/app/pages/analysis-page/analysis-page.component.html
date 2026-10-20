@@ -47,42 +47,74 @@
         </div>
       </div>
 
-      <div class="upload-zone" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
-        (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (click)="fileInput.click()">
+      <div class="file-upload-section">
         <input type="file" #fileInput (change)="onFileSelected($event)" multiple hidden accept=".fastq,.fq,.fastq.gz,.fq.gz" />
-        <p><strong>{{ sequencingPlatform === 'illumina' ? 'Upload paired-end files' : 'Upload files' }}</strong></p>
-        <span class="hint" *ngIf="sequencingPlatform === 'nanopore'">FASTQ / FQ · Multiple files allowed</span>
-        <span class="hint" *ngIf="sequencingPlatform === 'illumina'">FASTQ / FQ / GZ · R1 and R2 names are paired automatically</span>
-      </div>
-
-      <div class="file-list" *ngIf="sequencingPlatform === 'nanopore' && state.selectedFiles.length > 0">
-        <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item">
-          <span class="file-name">{{ file.name }}</span>
-          <span class="file-size">({{ file.size / 1024 / 1024 | number:'1.1-1' }} MB)</span>
-          <button type="button" class="btn-remove" (click)="removeFile(i)">&times;</button>
-        </div>
-      </div>
-
-      <div class="illumina-pair-grid" *ngIf="sequencingPlatform === 'illumina' && state.illuminaPairs.length > 0">
-        <article class="illumina-pair-card" *ngFor="let pair of state.illuminaPairs">
-          <div class="illumina-mate-slots">
-            <div class="illumina-mate-slot" [class.empty]="!pair.r1" aria-label="R1 slot" (dragover)="allowMateDrop($event)" (drop)="dropMate($event, pair.id, 'r1')">
-              <div class="mate-file" *ngIf="pair.r1" draggable="true" (dragstart)="startMateDrag($event, pair.id, 'r1')">
-                <span class="mate-file-copy" [title]="pair.r1.name">{{ pair.r1.name }}</span>
-                <button type="button" class="btn-remove" (click)="removeIlluminaMate(pair.id, 'r1')" aria-label="Remove R1">&times;</button>
-              </div>
-              <span class="mate-empty" *ngIf="!pair.r1">Drop R1 file</span>
-            </div>
-            <div class="illumina-mate-slot" [class.empty]="!pair.r2" aria-label="R2 slot" (dragover)="allowMateDrop($event)" (drop)="dropMate($event, pair.id, 'r2')">
-              <div class="mate-file" *ngIf="pair.r2" draggable="true" (dragstart)="startMateDrag($event, pair.id, 'r2')">
-                <span class="mate-file-copy" [title]="pair.r2.name">{{ pair.r2.name }}</span>
-                <button type="button" class="btn-remove" (click)="removeIlluminaMate(pair.id, 'r2')" aria-label="Remove R2">&times;</button>
-              </div>
-              <span class="mate-empty" *ngIf="!pair.r2">Drop R2 file</span>
-            </div>
+        <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
+        <div class="upload-zone" role="group" aria-label="Upload files or folders"
+          [class.choosing-upload]="showUploadChoices" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
+          (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)"
+          (click)="!isReadingFolders && (showUploadChoices = true)">
+          <button *ngIf="!showUploadChoices" type="button" class="upload-zone-prompt" [disabled]="isReadingFolders"
+            (click)="showUploadChoices = true">
+            <strong>Drop files or folders, or click to upload</strong>
+            <span class="hint" *ngIf="sequencingPlatform === 'nanopore'">FASTQ / FQ / GZ · Multiple files and folders allowed</span>
+            <span class="hint" *ngIf="sequencingPlatform === 'illumina'">FASTQ / FQ / GZ · R1 and R2 names are paired automatically</span>
+          </button>
+          <div *ngIf="showUploadChoices" class="upload-choice-options">
+            <button type="button" class="upload-choice-option" [disabled]="isReadingFolders" (click)="fileInput.click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10Z"/><path d="M13 3v7h7M8 14h8M8 17h5"/></svg>
+              <span>Upload files</span>
+            </button>
+            <button type="button" class="upload-choice-option" [disabled]="isReadingFolders" (click)="folderInput.click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 2h18"/></svg>
+              <span>Upload folder</span>
+            </button>
           </div>
-          <strong class="illumina-pair-name" [title]="displayIlluminaPairName(pair)">{{ displayIlluminaPairName(pair) }}</strong>
-        </article>
+        </div>
+        <p class="file-action-message" *ngIf="isReadingFolders" role="status">Reading folders…</p>
+
+        <div class="file-list" *ngIf="sequencingPlatform === 'nanopore' && state.selectedFiles.length > 0">
+          <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item reorderable-file" draggable="true"
+            (dragstart)="startSequenceFileDrag($event, file)" (dragend)="endSequenceFileDrag()"
+            (dragover)="allowSequenceFileDrop($event, file)" (drop)="dropSequenceFile($event, file)"
+            [class.file-dragging]="draggedSequenceFile === file"
+            [class.drop-before]="sequenceDropTarget === file && !sequenceDropAfter && draggedSequenceFile !== file"
+            [class.drop-after]="sequenceDropTarget === file && sequenceDropAfter && draggedSequenceFile !== file">
+            <span class="file-drag-handle" aria-hidden="true" title="Drag to reorder">⠿</span>
+            <span class="file-name" [title]="sequenceFilePath(file)">{{ file.name }}</span>
+            <span class="file-size">({{ file.size / 1024 / 1024 | number:'1.1-1' }} MB)</span>
+            <button type="button" class="btn-remove" (click)="removeFile(i)">&times;</button>
+          </div>
+        </div>
+
+        <div class="illumina-pair-grid" *ngIf="sequencingPlatform === 'illumina' && state.illuminaPairs.length > 0">
+          <article class="illumina-pair-card" *ngFor="let pair of state.illuminaPairs">
+            <div class="illumina-mate-slots">
+              <div class="illumina-mate-slot" [class.empty]="!pair.r1" aria-label="R1 slot" (dragover)="allowMateDrop($event)" (drop)="dropMate($event, pair.id, 'r1')">
+                <div class="mate-file" *ngIf="pair.r1" draggable="true" (dragstart)="startMateDrag($event, pair.id, 'r1')">
+                  <span class="mate-file-copy" [title]="pair.r1.name">{{ pair.r1.name }}</span>
+                  <button type="button" class="btn-remove" (click)="removeIlluminaMate(pair.id, 'r1')" aria-label="Remove R1">&times;</button>
+                </div>
+                <span class="mate-empty" *ngIf="!pair.r1">Drop R1 file</span>
+              </div>
+              <div class="illumina-mate-slot" [class.empty]="!pair.r2" aria-label="R2 slot" (dragover)="allowMateDrop($event)" (drop)="dropMate($event, pair.id, 'r2')">
+                <div class="mate-file" *ngIf="pair.r2" draggable="true" (dragstart)="startMateDrag($event, pair.id, 'r2')">
+                  <span class="mate-file-copy" [title]="pair.r2.name">{{ pair.r2.name }}</span>
+                  <button type="button" class="btn-remove" (click)="removeIlluminaMate(pair.id, 'r2')" aria-label="Remove R2">&times;</button>
+                </div>
+                <span class="mate-empty" *ngIf="!pair.r2">Drop R2 file</span>
+              </div>
+            </div>
+            <strong class="illumina-pair-name" [title]="displayIlluminaPairName(pair)">{{ displayIlluminaPairName(pair) }}</strong>
+          </article>
+        </div>
+        <div class="file-collection-footer" *ngIf="uploadedSequenceFiles.length > 0">
+          <button type="button" class="collect-files-button" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 2h18M12 12v6m-3-3 3 3 3-3"/></svg>
+            Collect into folder
+          </button>
+        </div>
+        <p class="file-action-message" *ngIf="fileActionMessage" role="status" aria-live="polite">{{ fileActionMessage }}</p>
       </div>
 
       <div class="form-row analysis-controls-grid">
@@ -90,17 +122,16 @@
           <label>
             Window Size (bp)
             <span class="custom-window-badge" *ngIf="state.analysisForm.get('customWindowEnabled')?.value">Custom</span>
-            <span class="info-icon" tabindex="0" role="button" aria-label="Window size help">?
+            <span class="info-icon">?
               <span class="tooltip-text">Total analysis width around cut site.</span>
             </span>
           </label>
-          <input type="number" formControlName="interestRegion" class="form-control"
-            [readonly]="state.analysisForm.get('customWindowEnabled')?.value" />
+          <input type="number" formControlName="interestRegion" class="form-control" />
         </div>
         <div class="form-group flex-wide">
           <label>
             Data Filtering (Phred)
-            <span class="info-icon" tabindex="0" role="button" aria-label="Data filtering help">?
+            <span class="info-icon">?
               <span class="tooltip-text">Minimum Phred quality score.</span>
             </span>
           </label>
@@ -109,7 +140,7 @@
         <div class="form-group flex-wide">
           <label>
             Assignment Margin (%)
-            <span class="info-icon" tabindex="0" role="button" aria-label="Assignment margin help">?
+            <span class="info-icon">?
               <span class="tooltip-text">Minimum score difference for target assignment.</span>
             </span>
           </label>
@@ -118,7 +149,7 @@
         <div class="form-group flex-wide">
           <label>
             Indel Threshold (%)
-            <span class="info-icon" tabindex="0" role="button" aria-label="Indel threshold help">?
+            <span class="info-icon">?
               <span class="tooltip-text">Noise filter. Ignore groups below this %.</span>
             </span>
           </label>
@@ -145,7 +176,7 @@
         <div class="form-group" style="max-width: 180px; margin-left: auto; margin-top: -10px; margin-bottom: 10px;">
           <label>
             Rescue Filtering
-            <span class="info-icon" tabindex="0" role="button" aria-label="Ambiguous analysis help">?
+            <span class="info-icon">?
               <span class="tooltip-text">Minimum cluster size for Ambiguous Rescue.</span>
             </span>
           </label>
@@ -169,7 +200,10 @@
             <label>Left: <input type="number" min="0" formControlName="customWindowLeft" class="form-control" /> bp</label>
             <label>Right: <input type="number" min="0" formControlName="customWindowRight" class="form-control" /> bp</label>
           </div>
+          <button type="button" class="btn-reference-scope" (click)="coverFullReference()"
+            title="Calculate left/right lengths from each cut site to cover every configured reference">Cover full ref</button>
         </div>
+        <p *ngIf="fullRefWindowError" role="alert">{{ fullRefWindowError }}</p>
         <section class="similar-window-card">
           <div class="similar-window-header">
             <h4>Similar Window Setting</h4>
@@ -180,7 +214,7 @@
             <div class="slider-header">
               <label>
                 Distance Weight
-                <span class="info-icon" tabindex="0" role="button" aria-label="Distance weighting help">?
+                <span class="info-icon">?
                   <span class="tooltip-text">Assigns higher weight to sequence differences further from the cut site during classification (Default: 0, Recommended: 0.5 - 3.0).</span>
                 </span>
               </label>
@@ -194,18 +228,23 @@
             <div class="slider-header">
               <label>
                 Cut Site Exclusion Window
-                <span class="info-icon" tabindex="0" role="button" aria-label="Cut-site exclusion help">?
+                <span class="info-icon">?
                   <span class="tooltip-text">Excludes mutations (indels/substitutions) starting within cut site ±N bp from similarity score calculation (Default: 0).</span>
                 </span>
               </label>
               <label class="slider-manual-value">
                 <span>±</span>
                 <input type="number" min="0" max="500" step="1" formControlName="cutSiteExclusionFlank"
+                  [value]="state.analysisForm.get('cutSiteExclusionFlank')?.value ?? 0"
+                  (input)="onCutSiteExclusionInput($event)"
                   aria-label="Cut-site exclusion window" />
                 <span>bp</span>
               </label>
             </div>
-            <input type="range" min="0" max="10" step="1" formControlName="cutSiteExclusionFlank" class="form-range" />
+            <input type="range" min="0" max="500" step="1" formControlName="cutSiteExclusionFlank"
+              [value]="state.analysisForm.get('cutSiteExclusionFlank')?.value ?? 0"
+              (input)="onCutSiteExclusionSlider($event)"
+              aria-label="Cut-site exclusion slider" class="form-range" />
             <p class="slider-description">Excludes indels/mutations starting within cut site ±N bp from similarity calculations to prevent score distortion.</p>
           </div>
           </div>
@@ -266,7 +305,7 @@
               (click)="selectReferenceSource(source.key)">{{source.label}}</button>
           </div>
           <div class="reference-scope-status" *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom">
-            <button type="button" *ngIf="state.activeReferenceKey !== 'default' && activeReferenceIsCustom" (click)="useDefaultForActiveSource()">Use Default</button>
+            <button type="button" (click)="useDefaultForActiveSource()">Use Default</button>
           </div>
         </div>
 
@@ -283,11 +322,11 @@
           <div class="window-controls-row">
             <label class="control-label">Window Size (bp):</label>
             <div class="slider-wrapper">
-              <input type="range" min="30" max="180" step="1" [ngModel]="windowCheckSize"
+              <input type="range" [min]="windowCheckSize < 30 ? 1 : 30" [max]="windowCheckSize > 180 ? 1000 : 180" step="1" [ngModel]="windowCheckSize"
                 [ngModelOptions]="{standalone: true}" (ngModelChange)="onWindowCheckSizeChange($event)"
                 class="window-range-slider" />
-              <span class="range-bound min-bound">30</span>
-              <span class="range-bound max-bound">180</span>
+              <span class="range-bound min-bound">{{windowCheckSize < 30 ? 1 : 30}}</span>
+              <span class="range-bound max-bound">{{windowCheckSize > 180 ? 1000 : 180}}</span>
             </div>
             <div class="number-input-wrapper">
               <input type="number" min="1" max="1000" [ngModel]="windowCheckSize"
@@ -304,7 +343,8 @@
           </div>
 
           <!-- Content Results -->
-          <div class="window-check-results" *ngIf="!isCalculatingWindowCheck">
+          <p *ngIf="windowCheckError" role="alert">{{windowCheckError}}</p>
+          <div class="window-check-results" *ngIf="!isCalculatingWindowCheck && !windowCheckError">
             <div *ngIf="extractedWindows.length === 0" class="no-windows-alert">
               No valid reference sequences or gRNA targets entered yet. Please fill out the reference configuration below.
             </div>
@@ -312,7 +352,9 @@
             <div *ngIf="extractedWindows.length > 0">
               <div class="homoeolog-overviews" *ngIf="homoeologMode && homoeologOverviews.length">
                 <div class="homoeolog-overview-card" *ngFor="let overview of homoeologOverviews">
-                  <div class="homoeolog-overview-head"><strong>{{ overview.groupId }}</strong></div>
+                  <div class="homoeolog-overview-head">
+                    <strong>{{ overview.groupId }}</strong>
+                  </div>
                   <div class="homoeolog-lane" *ngFor="let lane of overview.lanes">
                     <div class="homoeolog-lane-label" [title]="lane.geneName + (lane.isAnchor ? ' · baseline' : '')">
                       <label class="homoeolog-anchor-toggle" [title]="lane.isAnchor ? 'Baseline reference' : 'Use as baseline'">
@@ -330,25 +372,31 @@
                       <ng-container *ngFor="let marker of lane.markers; let markerIndex = index">
                         <div *ngIf="marker.windowLeftPercent !== undefined" class="homoeolog-window"
                           [style.left.%]="marker.windowLeftPercent" [style.width.%]="marker.windowWidthPercent"
-                          [style.--marker-color]="targetColor(markerIndex)" [title]="marker.targetId + ' window'"></div>
+                          [style.--marker-color]="targetColor(markerIndex)"
+                          [title]="marker.targetId + ' window'"></div>
                         <div *ngIf="marker.guideLeftPercent !== undefined" class="homoeolog-guide"
-                          [class.near]="!marker.exact" [style.left.%]="marker.guideLeftPercent"
-                          [style.width.%]="marker.guideWidthPercent" [style.--marker-color]="targetColor(markerIndex)"
+                          [class.near]="!marker.exact"
+                          [style.left.%]="marker.guideLeftPercent" [style.width.%]="marker.guideWidthPercent"
+                          [style.--marker-color]="targetColor(markerIndex)"
                           [title]="marker.targetId + ' gRNA · cut ' + marker.cutSite"></div>
                         <b *ngIf="marker.leftPercent !== undefined" class="homoeolog-marker-label"
-                          [style.left.%]="marker.leftPercent" [style.--marker-color]="targetColor(markerIndex)"
+                          [style.left.%]="marker.leftPercent"
+                          [style.--marker-color]="targetColor(markerIndex)"
                           [title]="marker.targetId + ' · cut ' + marker.cutSite + (marker.exact ? ' · exact' : ' · ' + marker.mismatches + ' mismatch')">
                           {{ marker.targetId }}
                           <small *ngIf="marker.windowDifferenceBp !== undefined"
                             [class.same]="marker.windowDifferenceBp === 0">{{ marker.windowDifferenceBp }} bp</small>
                         </b>
                         <div *ngIf="marker.leftPercent === undefined" class="homoeolog-marker-error"
-                          [style.top.px]="8" [title]="marker.error">{{ marker.targetId }} !</div>
+                          [style.top.px]="8" [title]="marker.error">
+                          {{ marker.targetId }} !
+                        </div>
                       </ng-container>
                     </div>
                   </div>
                 </div>
               </div>
+
               <!-- Extracted Windows Cards List -->
               <div class="windows-list-section">
                 <h4>Extracted Target Windows (Size: {{ windowCheckSize }} bp)</h4>
@@ -360,7 +408,9 @@
                     </div>
                     <div class="window-meta" *ngIf="item.cutSiteIndex !== -1">
                       Cut Site Index: {{ item.cutSiteIndex }} | Strand: {{ item.strand }} | PAM: <code>{{ item.pam }}</code>
-                      <span class="near-match-badge" *ngIf="item.guideMatch && !item.guideMatch.exact">{{ item.guideMatch.mismatches }} mismatch</span>
+                      <span class="near-match-badge" *ngIf="item.guideMatch && !item.guideMatch.exact">
+                        {{ item.guideMatch.mismatches }} mismatch
+                      </span>
                     </div>
                     <div class="window-meta warning" *ngIf="item.cutSiteIndex === -1">
                       gRNA not matched in reference (fallback center window)
@@ -509,80 +559,79 @@
         </div>
         <div formArrayName="genes">
           <ng-container *ngIf="!homoeologMode">
-          <div *ngFor="let gene of state.geneBlocks.controls; let gi = index" [formGroupName]="gi"
-            class="gene-block-card">
-            <div class="gene-block-header">
-              <div class="gene-block-title">
-                <span>Gene {{ gi + 1 }}</span>
+            <div *ngFor="let gene of state.geneBlocks.controls; let gi = index; trackBy: trackControl" [formGroupName]="gi"
+              class="gene-block-card">
+              <div class="gene-block-header">
+                <div class="gene-block-title"><span>Gene {{ gi + 1 }}</span></div>
+                <button type="button" class="btn-remove-target" (click)="state.removeGene(gi)"
+                  *ngIf="state.geneBlocks.length > 1">Remove Gene</button>
               </div>
-              <button type="button" class="btn-remove-target" (click)="state.removeGene(gi)"
-                *ngIf="state.geneBlocks.length > 1">Remove Gene</button>
-            </div>
-            <div class="gene-block-body">
-              <div class="form-row" style="gap:15px; margin-bottom:12px;">
-                <div class="form-group" style="flex:0 0 200px;">
-                  <label>Gene Name:</label>
-                  <input type="text" formControlName="gene_name" placeholder="e.g. GeneA" />
+              <div class="gene-block-body">
+                <div class="form-row" style="gap:15px; margin-bottom:12px;">
+                  <div class="form-group" style="flex:0 0 200px;">
+                    <label>Gene Name:</label>
+                    <input type="text" formControlName="gene_name" placeholder="e.g. GeneA" />
+                  </div>
+                  <div class="form-group full">
+                    <label>Reference Sequence:</label>
+                    <textarea formControlName="gene_reference" rows="3" class="monospaced"></textarea>
+                  </div>
                 </div>
-                <div class="form-group full">
-                  <label>Reference Sequence:</label>
-                  <textarea formControlName="gene_reference" rows="3" class="monospaced"></textarea>
-                </div>
-              </div>
 
-              <div class="gene-targets-section">
-                <div class="gene-targets-header">
-                  <span class="gene-targets-label">Targets within this gene</span>
-                  <button type="button" class="btn-add-small" (click)="state.addGeneTarget(gi)">Add Target</button>
-                </div>
-                <div formArrayName="geneTargets">
-                  <div *ngFor="let gt of state.getGeneTargets(gi).controls; let ti = index" [formGroupName]="ti"
-                     class="gene-target-row">
-                    <span class="gene-target-num">T{{ ti + 1 }}</span>
-                    <div class="form-group" style="flex:0 0 180px;">
-                      <label>Target Name:</label>
-                      <input type="text" formControlName="target_id" />
+                <div class="gene-targets-section">
+                  <div class="gene-targets-header">
+                    <span class="gene-targets-label">Targets within this gene</span>
+                    <button type="button" class="btn-add-small" (click)="state.addGeneTarget(gi)">Add Target</button>
+                  </div>
+                  <div formArrayName="geneTargets">
+                    <div *ngFor="let gt of state.getGeneTargets(gi).controls; let ti = index; trackBy: trackControl" [formGroupName]="ti"
+                       class="gene-target-row">
+                      <span class="gene-target-num">T{{ ti + 1 }}</span>
+                      <div class="form-group" style="flex:0 0 180px;">
+                        <label>Target Name:</label>
+                        <input type="text" formControlName="target_id" />
+                      </div>
+                      <div class="form-group" style="flex:1;">
+                        <label>gRNA Sequence:</label>
+                        <input type="text" formControlName="gRNA" />
+                      </div>
+                      <button type="button" class="btn-remove" (click)="state.removeGeneTarget(gi, ti)"
+                        *ngIf="state.getGeneTargets(gi).length > 1" style="margin-top:20px;">&times;</button>
                     </div>
-                    <div class="form-group" style="flex:1;">
-                      <label>gRNA Sequence:</label>
-                      <input type="text" formControlName="gRNA" />
-                    </div>
-                    <button type="button" class="btn-remove" (click)="state.removeGeneTarget(gi, ti)"
-                      *ngIf="state.getGeneTargets(gi).length > 1" style="margin-top:20px;">&times;</button>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
           </ng-container>
 
           <ng-container *ngIf="homoeologMode">
             <div class="homoeolog-input-card" *ngFor="let group of homoeologInputGroups; trackBy: trackHomoeologGroup"
-              [attr.data-homoeolog-group]="group.name" [class.drag-over]="dragOverHomoeolog === group.name">
+              [attr.data-homoeolog-group]="group.name"
+              [class.drag-over]="dragOverHomoeolog === group.name">
               <div class="homoeolog-input-head">
                 <input class="homoeolog-name-input" [value]="group.name"
-                  (blur)="renameHomoeologGroup(group.indices, $any($event.target).value)" aria-label="Homoeolog name" />
+                  (blur)="renameHomoeologGroup(group.indices, $any($event.target).value)"
+                  aria-label="Homoeolog name" />
                 <button type="button" class="btn-add-small" (click)="addReferenceToHomoeolog(group.indices)">+ Reference</button>
               </div>
-              <div class="homoeolog-ref-row" *ngFor="let gi of group.indices; let ri = index" [formGroupName]="gi">
+              <div class="homoeolog-ref-row" *ngFor="let reference of group.references; let ri = index; trackBy: trackHomoeologReference" [formGroupName]="reference.index">
                 <div class="homoeolog-ref-main">
-                  <span class="homoeolog-drag-handle" (pointerdown)="startReferencePointerDrag($event, gi)"
+                  <span class="homoeolog-drag-handle"
+                    (pointerdown)="startReferencePointerDrag($event, reference.index)"
                     (pointercancel)="endReferenceDrag()" title="Move reference">⠿</span>
                   <span class="homoeolog-ref-label">Ref {{ ri + 1 }}</span>
                   <input type="text" formControlName="gene_name" [placeholder]="'Reference ' + (ri + 1)" aria-label="Reference name" />
-                  <textarea formControlName="gene_reference" rows="1" class="monospaced homoeolog-ref-sequence"
-                    placeholder="Reference sequence" aria-label="Reference sequence"></textarea>
-                  <button type="button" class="homoeolog-remove-ref" (click)="state.removeGene(gi)"
-                    *ngIf="state.geneBlocks.length > 1" aria-label="Remove reference">&times;</button>
+                  <textarea formControlName="gene_reference" rows="1" class="monospaced homoeolog-ref-sequence" placeholder="Reference sequence" aria-label="Reference sequence"></textarea>
+                  <button type="button" class="homoeolog-remove-ref" (click)="state.removeGene(reference.index)" *ngIf="state.geneBlocks.length > 1" aria-label="Remove reference">&times;</button>
                 </div>
                 <div class="homoeolog-targets" formArrayName="geneTargets">
-                  <div class="homoeolog-target-row" *ngFor="let gt of state.getGeneTargets(gi).controls; let ti = index" [formGroupName]="ti">
+                  <div class="homoeolog-target-row" *ngFor="let gt of state.getGeneTargets(reference.index).controls; let ti = index; trackBy: trackControl" [formGroupName]="ti">
                     <span>T{{ ti + 1 }}</span>
                     <input type="text" formControlName="target_id" placeholder="Target" aria-label="Target name" />
                     <input type="text" formControlName="gRNA" placeholder="gRNA sequence" aria-label="gRNA sequence" class="monospaced" />
-                    <button type="button" (click)="state.removeGeneTarget(gi, ti)" *ngIf="state.getGeneTargets(gi).length > 1" aria-label="Remove target">&times;</button>
+                    <button type="button" (click)="state.removeGeneTarget(reference.index, ti)" *ngIf="state.getGeneTargets(reference.index).length > 1" aria-label="Remove target">&times;</button>
                   </div>
-                  <button type="button" class="btn-add-small homoeolog-add-target" (click)="state.addGeneTarget(gi)">+ Target</button>
+                  <button type="button" class="btn-add-small homoeolog-add-target" (click)="state.addGeneTarget(reference.index)">+ Target</button>
                 </div>
               </div>
             </div>
@@ -592,6 +641,7 @@
 
       <button
         type="submit"
+
         [disabled]="state.isLoading || (sequencingPlatform === 'illumina' ? illuminaUnitCount === 0 : state.selectedFiles.length === 0)"
         class="btn-primary"
       >
@@ -629,6 +679,50 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="collection-modal-backdrop" *ngIf="showCollectFilesDialog" (click)="closeCollectFilesDialog()">
+    <section class="collection-modal" role="dialog" aria-modal="true" aria-labelledby="collection-title" (click)="$event.stopPropagation()" (keydown)="collectionDialogKeydown($event)">
+      <header class="collection-modal-header">
+        <h2 id="collection-title">Collect files into folder</h2>
+        <button type="button" class="btn-folder-input" (click)="closeCollectFilesDialog()" [disabled]="isCopyingFiles" aria-label="Close file collection">×</button>
+      </header>
+      <p class="collection-summary">{{ collectionRows.length }} files · Originals stay unchanged</p>
+      <label class="collection-field" for="collection-folder-name">Folder name</label>
+      <input id="collection-folder-name" class="collection-name-input" type="text" [(ngModel)]="collectionFolderName" [disabled]="isCopyingFiles" placeholder="New folder name" />
+      <label class="collection-field">Folder location</label>
+      <div class="collection-location-row">
+        <span>{{ collectionLocation?.name || 'Not selected' }}</span>
+        <button type="button" class="btn-folder-input" (click)="chooseCollectionLocation()" [disabled]="!canCopyToFolder || isCopyingFiles">Choose location</button>
+      </div>
+      <p class="collection-error" *ngIf="!canCopyToFolder">Folder copying requires desktop Chrome or Edge on HTTPS or localhost.</p>
+      <label class="collection-rename-toggle"><input type="checkbox" [(ngModel)]="changeCollectionFileNames" [disabled]="isCopyingFiles" /> Change file name</label>
+      <div class="collection-name-table" *ngIf="changeCollectionFileNames">
+        <table>
+          <thead><tr>
+            <th [attr.aria-sort]="collectionSort?.key === 'currentName' ? (collectionSort?.ascending ? 'ascending' : 'descending') : 'none'">
+              <button type="button" class="collection-sort-button" (click)="sortCollectionNames('currentName')" [disabled]="isCopyingFiles">Current file name <span aria-hidden="true">{{ collectionSort?.key === 'currentName' ? (collectionSort?.ascending ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+            <th [attr.aria-sort]="collectionSort?.key === 'newName' ? (collectionSort?.ascending ? 'ascending' : 'descending') : 'none'">
+              <button type="button" class="collection-sort-button" (click)="sortCollectionNames('newName')" [disabled]="isCopyingFiles">New file name <span aria-hidden="true">{{ collectionSort?.key === 'newName' ? (collectionSort?.ascending ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let row of collectionRows; let i = index">
+              <td [title]="sequenceFilePath(row.file)">{{ row.currentName }}</td>
+              <td><input type="text" [(ngModel)]="row.newName" [disabled]="isCopyingFiles" [attr.data-rename-row]="i" [attr.aria-label]="'New file name for ' + row.file.name" (paste)="pasteCollectionNames($event, i)" (keydown)="moveCollectionCell($event, i)" /></td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Paste a column or two-column range from Excel. File extensions stay unchanged.</p>
+      </div>
+      <p class="collection-error" *ngIf="collectionNameError">{{ collectionNameError }}</p>
+      <p class="collection-progress" *ngIf="collectionMessage" role="status" aria-live="polite">{{ collectionMessage }}</p>
+      <footer class="collection-modal-footer">
+        <button type="button" class="btn-folder-input" (click)="closeCollectFilesDialog()" [disabled]="isCopyingFiles">Cancel</button>
+        <button type="button" class="btn-folder-input collection-copy-button" (click)="copyUploadedFilesToFolder()" [disabled]="!canCreateCollection">{{ isCopyingFiles ? 'Copying…' : 'Create folder & copy files' }}</button>
+      </footer>
+    </section>
   </div>
 
   <div *ngIf="state.error" class="error-box">

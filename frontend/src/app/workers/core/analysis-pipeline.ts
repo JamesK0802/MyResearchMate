@@ -19,8 +19,9 @@ import {
   scoreReadAgainstWindow,
   clearClassifierCache,
   ClassInfo,
+  ValidatedTargetWindow,
 } from './classifier';
-import { classifyMutationWithAlignment, AlignmentToken } from './analyzer';
+import { classifyMutationWithAlignment, alignReadToRef, materializeTokensAgainstReference, clearAnalyzerCache, AlignmentToken } from './analyzer';
 import { assignReadsToReferences, GenePayload, DemuxResult } from './multi-reference-assigner';
 import { FastqRead, QualityScores } from './fastq-parser';
 import { SequencingPlatform } from '../../models/illumina.model';
@@ -181,7 +182,8 @@ function runAnalysisOnReads(
   data: Array<[string, QualityScores | null]>,
   targets: TargetConfig[],
   phredThreshold: number = 10,
-  indelThreshold: number = 1.0
+  indelThreshold: number = 1.0,
+  validatedWindows?: Array<Record<string, ValidatedTargetWindow> | undefined>
 ): { target_results: TargetResult[]; multi_target_summary?: MultiTargetSummary } {
   const totalReads = data.length;
   const targetResultsList: TargetResult[] = [];
@@ -248,7 +250,15 @@ function runAnalysisOnReads(
     // Step 4: Process each read
     for (let i = 0; i < data.length; i++) {
       const [seq, qual] = data[i];
-      const [usable, reason, bestRes] = isReadUsable(seq, qual, refWindow, phredThreshold, sgrnaSeq, cutSiteIndexFixed);
+      // Classification may have validated this candidate against a located
+      // competing homoeolog window. Do not discard that same evidence again
+      // at the old exact-seed gate, and do not mutate the global usability
+      // cache (which would make single-reference results history-dependent).
+      const prior = validatedWindows?.[i]?.[targetId];
+      const [usable, reason, bestRes] = prior && prior.ref_window === refWindow &&
+          prior.cut_index_in_window === cutSiteIndexFixed
+        ? [true, 'ok', prior.result] as const
+        : isReadUsable(seq, qual, refWindow, phredThreshold, sgrnaSeq, cutSiteIndexFixed);
 
       if (!usable) {
         if (reason === 'quality') counts['fail_quality']++;
@@ -280,21 +290,38 @@ function runAnalysisOnReads(
 
       // Classify
       const { category, has_sub: hasSub, net_indel: netIndel, tokens: readTokens } =
-        classifyMutationWithAlignment(refWindow.toUpperCase(), observedRead.toUpperCase(), leftX, rightX);
+        classifyMutationWithAlignment(refWindow.toUpperCase(), readWindow.toUpperCase(), leftX, rightX);
 
       counts[category]++;
       if (hasSub) counts['substitution']++;
 
-      // Grouping for Annotation View
-      const key = readWindow.toUpperCase();
+      // Grouping for Annotation View (treat X as WT sequence so all lengths merge into 1 group)
+      let groupKey = readWindow.toUpperCase();
+      let groupTokens: AlignmentToken[] | null = readTokens;
+      if (leftX > 0 || rightX > 0 || groupKey.includes('X')) {
+        const refUpper = refWindow.toUpperCase();
+        groupKey = materializeTokensAgainstReference(refUpper, readTokens);
+        // Re-alignment is needed only when a new annotation group is created.
+        // Repeating it for every duplicate read dominated large FASTQ runtime.
+        groupTokens = null;
+      }
+
+      const key = groupKey;
       if (!groupsDict[key]) {
+        if (groupTokens === null) {
+          // Annotation must use the same 10-bp evidence floor as classification.
+          // Falling back to 1-bp matches here could display one biological event
+          // as a fragmented deletion/insertion mosaic even when its numeric call
+          // had already been classified stringently.
+          groupTokens = alignReadToRef(refWindow.toUpperCase(), groupKey, 10);
+        }
         groupsDict[key] = {
           read_inner: key,
           read_count: 0,
           classification: category,
           net_indel: netIndel,
           has_sub: hasSub,
-          tokens: readTokens,
+          tokens: groupTokens,
         };
       }
       groupsDict[key].read_count++;
@@ -315,13 +342,30 @@ function runAnalysisOnReads(
       }
     }
 
-    // Step 5: Indel Threshold Filter
+    // Step 5: Indel Threshold Filter (post-cut percentage standard)
     const aligned = counts['aligned_reads'];
-    const thresholdCount = aligned * (indelThreshold / 100.0);
 
     const passedGroupsDict: Record<string, typeof groupsDict[string]> = {};
-    for (const [k, g] of Object.entries(groupsDict)) {
-      if (g.read_count >= thresholdCount) passedGroupsDict[k] = g;
+    if (indelThreshold <= 0) {
+      for (const [k, g] of Object.entries(groupsDict)) {
+        passedGroupsDict[k] = g;
+      }
+    } else {
+      // Sort groups descending by read_count so largest groups are included first
+      const sortedCandidates = Object.entries(groupsDict)
+        .sort((a, b) => b[1].read_count - a[1].read_count);
+
+      let runningSum = 0;
+      for (const [k, g] of sortedCandidates) {
+        const nextSum = runningSum + g.read_count;
+        const postCutPct = (g.read_count / nextSum) * 100.0;
+        if (postCutPct >= indelThreshold) {
+          runningSum = nextSum;
+          passedGroupsDict[k] = g;
+        } else {
+          break;
+        }
+      }
     }
 
     const newAligned = Object.values(passedGroupsDict).reduce((s, g) => s + g.read_count, 0);
@@ -348,10 +392,9 @@ function runAnalysisOnReads(
 
     const pct = (val: number) => newAligned > 0 ? Math.round((val / newAligned) * 10000) / 100 : 0.0;
 
-    // Step 5b: Top Groups
+    // Step 5b: Top Groups (all groups displayed)
     const sortedGroups = Object.values(passedGroupsDict)
-      .sort((a, b) => b.read_count - a.read_count)
-      .slice(0, 10);
+      .sort((a, b) => b.read_count - a.read_count);
 
     const topGroups: TopGroup[] = sortedGroups.map((g, idx) => {
       let displayClass: string;
@@ -526,7 +569,8 @@ export function runMultiReferenceAnalysis(
     const geneReadsData: Array<[string, QualityScores | null]> = assignedReadsInfo.map(r => [r.seq, r.qual]);
     const assignedCount = geneReadsData.length;
 
-    const rawAnalysis = runAnalysisOnReads(geneReadsData, targets, phredThreshold, indelThreshold);
+    const rawAnalysis = runAnalysisOnReads(geneReadsData, targets, phredThreshold, indelThreshold,
+      assignedReadsInfo.map(r => r.validated_windows));
 
     const geneEntry: GeneResult = {
       gene: genePayload.display_gene || geneName,
@@ -731,6 +775,7 @@ export function processFile(
   params: AnalysisParams
 ): FileResult {
   clearClassifierCache();
+  clearAnalyzerCache();
 
   const data: Array<[string, QualityScores | null]> = reads.map(r => [r.seq, r.qual]);
 

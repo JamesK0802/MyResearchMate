@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppStateService } from '../../services/app-state.service';
@@ -87,7 +88,11 @@ import { AppStateService } from '../../services/app-state.service';
   `]
 })
 export class CrisprLayoutComponent {
-  constructor(public state: AppStateService, private router: Router) {}
+  constructor(public state: AppStateService, private router: Router, cdr: ChangeDetectorRef, destroyRef: DestroyRef) {
+    // Worker completions mutate shared state outside a template event. Refresh
+    // the routed shell as well as the result dashboard in the zoneless app.
+    state.resultsUpdated$.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => cdr.markForCheck());
+  }
 
   get isMyDataRoute(): boolean { return this.router.url.startsWith('/crispr/my-data'); }
 

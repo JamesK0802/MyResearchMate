@@ -1,5 +1,7 @@
 import { Injectable, NgZone } from '@angular/core';
 import { Router } from '@angular/router';
+import { safeSequenceFilename } from '../utils/sequence-filename';
+import { findMergeTarget } from '../models/result-merge';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { BehaviorSubject, Subject, Subscription } from 'rxjs';
 import { ExcelExportService, ExportParams } from './excel-export.service';
@@ -11,7 +13,7 @@ import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult } fro
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
 import { IlluminaFilePair } from '../models/illumina.model';
-import { safeSequenceFilename } from '../utils/sequence-filename';
+import { CurationItem } from '../models/curation-sweep';
 
 /** Independent result data container */
 export interface ResultSlot {
@@ -115,6 +117,11 @@ export class AppStateService {
   debugLogs: string[] = [];
   private charts: Chart[] = [];
   resultsUpdated$ = new Subject<void>();
+  collapseAnalysisPanels$ = new Subject<void>();
+
+  collapseAnalysisPanels() {
+    this.collapseAnalysisPanels$.next();
+  }
 
   fileProgress: { [filename: string]: number } = {};
   get fileProgressKeys(): string[] {
@@ -125,10 +132,9 @@ export class AppStateService {
   activeMainTab$ = new BehaviorSubject<'analysis' | 'viewer' | 'benchmark' | 'workspace'>('analysis');
 
   switchMainTab(tab: 'analysis' | 'viewer' | 'benchmark' | 'workspace') {
+    if (this.isAnalysisRunning && tab !== this.activeMainTab$.value) return;
     this.activeMainTab$.next(tab);
-    if (tab === 'workspace') {
-      void this.router.navigateByUrl('/tools/sequence-viewer');
-    }
+    if (tab === 'workspace') void this.router.navigateByUrl('/tools/sequence-viewer');
   }
 
   constructor(
@@ -430,9 +436,7 @@ export class AppStateService {
 
   private restoreActiveReferenceConfig() {
     const hasCustom = this.hasCustomReferenceConfig(this.activeReferenceKey);
-    const genes = hasCustom
-      ? this.referenceConfigs[this.activeReferenceKey]
-      : this.referenceConfigs['default'];
+    const genes = hasCustom ? this.referenceConfigs[this.activeReferenceKey] : this.referenceConfigs['default'];
     this.activeReferenceInherited = this.activeReferenceKey !== 'default' && !hasCustom;
     this.replaceGenes(genes || []);
   }
@@ -465,10 +469,7 @@ export class AppStateService {
     }
   }
 
-  private cloneGenes(genes: any[]): any[] {
-    return JSON.parse(JSON.stringify(genes || []));
-  }
-
+  private cloneGenes(genes: any[]): any[] { return JSON.parse(JSON.stringify(genes || [])); }
   private cloneReferenceConfigs(configs: Record<string, any[]>): Record<string, any[]> {
     return Object.fromEntries(Object.entries(configs || {}).map(([key, genes]) => [key, this.cloneGenes(genes)]));
   }
@@ -496,6 +497,7 @@ export class AppStateService {
         }));
         const geneGroup = this.fb.group({
           gene_name: [name],
+          homoeolog_group: [''],
           gene_reference: [val.seq, Validators.required],
           geneTargets: this.fb.array(targetGroups)
         });
@@ -543,13 +545,7 @@ export class AppStateService {
   }
 
   // ── Local Mode Analysis ──
-  runLocalAnalysis(
-    files: File[],
-    genesPayload: any[],
-    params: any,
-    illuminaPairs: IlluminaFilePair[] = [],
-    genesByInput: Record<string, any[]> = {}
-  ) {
+  runLocalAnalysis(files: File[], genesPayload: any[], params: any, illuminaPairs: IlluminaFilePair[] = [], genesByInput: Record<string, any[]> = {}) {
     if (this.isAnalysisRunning) {
       this.error = 'Wait for the current analysis to finish or cancel it first.';
       return;
@@ -666,39 +662,6 @@ export class AppStateService {
       const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
       return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
     };
-    const targetKey = (target: any) => {
-      const sequence = normalizedSequence(target.sgrna_seq || target.display_sgrna_seq);
-      return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
-    };
-    const mergeTarget = (extT: any, newT: any) => {
-      extT.target_id = mergeAliases(extT.target_id, newT.target_id);
-      const s1 = extT.summary, s2 = newT.summary;
-      const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
-      const b2 = newT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
-      b1.out_of_frame += b2.out_of_frame || 0; b1.in_frame += b2.in_frame || 0;
-      b1.no_indel += b2.no_indel || 0; b1.substitution += b2.substitution || 0;
-      b1.failed = (b1.failed || 0) + (b2.failed || b2.ambiguous || 0);
-      b1.ambiguous = b1.failed;
-      extT.breakdown = b1;
-      s1.total_reads += s2.total_reads; s1.matched_reads += s2.matched_reads; s1.aligned_reads += s2.aligned_reads;
-      const ta = s1.aligned_reads || 1;
-      const pct = (v: number) => Math.round((v / ta) * 10000) / 100;
-      s1.out_of_frame_pct = pct(b1.out_of_frame); s1.in_frame_pct = pct(b1.in_frame);
-      s1.no_indel_pct = pct(b1.no_indel); s1.substitution_pct = pct(b1.substitution);
-      s1.modified = b1.out_of_frame + b1.in_frame; s1.unmodified = b1.no_indel;
-      s1.substitution_reads = b1.substitution;
-      s1.editing_efficiency = pct(s1.modified);
-      s1.indel_editing_efficiency = pct(s1.modified);
-      s1.substitution_policy = 'separate_category_indel_editing_excludes_substitutions';
-      s1.failed_reads = b1.failed;
-      if (newT.top_groups && extT.top_groups) {
-        const gm = new Map<string, any>();
-        [...extT.top_groups, ...newT.top_groups].forEach(g => { if (gm.has(g.read_inner)) { gm.get(g.read_inner).read_count += g.read_count; } else { gm.set(g.read_inner, { ...g }); } });
-        const mg = Array.from(gm.values()).sort((a, b) => b.read_count - a.read_count);
-        mg.forEach((g, i) => { g.group_rank = i + 1; g.read_pct = pct(g.read_count); });
-        extT.top_groups = mg;
-      }
-    };
     let totalAmb = 0, totalRaw = 0, totalPhred = 0, totalAnchor = 0;
     for (const fileResult of allResults) {
       const mrd: MultiReferenceResponse | undefined = fileResult?.multi_reference_result;
@@ -714,15 +677,41 @@ export class AppStateService {
           ex.gene = mergeAliases(ex.gene, geneRes.gene);
           ex.assigned_read_count += geneRes.assigned_read_count;
           if (ex.analysis_result?.targets && geneRes.analysis_result?.targets) {
-            const existingTargets = new Map(ex.analysis_result.targets.map((target: any) => [targetKey(target), target]));
-            for (const newT of geneRes.analysis_result.targets) {
-              const existingTarget = existingTargets.get(targetKey(newT));
-              if (existingTarget) mergeTarget(existingTarget, newT);
-              else {
-                ex.analysis_result.targets.push(JSON.parse(JSON.stringify(newT)));
-                existingTargets.set(targetKey(newT), ex.analysis_result.targets[ex.analysis_result.targets.length - 1]);
+            geneRes.analysis_result.targets.forEach((newT: any) => {
+              const extT = findMergeTarget(ex.analysis_result.targets, newT, geneRes.analysis_result.targets);
+              if (!extT) {
+                const copy = JSON.parse(JSON.stringify(newT));
+                ex.analysis_result.targets.push(copy);
+                return;
               }
-            }
+              extT.target_id = mergeAliases(extT.target_id, newT.target_id);
+              const s1 = extT.summary, s2 = newT.summary;
+              const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
+              const b2 = newT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
+              b1.out_of_frame += b2.out_of_frame || 0; b1.in_frame += b2.in_frame || 0;
+              b1.no_indel += b2.no_indel || 0; b1.substitution += b2.substitution || 0;
+              b1.failed = (b1.failed || 0) + (b2.failed || b2.ambiguous || 0);
+              b1.ambiguous = b1.failed;
+              extT.breakdown = b1;
+              s1.total_reads += s2.total_reads; s1.matched_reads += s2.matched_reads; s1.aligned_reads += s2.aligned_reads;
+              const ta = s1.aligned_reads || 1;
+              const pct = (v: number) => Math.round((v / ta) * 10000) / 100;
+              s1.out_of_frame_pct = pct(b1.out_of_frame); s1.in_frame_pct = pct(b1.in_frame);
+              s1.no_indel_pct = pct(b1.no_indel); s1.substitution_pct = pct(b1.substitution);
+              s1.modified = b1.out_of_frame + b1.in_frame; s1.unmodified = b1.no_indel;
+              s1.substitution_reads = b1.substitution;
+              s1.editing_efficiency = pct(s1.modified);
+              s1.indel_editing_efficiency = pct(s1.modified);
+              s1.substitution_policy = 'separate_category_indel_editing_excludes_substitutions';
+              s1.failed_reads = b1.failed;
+              if (newT.top_groups && extT.top_groups) {
+                const gm = new Map<string, any>();
+                [...extT.top_groups, ...newT.top_groups].forEach(g => { if (gm.has(g.read_inner)) { gm.get(g.read_inner).read_count += g.read_count; } else { gm.set(g.read_inner, { ...g }); } });
+                const mg = Array.from(gm.values()).sort((a, b) => b.read_count - a.read_count);
+                mg.forEach((g, i) => { g.group_rank = i + 1; g.read_pct = pct(g.read_count); });
+                extT.top_groups = mg;
+              }
+            });
           }
         } else { geneMap.set(identity, JSON.parse(JSON.stringify(geneRes))); }
       }
@@ -754,7 +743,7 @@ export class AppStateService {
     this.selectedRowIndex = 0;
   }
 
-  loadResultData(data: { params: any, scopes: any[] }) {
+  loadResultData(data: { params: any, scopes: any[], curationConfig?: CurationConfig | null }) {
     this.ngZone.run(() => {
       this.lastRunParams = data.params;
       this.allFileResults = [];
@@ -789,7 +778,21 @@ export class AppStateService {
 
       this.isMultiReference = true;
       this.multiFileCount = fileScopes.length;
+      // Rebuild from the per-file evidence rather than trusting an old exported
+      // Merged sheet, which may contain counts produced by an earlier merge bug.
+      if (fileScopes.length) this.handleAnalysisComplete({ results: this.allFileResults });
       this.selectedScopeIndex = -1;
+
+      if (data.curationConfig) {
+        this.originalSlotSnapshot = JSON.parse(JSON.stringify(this.slot));
+        this.curationConfig = data.curationConfig;
+        this.isCuratedView = true;
+      } else {
+        this.isCuratedView = false;
+        this.curationConfig = null;
+        this.originalSlotSnapshot = null;
+      }
+
       this.updateVisibleGenes();
       this.resultsUpdated$.next();
     });
@@ -824,9 +827,6 @@ export class AppStateService {
     this.debugLogs = [];
     this.selectedFiles = [];
     this.illuminaPairs = [];
-    this.referenceConfigs = { default: this.cloneGenes(this.geneBlocks.getRawValue()) };
-    this.activeReferenceKey = 'default';
-    this.activeReferenceInherited = false;
   }
 
   newViewer() {
@@ -883,6 +883,25 @@ export class AppStateService {
     const idx = this.curationConfig.excludedFiles.indexOf(fileName);
     if (idx >= 0) this.curationConfig.excludedFiles.splice(idx, 1);
     else this.curationConfig.excludedFiles.push(fileName);
+    this.recalculateCuratedView();
+  }
+
+  setCurationExclusions(items: CurationItem[], excluded: boolean): void {
+    if (!this.isCuratedView || !this.curationConfig || !items.length) return;
+    const fields = { file: 'excludedFiles', gene: 'excludedGenes', group: 'excludedGroups' } as const;
+    const sets = {
+      file: new Set(this.curationConfig.excludedFiles),
+      gene: new Set(this.curationConfig.excludedGenes),
+      group: new Set(this.curationConfig.excludedGroups),
+    };
+    let changed = false;
+    for (const item of items) {
+      const set = sets[item.kind];
+      if (excluded && !set.has(item.key)) { set.add(item.key); changed = true; }
+      if (!excluded && set.delete(item.key)) changed = true;
+    }
+    if (!changed) return;
+    for (const kind of ['file', 'gene', 'group'] as const) this.curationConfig[fields[kind]] = [...sets[kind]];
     this.recalculateCuratedView();
   }
 
@@ -1099,10 +1118,10 @@ export class AppStateService {
         data: {
           labels: barLabels,
           datasets: [
-            { label: 'No Indel %', data: barDataNoIndel, backgroundColor: '#2ecc71' },
-            { label: 'Substitution %', data: barDataSub, backgroundColor: '#3498db' },
-            { label: 'In-frame %', data: barDataIn, backgroundColor: '#e67e22' },
-            { label: 'Out-of-frame %', data: barDataOut, backgroundColor: '#e74c3c' },
+            { label: 'No Indel %', data: barDataNoIndel, backgroundColor: '#009E73' },
+            { label: 'Substitution %', data: barDataSub, backgroundColor: '#CC79A7' },
+            { label: 'In-frame %', data: barDataIn, backgroundColor: '#0072B2' },
+            { label: 'Out-of-frame %', data: barDataOut, backgroundColor: '#E69F00' },
           ]
         },
         options: { animation: false, responsive: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
@@ -1124,7 +1143,7 @@ export class AppStateService {
               labels: ['Unmodified', 'Substitution', 'In-frame', 'Out-of-frame'],
               datasets: [{
                 data: [s.no_indel_pct, s.substitution_pct, s.in_frame_pct, s.out_of_frame_pct],
-                backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
+                backgroundColor: ['#009E73', '#CC79A7', '#0072B2', '#E69F00']
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Mutation Distribution (${gene.gene} - ${target.target_id})` } } }
@@ -1144,7 +1163,7 @@ export class AppStateService {
               labels: ['Indel edited', 'No indel', 'Substitution'],
               datasets: [{
                 data: [edited, unedited, substitution],
-                backgroundColor: ['#f85a7e', '#d1d1d1', '#3498db']
+                backgroundColor: ['#E69F00', '#009E73', '#CC79A7']
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Indel Editing (${gene.gene} - ${target.target_id})` } } }
@@ -1157,22 +1176,27 @@ export class AppStateService {
     return allImages;
   }
 
-  async exportToExcel() {
+  lastExportedFile: File | null = null;
+
+  async exportToExcel(): Promise<File | null> {
     const data = this.getExportData();
-    if (!data) return;
+    if (!data) return null;
 
     try {
       this.addLog('Generating chart images for export...');
       const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      const file = await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      this.lastExportedFile = file;
       this.addLog('Excel exported with all diagrams.');
+      return file;
     } catch (e: any) {
       console.error('Excel export failed:', e);
       this.addLog(`Excel export failed: ${e.message}`);
+      return null;
     }
   }
 
-  async exportOriginalToExcel() {
+  async exportOriginalToExcel(): Promise<File | null> {
     const data = this.getOriginalExportData();
     if (!data) {
       return this.exportToExcel();
@@ -1180,45 +1204,59 @@ export class AppStateService {
     try {
       this.addLog('Generating original result export...');
       const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      const file = await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      this.lastExportedFile = file;
       this.addLog('Original result Excel exported.');
+      return file;
     } catch (e: any) {
       console.error('Original export failed:', e);
       this.addLog(`Original export failed: ${e.message}`);
+      return null;
     }
   }
 
-  async exportCuratedToExcel() {
+  async exportCuratedToExcel(): Promise<File | null> {
     const data = this.getExportData();
-    if (!data) return;
+    if (!data) return null;
     try {
       this.addLog('Generating curated result export...');
       const images = await this.generateChartImagesForExport(data.scopes);
-      await this.excelExportService.exportToExcel(
+      const file = await this.excelExportService.exportToExcel(
         data.params as any, data.scopes, images, this.curationConfig ?? undefined
       );
+      this.lastExportedFile = file;
       this.addLog('Curated result Excel exported.');
+      return file;
     } catch (e: any) {
       console.error('Curated export failed:', e);
       this.addLog(`Curated export failed: ${e.message}`);
+      return null;
     }
   }
 
   isExportingFastq = false;
   exportStatus$ = new BehaviorSubject<{ active: boolean; percent: number; stage: string; title: string } | null>(null);
 
+  get hasFastqExportSources(): boolean {
+    return this.fastqExportSources().length > 0;
+  }
+
+  private fastqExportSources(): Array<File | IlluminaFilePair> {
+    const sources: Array<File | IlluminaFilePair> = this.lastRunParams?.sequencingPlatform === 'illumina'
+      ? this.illuminaPairs.filter(pair => pair.r1 || pair.r2)
+      : this.selectedFiles;
+    if (this.selectedScopeIndex === -1) return sources;
+    const selected = sources[this.selectedScopeIndex];
+    return selected ? [selected] : [];
+  }
+
   async downloadGroupFastq(group: any) {
-    if (!this.selectedTarget || !this.selectedFiles.length) return;
+    if (!this.selectedTarget || !this.hasFastqExportSources) return;
     this.isExportingFastq = true;
     this.exportStatus$.next({ active: true, percent: 10, stage: 'Reading FASTQ file...', title: `Exporting Group ${group.group_rank} FASTQ` });
 
     try {
-      let filesToProcess: File[] = [];
-      if (this.selectedScopeIndex === -1) {
-        filesToProcess = this.selectedFiles;
-      } else {
-        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
-      }
+      const filesToProcess = this.fastqExportSources();
 
       const blobs: Blob[] = [];
       const target = this.selectedTarget;
@@ -1267,17 +1305,12 @@ export class AppStateService {
   }
 
   async downloadAllTargetFastq(target: any) {
-    if (!target || !this.selectedFiles.length) return;
+    if (!target || !this.hasFastqExportSources) return;
     this.isExportingFastq = true;
     this.exportStatus$.next({ active: true, percent: 10, stage: 'Reading FASTQ file...', title: `Exporting All Reads (${target.target_id})` });
 
     try {
-      let filesToProcess: File[] = [];
-      if (this.selectedScopeIndex === -1) {
-        filesToProcess = this.selectedFiles;
-      } else {
-        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
-      }
+      const filesToProcess = this.fastqExportSources();
 
       const blobs: Blob[] = [];
       const params = this.lastRunParams || { phredThreshold: 10 };
@@ -1321,18 +1354,13 @@ export class AppStateService {
   }
 
   async openGroupInSequenceWorkspace(group: any, target: any) {
-    if (!target || !group || !this.selectedFiles.length) return;
+    if (!target || !group || !this.hasFastqExportSources) return;
     this.isExportingFastq = true;
     this.exportStatus$.next({ active: true, percent: 10, stage: 'Preparing Sequence Workspace...', title: `Opening Group ${group.group_rank} in Workspace` });
     this.switchMainTab('workspace');
 
     try {
-      let filesToProcess: File[] = [];
-      if (this.selectedScopeIndex === -1) {
-        filesToProcess = this.selectedFiles;
-      } else {
-        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
-      }
+      const filesToProcess = this.fastqExportSources();
 
       const blobs: Blob[] = [];
       const readInner = group.read_inner;
@@ -1384,18 +1412,13 @@ export class AppStateService {
   }
 
   async openAllTargetInSequenceWorkspace(target: any) {
-    if (!target || !this.selectedFiles.length) return;
+    if (!target || !this.hasFastqExportSources) return;
     this.isExportingFastq = true;
     this.exportStatus$.next({ active: true, percent: 10, stage: 'Preparing Sequence Workspace...', title: `Opening All Reads (${target.target_id}) in Workspace` });
     this.switchMainTab('workspace');
 
     try {
-      let filesToProcess: File[] = [];
-      if (this.selectedScopeIndex === -1) {
-        filesToProcess = this.selectedFiles;
-      } else {
-        filesToProcess = [this.selectedFiles[this.selectedScopeIndex]];
-      }
+      const filesToProcess = this.fastqExportSources();
 
       const blobs: Blob[] = [];
       const params = this.lastRunParams || { phredThreshold: 10 };
@@ -1462,7 +1485,6 @@ export class AppStateService {
   benchStage$ = new BehaviorSubject<string>('');
   benchError: string | null = null;
   benchmarkResult: BenchmarkResult | null = null;
-  private benchDestroy$ = new Subject<void>();
   private benchProgressAnimId: any = null;
   private localBenchSub: Subscription | null = null;
 

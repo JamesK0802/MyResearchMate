@@ -198,6 +198,7 @@ export function createAlignmentCacheId(): string {
               (mousemove)="onDragScroll($event, msaViewport)">
               
               <div class="msa-seq-rows-container monospaced">
+                <div class="cut-site-vertical-guide" [style.left.px]="cutSiteGuideLeftPx"></div>
                 <!-- Top Sequence Header matched to READ ID header -->
                 <div class="msa-seq-header">
                   <span class="msa-seq-header-title">ALIGNMENT CANVAS (Cut Site Centered ✂)</span>
@@ -496,7 +497,6 @@ export function createAlignmentCacheId(): string {
     .alignment-results {
       display: flex;
       flex-direction: column;
-      min-width: 0;
     }
     .aligned-result-section { order: 1; }
     .unaligned-result-section { order: 2; }
@@ -514,8 +514,6 @@ export function createAlignmentCacheId(): string {
       overflow: hidden;
       background: #ffffff;
       position: relative;
-      min-width: 0;
-      width: 100%;
     }
     .msa-ids-column {
       flex-shrink: 0;
@@ -561,7 +559,6 @@ export function createAlignmentCacheId(): string {
     }
     .msa-seq-viewport {
       flex: 1;
-      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       cursor: grab;
@@ -697,8 +694,6 @@ export function createAlignmentCacheId(): string {
       border-radius: 6px;
       overflow: hidden;
       background: #ffffff;
-      min-width: 0;
-      width: 100%;
     }
     .raw-ids-column {
       flex-shrink: 0;
@@ -761,7 +756,6 @@ export function createAlignmentCacheId(): string {
     }
     .raw-seq-viewport {
       flex: 1;
-      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       background: #ffffff;
@@ -823,24 +817,24 @@ export function createAlignmentCacheId(): string {
       .reads-panel { padding: 8px 0; border-left: 0; border-right: 0; border-radius: 0; }
       .workspace-top-bar { align-items: stretch; gap: 8px; padding: 0 8px 8px; }
       .top-bar-left { width: 100%; flex-wrap: wrap; gap: 6px; }
-      .workspace-title { font-size: 0.86rem; }
+      .workspace-title { font-size: .86rem; }
       .unaligned-summary-tag,
       .aligned-summary-tag,
-      .filter-count-tag { font-size: 0.7rem; padding: 2px 7px; }
+      .filter-count-tag { font-size: .7rem; padding: 2px 7px; }
       .top-bar-right { width: 100%; min-width: 0; gap: 6px; }
       .search-box { flex: 1; min-width: 0; gap: 4px; }
       .search-box input { width: 0; min-width: 0; flex: 1; padding: 7px 8px; }
       .search-box button { padding: 7px 9px; }
-      .btn-align-toggle { flex: 0 0 auto; padding: 7px 9px; font-size: 0.72rem; }
+      .btn-align-toggle { flex: 0 0 auto; padding: 7px 9px; font-size: .72rem; }
       .align-config-panel { margin: 0 8px 8px; padding: 9px; }
       .align-mode-tabs,
       .form-row { flex-direction: column; }
       .mode-tab-btn { width: 100%; }
-      .alignment-results { width: 100%; }
+      .alignment-results { width: 100%; min-width: 0; }
       .msa-section,
       .unaligned-section { margin-left: 0; margin-right: 0; }
       .msa-wrapper,
-      .raw-table-wrapper { border-radius: 0; border-left: 0; border-right: 0; }
+      .raw-table-wrapper { width: 100%; min-width: 0; border-radius: 0; border-left: 0; border-right: 0; }
       .msa-ids-column,
       .raw-ids-column { width: 58px; }
       .msa-id-header,
@@ -853,12 +847,12 @@ export function createAlignmentCacheId(): string {
       .mobile-label,
       .mobile-read-index,
       .mobile-reference-label { display: inline; }
-      .mobile-read-index { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 28px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #2563eb; font: 800 0.7rem/1 system-ui, sans-serif; }
-      .mobile-reference-label { color: #2563eb; font: 800 0.68rem/1 system-ui, sans-serif; }
+      .mobile-read-index { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 28px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #2563eb; font: 800 .7rem/1 system-ui, sans-serif; }
+      .mobile-reference-label { color: #2563eb; font: 800 .68rem/1 system-ui, sans-serif; }
       .raw-len-badge { display: none; }
       .alignment-failure-badge { display: none; }
       .raw-seq-header,
-      .msa-seq-header { padding-left: 8px; font-size: 0.68rem; }
+      .msa-seq-header { padding-left: 8px; font-size: .68rem; }
       .raw-seq-row,
       .msa-seq-row { padding-left: 8px; padding-right: 8px; }
       .load-sentinel { padding: 0 8px; }
@@ -867,6 +861,32 @@ export function createAlignmentCacheId(): string {
       .mobile-read-info > span:last-child { color: #475569; font-size: .76rem; font-weight: 750; }
       .read-info-label { color: #2563eb; font-size: .64rem; font-weight: 850; letter-spacing: .08em; }
       .read-info-close { position: absolute; top: 8px; right: 9px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f5f9; color: #64748b; font-size: 1.2rem; }
+    }
+
+    .cut-site-vertical-guide {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ef4444;
+      z-index: 4;
+      pointer-events: none;
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+    }
+
+    .mobile-read-info,
+    .mobile-label,
+    .mobile-read-index,
+    .mobile-reference-label { display: none; }
+
+    @media (max-width: 700px) {
+      .raw-len-badge,
+      .alignment-failure-badge { display: none; }
+    }
+
+    @media (max-width: 700px) {
+      .raw-seq-viewport,
+      .msa-seq-viewport { min-width: 0; }
     }
   `]
 })
@@ -1468,6 +1488,11 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.sortProcessedReadsByAlignment();
     this.applyFilterAndPagination();
     this.centerCutSiteScroll();
+  }
+
+  get cutSiteGuideLeftPx(): number {
+    const column = this.maxPreCutLen + (this.alignedCutSiteInWindow >= 0 ? this.alignedCutSiteInWindow : Math.floor(this.alignedWindowSeq.length / 2));
+    return column * 7.8 + 10;
   }
 
   centerCutSiteScroll() {

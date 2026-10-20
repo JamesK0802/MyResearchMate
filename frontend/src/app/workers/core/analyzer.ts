@@ -29,15 +29,95 @@ export interface MutationResult {
   tokens: AlignmentToken[];
 }
 
+const mutationCache = new Map<string, MutationResult>();
+const MAX_MUTATION_CACHE_ENTRIES = 8192;
+
+function cloneMutationResult(result: MutationResult): MutationResult {
+  return { ...result, tokens: result.tokens.map(token => ({ ...token })) };
+}
+
+export function clearAnalyzerCache(): void {
+  mutationCache.clear();
+}
+
+// Refine only the small replacement intervals BETWEEN established matching
+// blocks. The 10-bp placement/evidence floor must not erase real shorter matches
+// inside these intervals. Affine gaps discourage the opposite failure: chaining
+// incidental single-base matches into many separate insertions/deletions.
+// Bounded work keeps this correction independent of the full amplicon size.
+function refineReplacement(ref: string, read: string): AlignmentToken[] | null {
+  const width = read.length + 1;
+  const cells = (ref.length + 1) * width;
+  if (cells > 65536) return null;
+  const scores = Array.from({ length: 3 }, () => new Int32Array(cells).fill(1_000_000));
+  const trace = Array.from({ length: 3 }, () => new Uint8Array(cells));
+  scores[0][0] = 0;
+  const choose = (a: number, b: number, c: number): number => a <= b && a <= c ? 0 : b <= c ? 1 : 2;
+  for (let i = 0; i <= ref.length; i++) {
+    for (let j = 0; j <= read.length; j++) {
+      if (!i && !j) continue;
+      const index = i * width + j;
+      if (i && j) {
+        const previous = index - width - 1;
+        const state = choose(scores[0][previous], scores[1][previous], scores[2][previous]);
+        scores[0][index] = scores[state][previous] + (ref[i - 1] === read[j - 1] ? 0 : 3);
+        trace[0][index] = state;
+      }
+      if (i) {
+        const previous = index - width;
+        const state = choose(scores[0][previous] + 6, scores[1][previous] + 1, scores[2][previous] + 6);
+        scores[1][index] = scores[state][previous] + (state === 1 ? 1 : 6);
+        trace[1][index] = state;
+      }
+      if (j) {
+        const previous = index - 1;
+        const state = choose(scores[0][previous] + 6, scores[1][previous] + 6, scores[2][previous] + 1);
+        scores[2][index] = scores[state][previous] + (state === 2 ? 1 : 6);
+        trace[2][index] = state;
+      }
+    }
+  }
+  let i = ref.length, j = read.length;
+  const end = cells - 1;
+  let state = choose(scores[0][end], scores[1][end], scores[2][end]);
+  const reverse: AlignmentToken[] = [];
+  while (i || j) {
+    const previous = trace[state][i * width + j];
+    if (state === 0) {
+      reverse.push({ type: ref[i - 1] === read[j - 1] ? 'equal' : 'substitute', val: read[j - 1] });
+      i--; j--;
+    } else if (state === 1) {
+      reverse.push({ type: 'delete', val: '-' }); i--;
+    } else {
+      reverse.push({ type: 'insert', val: read[j - 1] }); j--;
+    }
+    state = previous;
+  }
+  const result: AlignmentToken[] = [];
+  for (const token of reverse.reverse()) {
+    const last = result[result.length - 1];
+    if (last?.type === token.type) last.val += token.val;
+    else result.push({ ...token });
+  }
+  return result;
+}
+
 export function classifyMutationWithAlignment(
   refSeq: string,
   readSeq: string,
   leftX: number = 0,
   rightX: number = 0
 ): MutationResult {
+  const cacheKey = `${refSeq}\u0000${readSeq}\u0000${leftX}\u0000${rightX}`;
+  const cached = mutationCache.get(cacheKey);
+  if (cached) return cloneMutationResult(cached);
+
+  // Every X run is unobserved sequence. Align the observed segments on either
+  // side independently so an internal paired-read gap cannot become a giant
+  // substitution or erase a real indel seen in either mate.
   const tokens = alignReadToRefXaware(refSeq, readSeq, leftX, rightX);
 
-  // Count only biological (non-unobserved) operations
+  // Count only biological operations
   let insLen = 0, delLen = 0, subCount = 0;
   for (const t of tokens) {
     if (t.type === 'insert') insLen += t.val.length;
@@ -55,12 +135,46 @@ export function classifyMutationWithAlignment(
     category = netIndel % 3 === 0 ? 'in_frame' : 'out_of_frame';
   }
 
-  return { category, has_sub: hasSub, net_indel: netIndel, tokens };
+  const result = { category, has_sub: hasSub, net_indel: netIndel, tokens };
+  if (mutationCache.size >= MAX_MUTATION_CACHE_ENTRIES) {
+    const oldest = mutationCache.keys().next().value;
+    if (oldest !== undefined) mutationCache.delete(oldest);
+  }
+  mutationCache.set(cacheKey, result);
+  return cloneMutationResult(result);
 }
 
-export function alignReadToRef(refSeq: string, readSeq: string): AlignmentToken[] {
-  const matcher = new SequenceMatcher(null, refSeq, readSeq);
-  const opcodes = matcher.getOpcodes();
+export function alignReadToRef(refSeq: string, readSeq: string, minMatchLength: number = 1): AlignmentToken[] {
+  // SequenceMatcher's default autojunk mode is designed for prose. At 200+
+  // characters it treats frequent symbols as noise; with DNA that removes
+  // all four nucleotides and turns the sequence after the first edit into one
+  // giant replacement. DNA bases are evidence, never junk.
+  const matcher = new SequenceMatcher(null, refSeq, readSeq, readSeq.length < 200);
+  let opcodes = matcher.getOpcodes();
+  // Strong blocks establish placement. Short matches inside the intervening
+  // replacement intervals are recovered below, not discarded as substitutions.
+  const shortestSequenceLength = Math.min(refSeq.length, readSeq.length);
+  const effectiveMinMatchLength = shortestSequenceLength < minMatchLength
+    ? 1
+    : Math.max(1, minMatchLength);
+  if (effectiveMinMatchLength > 1) {
+    const anchors = matcher.getMatchingBlocks()
+      .filter(([, , length]) => length >= effectiveMinMatchLength);
+    anchors.push([refSeq.length, readSeq.length, 0]);
+    opcodes = [];
+    let refPos = 0;
+    let readPos = 0;
+    for (const [refStart, readStart, length] of anchors) {
+      let tag = '';
+      if (refPos < refStart && readPos < readStart) tag = 'replace';
+      else if (refPos < refStart) tag = 'delete';
+      else if (readPos < readStart) tag = 'insert';
+      if (tag) opcodes.push([tag, refPos, refStart, readPos, readStart]);
+      if (length > 0) opcodes.push(['equal', refStart, refStart + length, readStart, readStart + length]);
+      refPos = refStart + length;
+      readPos = readStart + length;
+    }
+  }
 
   if (opcodes.length === 0) return [];
 
@@ -74,6 +188,13 @@ export function alignReadToRef(refSeq: string, readSeq: string): AlignmentToken[
     } else if (tag === 'replace') {
       const refChunk = refSeq.substring(i1, i2);
       const readChunk = readSeq.substring(j1, j2);
+      const refined = effectiveMinMatchLength > 1
+        ? refineReplacement(refChunk, readChunk)
+        : null;
+      if (refined) {
+        tokens.push(...refined);
+        continue;
+      }
       const subLen = Math.min(refChunk.length, readChunk.length);
 
       if (subLen > 0) {
@@ -100,37 +221,129 @@ export function alignReadToRefXaware(
   leftX: number = 0,
   rightX: number = 0
 ): AlignmentToken[] {
-  if (leftX > 0 || rightX > 0) {
-    const leftPadLen = Math.min(leftX, refSeq.length);
-    const rightPadLen = Math.min(rightX, Math.max(0, refSeq.length - leftPadLen));
-    
-    const targetRef = refSeq.substring(leftPadLen, refSeq.length - rightPadLen);
-    
-    let realObserved = readSeq;
-    if (readSeq.startsWith('X')) {
-      realObserved = readSeq.substring(leftPadLen, Math.max(leftPadLen, readSeq.length - rightPadLen));
-    } else if (readSeq.endsWith('X')) {
-      realObserved = readSeq.substring(0, Math.max(0, readSeq.length - rightPadLen));
+  // Use the same stringent annotation alignment for every sequencing/input
+  // mode. X-padding changes which bases are observed, not how observed bases
+  // are aligned and annotated around the cut site.
+  if (!readSeq.includes('X') && leftX <= 0 && rightX <= 0) return alignReadToRef(refSeq, readSeq, 10);
+
+  const leadingRun = readSeq.match(/^X+/)?.[0].length || 0;
+  const trailingRun = readSeq.match(/X+$/)?.[0].length || 0;
+  const leftPadLen = Math.min(Math.max(leftX, leadingRun), refSeq.length);
+  const rightPadLen = Math.min(Math.max(rightX, trailingRun), Math.max(0, refSeq.length - leftPadLen));
+  const coreStart = leadingRun;
+  const coreEnd = Math.max(coreStart, readSeq.length - trailingRun);
+  const coreRead = readSeq.substring(coreStart, coreEnd);
+  const coreRefStart = leftPadLen;
+  const coreRefEnd = Math.max(coreRefStart, refSeq.length - rightPadLen);
+  const coreRef = refSeq.substring(coreRefStart, coreRefEnd);
+  const tokens: AlignmentToken[] = [];
+  if (leftPadLen > 0) tokens.push({ type: 'unobserved', val: 'X'.repeat(leftPadLen) });
+
+  const segments = coreRead.split(/X+/).filter(Boolean);
+  if (segments.length <= 1) {
+    if (coreRef.length && segments.length) tokens.push(...alignReadToRef(coreRef, segments[0], 10));
+    else if (coreRef.length) tokens.push({ type: 'unobserved', val: 'X'.repeat(coreRef.length) });
+  } else {
+    // Place every observed mate by its matching-block envelope. Bases outside
+    // that envelope are primer/read overhang, not evidence of an indel. The
+    // uncovered reference interval between mates remains explicitly
+    // unobserved. This is deliberately a placement correction, not a new
+    // mutation-calling rule: alignReadToRef still calls edits inside each
+    // observed envelope exactly as before.
+    const placements = segments.flatMap(observed => {
+      // DNA uses only four symbols. For a 301-bp Illumina mate the generic
+      // SequenceMatcher autojunk heuristic marks every nucleotide as
+      // "popular", yielding no matching blocks at all. Placement is a short,
+      // reference-guided operation, so disable that text-oriented heuristic.
+      // Put the shorter reference window on SequenceMatcher's indexed side.
+      // Below 200 bp this keeps the original fast path; at 200+ bp we disable
+      // autojunk because DNA's four-letter alphabet must never be discarded.
+      const blocks = new SequenceMatcher(null, observed, coreRef, coreRef.length < 200)
+        .getMatchingBlocks()
+        .filter(block => block[2] > 0)
+        .map(([obsStart, refStart, length]) => [refStart, obsStart, length] as [number, number, number]);
+      // A remote mate can share a few incidental bases with the window. It is
+      // not positioned evidence unless it contains at least the same 10-bp
+      // exact seed used by paired-read overlap detection.
+      const anchorBlocks = blocks.filter(block => block[2] >= 10);
+      if (!anchorBlocks.length) return [];
+      // Short incidental matches are common in a four-letter alphabet and
+      // must not expand the observed envelope into primer/amplicon overhang.
+      // Only substantive placement anchors define the usable boundaries.
+      const first = anchorBlocks[0];
+      const last = anchorBlocks[anchorBlocks.length - 1];
+      return [{
+        refStart: first[0],
+        refEnd: last[0] + last[2],
+        observed,
+        obsStart: first[1],
+        obsEnd: last[1] + last[2],
+        anchorSupport: anchorBlocks.reduce((sum, block) => sum + block[2], 0),
+      }];
+    }).sort((a, b) => a.refStart - b.refStart);
+
+    // Failed-overlap mates must not both contribute to the same reference
+    // coordinates. Concatenating their overlapping alignments creates a
+    // cascade of small insertions/deletions from two competing observations.
+    // Keep the placement with stronger exact-anchor support; retain both only
+    // when their reference intervals are genuinely disjoint.
+    const resolvedPlacements: typeof placements = [];
+    for (const placement of placements) {
+      const previous = resolvedPlacements[resolvedPlacements.length - 1];
+      if (!previous || placement.refStart >= previous.refEnd) {
+        resolvedPlacements.push(placement);
+      } else if (placement.anchorSupport > previous.anchorSupport) {
+        resolvedPlacements[resolvedPlacements.length - 1] = placement;
+      }
     }
 
-    const tokens: AlignmentToken[] = [];
-    if (leftPadLen > 0) {
-      tokens.push({ type: 'unobserved', val: 'X'.repeat(leftPadLen) });
+    let refCursor = 0;
+    for (const placement of resolvedPlacements) {
+      let { refStart, refEnd, obsStart, obsEnd } = placement;
+      if (refEnd <= refCursor) continue;
+      if (refStart < refCursor) {
+        const overlap = refCursor - refStart;
+        refStart = refCursor;
+        obsStart = Math.min(obsEnd, obsStart + overlap);
+      }
+      if (refStart > refCursor) {
+        tokens.push({ type: 'unobserved', val: 'X'.repeat(refStart - refCursor) });
+      }
+      if (refEnd > refStart && obsEnd > obsStart) {
+        tokens.push(...alignReadToRef(
+          coreRef.substring(refStart, refEnd),
+          placement.observed.substring(obsStart, obsEnd),
+          10,
+        ));
+      }
+      refCursor = Math.max(refCursor, refEnd);
     }
-
-    if (targetRef.length > 0 && realObserved.length > 0) {
-      const innerTokens = alignReadToRef(targetRef, realObserved);
-      tokens.push(...innerTokens);
-    } else if (targetRef.length > 0) {
-      tokens.push({ type: 'delete', val: '-'.repeat(targetRef.length) });
+    if (refCursor < coreRef.length) {
+      tokens.push({ type: 'unobserved', val: 'X'.repeat(coreRef.length - refCursor) });
     }
-
-    if (rightPadLen > 0) {
-      tokens.push({ type: 'unobserved', val: 'X'.repeat(rightPadLen) });
-    }
-
-    return tokens;
   }
 
-  return alignReadToRef(refSeq, readSeq);
+  if (rightPadLen > 0) tokens.push({ type: 'unobserved', val: 'X'.repeat(rightPadLen) });
+  return tokens;
+}
+
+/** Build the annotation/grouping sequence while rendering unobserved bases as WT. */
+export function materializeTokensAgainstReference(refSeq: string, tokens: AlignmentToken[]): string {
+  let refPos = 0;
+  let sequence = '';
+  for (const token of tokens) {
+    if (token.type === 'equal' || token.type === 'substitute') {
+      sequence += token.val;
+      refPos += token.val.length;
+    } else if (token.type === 'insert') {
+      sequence += token.val;
+    } else if (token.type === 'delete') {
+      refPos += token.val.length;
+    } else {
+      const len = token.val.length;
+      sequence += refSeq.substring(refPos, refPos + len);
+      refPos += len;
+    }
+  }
+  return sequence;
 }
